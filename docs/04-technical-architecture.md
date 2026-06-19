@@ -304,6 +304,34 @@ For a room exceeding a single DO's comfortable connection/broadcast zone (~a few
 
 The VR client renders the **same Yjs document** — there is no separate sync path. A-Frame (declarative WebXR over Three.js) provides the scene, controllers, and headset integration; our networking is **not** networked-aframe's transport — we **adapt NAF's avatar/laser patterns but drive them from our Yjs + awareness layer** so 2D and VR share one source of truth.
 
+### 6.0 Session entry — the VR toggle and the 2D ↔ WebVR transition
+
+**Everyone starts in 2D.** Opening the board URL in **any** browser — including the headset's own browser — lands in the default 2D canvas core view (Konva, §1). VR is **never** entered automatically: it is gated behind a **headset-icon toggle in the top bar's top-right cluster** (beside Present/Share), labelled **"Enter VR"**, because `requestSession("immersive-vr")` requires a **user gesture**. The toggle is **always visible** and **reflects state** ("Enter VR" ↔ in-VR/"Exit VR").
+
+**Toggle enablement + fallback.** On mount the app calls `navigator.xr?.isSessionSupported("immersive-vr")`; the toggle is **enabled** only if it resolves `true` (Quest/headset browser). Otherwise it offers a **non-immersive fallback** — a "magic window" preview and/or a **QR/helper** to open the room on a headset (see fallback matrix below).
+
+**Lazy-load on first Enter.** The A-Frame/Three.js VR bundle is **code-split and loaded only on the first click** of the toggle (a brief "Preparing VR…"; pre-warmed on hover or when a headset is detected). This keeps the 2D core view's initial bundle lean — the VR engine never ships to users who never enter VR (the lazy-VR-bundle budget lives in [07](./07-engineering-quality-security-accessibility.md)).
+
+**Entry flow (renderer swap, no reload):**
+
+1. User clicks **"Enter VR"** (the required gesture) → lazy-load the VR bundle if not already loaded.
+2. `navigator.xr.requestSession("immersive-vr")` → standard WebXR comfort **fade** → mount the A-Frame scene with the board as the curved viewport-window panel ~1.5–2 m ahead (Social reach zone, §6.5).
+3. **Only the renderer swaps (Konva ↔ A-Frame).** Both renderers bind to the **same in-memory Yjs doc + awareness** (the same replica that was already syncing in 2D — §2, §3); **nothing reloads**, no new socket, no second document. The room, the Yjs doc, and the user's **identity/colour** all carry over unchanged.
+4. **Viewport-rect continuity:** the VR board viewport rect `{x,y,w,h}` is **initialised from the user's current 2D camera (pan/zoom)** via the same canvas↔display transform (§6.5), so the user "steps into" the exact region they were looking at.
+5. Awareness now **also publishes `xr` (head + hands + laser) plus the board-panel `viewport`** (§3.1); the user does **not** vanish to peers — their 2D cursor becomes an **"in VR"-badged marker / avatar**, with a subtle "X entered VR" toast.
+
+**Exit.** The headset exit gesture or an in-scene **"Exit VR"** button ends the XR session → fade back → unmount the A-Frame scene and re-bind the **Konva** renderer to the **same** Yjs doc → the 2D view resumes **at the same canvas region** (the viewport rect carries back). The toggle flips back to "Enter VR".
+
+**Fallbacks (non-immersive magic window).** When `immersive-vr` is unsupported, the same lazy VR bundle still powers a **non-immersive "magic window"** preview rendered into a normal `<canvas>` (mouse-orbit / device-orientation on mobile), so desktop and phone users get a 3D preview of the panel without a headset; a **QR/helper** deep-links the room onto a Quest. The session API differs (`inline` / no `requestSession("immersive-vr")`) but the renderer, Yjs binding, and viewport-rect model are identical.
+
+| Device | Path | Toggle behaviour |
+|---|---|---|
+| Quest / headset browser | full `immersive-vr` session | enabled → fade into immersive scene |
+| Desktop, no headset | non-immersive **magic window** (mouse-orbit) + **QR/helper** to a headset | shows preview / "open on headset" |
+| Mobile | **magic window** / cardboard (device-orientation) | enabled where supported; else preview |
+
+The session-entry sequence is diagrammed in §10.4; the world-space panel, viewport rect, and raycast→canvas math it lands in are in §6.5.
+
 ### 6.1 Two rendering fidelities
 
 | Path | How | When |
@@ -534,10 +562,12 @@ sequenceDiagram
   participant Y as Yjs doc (same replica)
   participant DO as Room DO
   participant B as Peers
-  U->>XR: tap "Enter VR" → requestSession('immersive-vr')
+  U->>U: isSessionSupported('immersive-vr')? → enable toggle
+  U->>U: tap top-right "Enter VR" toggle (user gesture)<br/>lazy-load A-Frame/Three.js bundle (first time)
+  U->>XR: requestSession('immersive-vr') → comfort fade
   XR-->>U: XR session + controllers
-  U->>U: mount A-Frame scene; map board plane to quad
-  U->>Y: subscribe (same doc) → render objects<br/>(CanvasTexture MVP → native geometry)
+  U->>U: renderer swap Konva→A-Frame (no reload);<br/>VR viewport rect ← current 2D camera (pan/zoom)
+  U->>Y: re-bind SAME doc + awareness → render objects<br/>(CanvasTexture MVP → native geometry)
   loop 20-30 Hz
     U->>DO: awareness xr:{head,hands,laser}
     DO-->>B: relay (2D peers see cursor at laser hit)

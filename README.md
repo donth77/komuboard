@@ -8,7 +8,7 @@
 
 ## What is this?
 
-This repository is currently a **planning package**, not yet code. It holds the canonical design and architecture documents that define what Coboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. The `index.html` at the repo root is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
+This repository is currently a **planning package**, not yet code. It holds the canonical design and architecture documents that define what Coboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. `docs/index.html` is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
 
 ## Documents
 
@@ -27,7 +27,7 @@ Read in numeric order; each doc cross-links the others.
 
 ## UI mockups
 
-The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockups** and matching **PNG screenshots** of the interface: **desktop** canvas + toolbar, **mobile/tablet** touch layout, **VR window mode**, the first-run **onboarding** flow, and the **design-token** style tile — plus an **aidesigner-generated alternative** mockup. The root `index.html` includes a **Mockups gallery** so you can browse them all (and the screenshots) alongside the documents in one view.
+The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockups** and matching **PNG screenshots** of the interface: **desktop** canvas + toolbar, **mobile/tablet** touch layout, **VR window mode**, the first-run **onboarding** flow, and the **design-token** style tile — plus an **aidesigner-generated alternative** mockup. `docs/index.html` includes a **Mockups gallery** so you can browse them all (and the screenshots) alongside the documents in one view.
 
 ## Headline features
 
@@ -70,8 +70,8 @@ Coboard is designed to host **and** run for $0 on a single Cloudflare account at
 ```text
 coboard/
 ├── README.md                 # this index
-├── index.html                # interactive combined view of all docs
 ├── docs/                     # the planning package (01–07)
+│   ├── index.html            # interactive combined view of all docs
 │   ├── 01-product-vision-and-references.md
 │   ├── 02-features-and-scope.md
 │   ├── 03-visual-design-ui-ux.md
@@ -115,4 +115,4 @@ pnpm wrangler deploy
 pnpm pages deploy
 ```
 
-Welcome aboard. Start with [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md), or open `index.html` for the full interactive read.
+Welcome aboard. Start with [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md), or open `docs/index.html` for the full interactive read.

@@ -287,10 +287,13 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 
 ### 3.1 Enter VR from any WebXR headset
 
-- **Story:** As a headset user I want to enter VR straight from the browser so that I can join the board immersively with no install.
-- An "Enter VR" affordance appears when a WebXR immersive session is available; activating it starts an immersive session (Quest/Vive; desktop/mobile fallback view when no headset).
-- Entering VR joins the **same room / same Yjs doc** as the 2D URL (no separate document).
-- A headless WebXR emulator smoke test confirms session entry and scene initialization without error.
+> Everyone — including a user inside a headset browser — opens the board URL into the **default 2D canvas core view first**. VR is entered by a **top-right headset toggle** in the top bar (next to Present/Share), labelled **"Enter VR"**. Clicking it is the **required user gesture** for WebXR; on first click the A-Frame/Three.js VR bundle is **lazy-loaded** ("Preparing VR…"). The board then mounts as a curved viewport-window panel ~1.5–2 m ahead (Social reach zone), and **only the renderer swaps (Konva 2D ↔ A-Frame 3D)** — the room, Yjs doc, identity/colour, and viewport region all carry over with **no reload**. The toggle reflects state ("Enter VR" ↔ "Exit VR"). See the canonical session-entry mechanics in [04 — Architecture](./04-technical-architecture.md) and the lazy VR bundle in [07](./07-engineering-quality-security-accessibility.md).
+
+- **Story:** As a headset user I want to enter VR with one tap of a top-right headset toggle in the toolbar so that I step into the same board immersively, with no install and nothing reloading.
+- The **headset-icon "Enter VR" toggle** is **always visible** in the top bar's top-right cluster (beside Present/Share); it is **enabled only when** `navigator.xr.isSessionSupported("immersive-vr")` resolves true, and otherwise offers a **fallback** (non-immersive preview or a QR/helper to open the room on a headset). It **reflects state**, toggling "Enter VR" ↔ in-VR/"Exit VR".
+- Activating the toggle is a **user gesture** that lazy-loads the VR bundle on first use and calls `requestSession("immersive-vr")` (WebXR comfort fade), then mounts the 3D scene with the board as the panel; entering joins the **same room / Yjs doc / identity** with **no separate document and no reload**, and the **VR viewport rect is initialised from the user's current 2D camera (pan/zoom)** so they step into the same region/view.
+- **Exiting** (headset exit gesture or in-scene "Exit VR" button) ends the XR session, fades back, and returns to the 2D view **at the same canvas region** the user left from.
+- **Fallbacks are exercised:** desktop without a headset gets a non-immersive **"magic window"** mouse-orbit 3D preview and/or a **QR/helper** to open the room on a headset; mobile gets magic-window/cardboard; a Quest/headset browser gets full `immersive-vr`. A headless WebXR emulator smoke test confirms toggle-driven session entry, viewport carry-over, and scene initialization without error.
 
 ### 3.2 Same board rendered as a 3D surface
 

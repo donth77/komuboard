@@ -224,7 +224,7 @@ Floating chrome over a full-bleed canvas. Top bar pinned top; tool dock floats b
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│  ◧ Coboard   ROOM-K3F9-Q2   [⧉ copy]        ┆  (◐ Bea)(◑ Ola)(◒ +3)  [🔗 Share] │  ← Top bar (--surface, --elev-1)
+│ ◧ Coboard  ROOM-K3F9-Q2 [⧉]  ┆ (◐Bea)(◑Ola)(◒+3)  [▷Present][◩ Enter VR][🔗Share] │  ← Top bar (--surface, --elev-1); top-right cluster: Present · Enter VR · Share
 ├───────────────────────────────────────────────────────────────────────────────┤
 │                                                                     ┌─────────┐ │
 │                                                                     │Properties│ │  ← contextual,
@@ -245,7 +245,7 @@ Floating chrome over a full-bleed canvas. Top bar pinned top; tool dock floats b
 
 | Region | Contents | Behavior |
 | --- | --- | --- |
-| **Top bar** | Logo (home), room code chip + copy, presence avatar cluster, Share button, theme toggle, overflow `⋯` (Export, Templates, Timer, Vote, Spotlight, Enter VR) | Always visible; auto-hides nothing. Presence cluster shows up to 5 avatars then `+N`. |
+| **Top bar** | Logo (home), room code chip + copy, presence avatar cluster, **`◩ Enter VR`** headset-icon button (top-right cluster, next to Present/Share — toggles to "Exit VR" in-session; see §4.4), Present/Spotlight, Share button, theme toggle, overflow `⋯` (Export, Templates, Timer, Vote, Spotlight) | Always visible; auto-hides nothing. Presence cluster shows up to 5 avatars then `+N`. The **Enter VR** button is always rendered (enabled/fallback per §4.4). |
 | **Tool dock** | Primary tools in shortcut order, `⌄ more` for Connector/Frame/Image/Stamp, undo/redo, settings | Floats bottom-center; horizontally scrolls if narrow; dims to 70% opacity after 3s idle, full on hover/focus. |
 | **Properties panel** | Fill, stroke, width, opacity, font, alignment, layer order, sticky color, connector style — only the props relevant to the current selection | Slides in from right when ≥1 object selected; `--elev-2`; collapses when selection cleared. |
 | **Zoom HUD** | `−`, percentage (click to reset to 100% / "zoom to fit"), `+` | Bottom-left; keyboard-equivalent to shortcuts. |
@@ -325,6 +325,39 @@ The board is a textured 3D plane at the canonical default **~2.0 m wide × ~1.2 
 | **Radial menu** | Thumbstick-click opens an 8-slot radial at the controller; quick tool/color/snap toggles; release to commit. |
 | **Drawing** | Dominant controller emits a laser; trigger-down draws onto the board hit-point, writing strokes into the same Yjs structures as 2D. |
 | **Avatars** | Head + 2 hands (poses from awareness), tinted with the user's identity color, name label billboarded above head, laser-pointer matching their color. |
+
+### 4.4 Web ↔ WebVR transition
+
+> **One URL, two renderers.** A Coboard room is **always a web page first**: opening the board URL in *any* browser — desktop, phone, or the headset's own browser — lands every user in the **2D canvas core view**. VR is not a separate app or a separate load; it is a **renderer swap** entered through a single toolbar button, and it preserves the one-document single-source-of-truth invariant (§8.4). The WebXR session mechanics (feature detection, `requestSession`, reference spaces, render-loop hand-off) live in [04 Technical Architecture](./04-technical-architecture.md); this section is the **UX/visual** contract for the toggle and the transition.
+
+**The VR toggle (top-bar button).** A **headset-icon button** sits in the **top bar, top-right cluster** (next to Present/Share — see §4.1), labelled **"Enter VR"**. It is **always visible** and reflects state — **"Enter VR" ↔ in-VR / "Exit VR"** — and its enabled-state is driven by capability detection:
+
+| `navigator.xr.isSessionSupported("immersive-vr")` | Button state | Behavior |
+| --- | --- | --- |
+| resolves **true** (Quest / headset browser, WebXR desktop rig) | **Enabled · "Enter VR"** | Click enters an immersive session (entry flow below). |
+| resolves **false** / `navigator.xr` absent (desktop without a headset) | **Enabled · fallback** | Offers a **non-immersive "magic window" preview** (mouse-orbit 3D) and/or a **QR / helper** to open the room on a headset — never a dead button. |
+
+**Entry flow (Enter VR).**
+1. **Open the board URL in any browser** → the default **2D canvas core view**. *Everyone* starts here, including inside a headset browser.
+2. **Click "Enter VR"** — a **user gesture**. WebXR *requires* a user activation to start an immersive session; this is precisely why entry is a **button, not automatic**.
+3. **Lazy-load the A-Frame/Three.js VR bundle on first click** (a brief **"Preparing VR…"** state). The bundle is **pre-warmed on hover**, or eagerly when a headset is detected, so the first entry feels instant. (Bundle-splitting / load budget: [07](./07-engineering-quality-security-accessibility.md).)
+4. `navigator.xr.requestSession("immersive-vr")` → the standard **WebXR comfort fade** → the **3D scene mounts** with the board as the curved **viewport-window panel** ~**1.5–2 m** ahead in the **Social reach zone** (§8.4).
+
+**Continuity (the seamless part).** Only the **renderer swaps** — **Konva 2D ↔ A-Frame 3D**. Everything else **carries over** and **nothing reloads**:
+- The **room**, the **Yjs document**, and the **user identity + colour** are the same live objects — this is the payoff of the single-source-of-truth invariant (§8.4).
+- The **viewport region carries over**: the VR board viewport rect `{x, y, w, h}` is **initialised from the user's 2D camera** (pan/zoom), so they literally **"step into" the same view** rather than landing somewhere unfamiliar.
+- **Awareness now also publishes head + hands + viewport** (in addition to cursor/selection). To other users you **do not vanish**: your cursor becomes an **"in VR"-badged marker** / your avatar appears, with a subtle **"X entered VR" toast** (§7.2, §8.4 cross-reality presence).
+
+**Exit.** The **headset exit gesture** or an **in-scene "Exit VR" button** ends the XR session → **fade back** → return to the **2D view at the same region** (the viewport rect carries back the same way it carried in). The top-bar button reverts to **"Enter VR"**.
+
+**Fallbacks by device.**
+| Device | What "Enter VR" does |
+| --- | --- |
+| **Desktop, no headset** | Non-immersive **"magic window" 3D preview** (mouse-orbit) and/or a **QR / helper** to open the room on a headset. |
+| **Mobile** | **Magic-window** (gyro-orbit) / **cardboard** stereoscopic mode. |
+| **Quest / headset browser** | Full **`immersive-vr`** session (the entry flow above). |
+
+**Performance & comfort.** The **VR bundle is lazy** — loaded only on the first Enter (see [07](./07-engineering-quality-security-accessibility.md)); the **WebXR fade** plays on enter and exit; the board **spawns in the Social reach zone** (§8.4); a **comfort vignette** is on by default (§8.1); the experience is **seated-first**. See [04 Technical Architecture](./04-technical-architecture.md) for the WebXR session lifecycle that backs this UX, and §8.5 for the in-world onboarding card shown on first entry.
 
 ---
 

@@ -559,7 +559,7 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-vis
 
 ## What is this?
 
-This repository is currently a **planning package**, not yet code. It holds the canonical design and architecture documents that define what Coboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. The `index.html` at the repo root is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
+This repository is currently a **planning package**, not yet code. It holds the canonical design and architecture documents that define what Coboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. `docs/index.html` is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
 
 ## Documents
 
@@ -578,7 +578,7 @@ Read in numeric order; each doc cross-links the others.
 
 ## UI mockups
 
-The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockups** and matching **PNG screenshots** of the interface: **desktop** canvas + toolbar, **mobile/tablet** touch layout, **VR window mode**, the first-run **onboarding** flow, and the **design-token** style tile — plus an **aidesigner-generated alternative** mockup. The root `index.html` includes a **Mockups gallery** so you can browse them all (and the screenshots) alongside the documents in one view.
+The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockups** and matching **PNG screenshots** of the interface: **desktop** canvas + toolbar, **mobile/tablet** touch layout, **VR window mode**, the first-run **onboarding** flow, and the **design-token** style tile — plus an **aidesigner-generated alternative** mockup. `docs/index.html` includes a **Mockups gallery** so you can browse them all (and the screenshots) alongside the documents in one view.
 
 ## Headline features
 
@@ -621,8 +621,8 @@ Coboard is designed to host **and** run for $0 on a single Cloudflare account at
 ```text
 coboard/
 ├── README.md                 # this index
-├── index.html                # interactive combined view of all docs
 ├── docs/                     # the planning package (01–07)
+│   ├── index.html            # interactive combined view of all docs
 │   ├── 01-product-vision-and-references.md
 │   ├── 02-features-and-scope.md
 │   ├── 03-visual-design-ui-ux.md
@@ -636,7 +636,9 @@ coboard/
 │   ├── vr.html               # VR window-mode mockup (+ vr.png)
 │   ├── onboarding.html       # first-run / room-join onboarding (+ onboarding.png)
 │   ├── tokens.html           # design-token style tile (+ tokens.png)
-│   └── aidesigner/           # AI-generated alternative mockup (HTML + PNG)
+│   ├── tokens.css            # shared design tokens consumed by every mockup
+│   ├── img/                  # PNG screenshots of each mockup
+│   └── ai/                   # AI-generated alternative mockup (aidesigner, HTML)
 ├── package.json              # pnpm workspace root
 ├── pnpm-workspace.yaml
 └── packages/
@@ -664,7 +666,7 @@ pnpm wrangler deploy
 pnpm pages deploy
 ```
 
-Welcome aboard. Start with [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md), or open `index.html` for the full interactive read.
+Welcome aboard. Start with [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md), or open `docs/index.html` for the full interactive read.
 </script>
 <script type="text/markdown" data-doc-id="doc-01" data-title="Product Vision &amp; References" data-num="01">
 # Coboard — Product Vision & References
@@ -1127,10 +1129,13 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 
 ### 3.1 Enter VR from any WebXR headset
 
-- **Story:** As a headset user I want to enter VR straight from the browser so that I can join the board immersively with no install.
-- An "Enter VR" affordance appears when a WebXR immersive session is available; activating it starts an immersive session (Quest/Vive; desktop/mobile fallback view when no headset).
-- Entering VR joins the **same room / same Yjs doc** as the 2D URL (no separate document).
-- A headless WebXR emulator smoke test confirms session entry and scene initialization without error.
+> Everyone — including a user inside a headset browser — opens the board URL into the **default 2D canvas core view first**. VR is entered by a **top-right headset toggle** in the top bar (next to Present/Share), labelled **"Enter VR"**. Clicking it is the **required user gesture** for WebXR; on first click the A-Frame/Three.js VR bundle is **lazy-loaded** ("Preparing VR…"). The board then mounts as a curved viewport-window panel ~1.5–2 m ahead (Social reach zone), and **only the renderer swaps (Konva 2D ↔ A-Frame 3D)** — the room, Yjs doc, identity/colour, and viewport region all carry over with **no reload**. The toggle reflects state ("Enter VR" ↔ "Exit VR"). See the canonical session-entry mechanics in [04 — Architecture](./04-technical-architecture.md) and the lazy VR bundle in [07](./07-engineering-quality-security-accessibility.md).
+
+- **Story:** As a headset user I want to enter VR with one tap of a top-right headset toggle in the toolbar so that I step into the same board immersively, with no install and nothing reloading.
+- The **headset-icon "Enter VR" toggle** is **always visible** in the top bar's top-right cluster (beside Present/Share); it is **enabled only when** `navigator.xr.isSessionSupported("immersive-vr")` resolves true, and otherwise offers a **fallback** (non-immersive preview or a QR/helper to open the room on a headset). It **reflects state**, toggling "Enter VR" ↔ in-VR/"Exit VR".
+- Activating the toggle is a **user gesture** that lazy-loads the VR bundle on first use and calls `requestSession("immersive-vr")` (WebXR comfort fade), then mounts the 3D scene with the board as the panel; entering joins the **same room / Yjs doc / identity** with **no separate document and no reload**, and the **VR viewport rect is initialised from the user's current 2D camera (pan/zoom)** so they step into the same region/view.
+- **Exiting** (headset exit gesture or in-scene "Exit VR" button) ends the XR session, fades back, and returns to the 2D view **at the same canvas region** the user left from.
+- **Fallbacks are exercised:** desktop without a headset gets a non-immersive **"magic window"** mouse-orbit 3D preview and/or a **QR/helper** to open the room on a headset; mobile gets magic-window/cardboard; a Quest/headset browser gets full `immersive-vr`. A headless WebXR emulator smoke test confirms toggle-driven session entry, viewport carry-over, and scene initialization without error.
 
 ### 3.2 Same board rendered as a 3D surface
 
@@ -1502,7 +1507,7 @@ Floating chrome over a full-bleed canvas. Top bar pinned top; tool dock floats b
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│  ◧ Coboard   ROOM-K3F9-Q2   [⧉ copy]        ┆  (◐ Bea)(◑ Ola)(◒ +3)  [🔗 Share] │  ← Top bar (--surface, --elev-1)
+│ ◧ Coboard  ROOM-K3F9-Q2 [⧉]  ┆ (◐Bea)(◑Ola)(◒+3)  [▷Present][◩ Enter VR][🔗Share] │  ← Top bar (--surface, --elev-1); top-right cluster: Present · Enter VR · Share
 ├───────────────────────────────────────────────────────────────────────────────┤
 │                                                                     ┌─────────┐ │
 │                                                                     │Properties│ │  ← contextual,
@@ -1523,7 +1528,7 @@ Floating chrome over a full-bleed canvas. Top bar pinned top; tool dock floats b
 
 | Region | Contents | Behavior |
 | --- | --- | --- |
-| **Top bar** | Logo (home), room code chip + copy, presence avatar cluster, Share button, theme toggle, overflow `⋯` (Export, Templates, Timer, Vote, Spotlight, Enter VR) | Always visible; auto-hides nothing. Presence cluster shows up to 5 avatars then `+N`. |
+| **Top bar** | Logo (home), room code chip + copy, presence avatar cluster, **`◩ Enter VR`** headset-icon button (top-right cluster, next to Present/Share — toggles to "Exit VR" in-session; see §4.4), Present/Spotlight, Share button, theme toggle, overflow `⋯` (Export, Templates, Timer, Vote, Spotlight) | Always visible; auto-hides nothing. Presence cluster shows up to 5 avatars then `+N`. The **Enter VR** button is always rendered (enabled/fallback per §4.4). |
 | **Tool dock** | Primary tools in shortcut order, `⌄ more` for Connector/Frame/Image/Stamp, undo/redo, settings | Floats bottom-center; horizontally scrolls if narrow; dims to 70% opacity after 3s idle, full on hover/focus. |
 | **Properties panel** | Fill, stroke, width, opacity, font, alignment, layer order, sticky color, connector style — only the props relevant to the current selection | Slides in from right when ≥1 object selected; `--elev-2`; collapses when selection cleared. |
 | **Zoom HUD** | `−`, percentage (click to reset to 100% / "zoom to fit"), `+` | Bottom-left; keyboard-equivalent to shortcuts. |
@@ -1603,6 +1608,39 @@ The board is a textured 3D plane at the canonical default **~2.0 m wide × ~1.2 
 | **Radial menu** | Thumbstick-click opens an 8-slot radial at the controller; quick tool/color/snap toggles; release to commit. |
 | **Drawing** | Dominant controller emits a laser; trigger-down draws onto the board hit-point, writing strokes into the same Yjs structures as 2D. |
 | **Avatars** | Head + 2 hands (poses from awareness), tinted with the user's identity color, name label billboarded above head, laser-pointer matching their color. |
+
+### 4.4 Web ↔ WebVR transition
+
+> **One URL, two renderers.** A Coboard room is **always a web page first**: opening the board URL in *any* browser — desktop, phone, or the headset's own browser — lands every user in the **2D canvas core view**. VR is not a separate app or a separate load; it is a **renderer swap** entered through a single toolbar button, and it preserves the one-document single-source-of-truth invariant (§8.4). The WebXR session mechanics (feature detection, `requestSession`, reference spaces, render-loop hand-off) live in [04 Technical Architecture](./04-technical-architecture.md); this section is the **UX/visual** contract for the toggle and the transition.
+
+**The VR toggle (top-bar button).** A **headset-icon button** sits in the **top bar, top-right cluster** (next to Present/Share — see §4.1), labelled **"Enter VR"**. It is **always visible** and reflects state — **"Enter VR" ↔ in-VR / "Exit VR"** — and its enabled-state is driven by capability detection:
+
+| `navigator.xr.isSessionSupported("immersive-vr")` | Button state | Behavior |
+| --- | --- | --- |
+| resolves **true** (Quest / headset browser, WebXR desktop rig) | **Enabled · "Enter VR"** | Click enters an immersive session (entry flow below). |
+| resolves **false** / `navigator.xr` absent (desktop without a headset) | **Enabled · fallback** | Offers a **non-immersive "magic window" preview** (mouse-orbit 3D) and/or a **QR / helper** to open the room on a headset — never a dead button. |
+
+**Entry flow (Enter VR).**
+1. **Open the board URL in any browser** → the default **2D canvas core view**. *Everyone* starts here, including inside a headset browser.
+2. **Click "Enter VR"** — a **user gesture**. WebXR *requires* a user activation to start an immersive session; this is precisely why entry is a **button, not automatic**.
+3. **Lazy-load the A-Frame/Three.js VR bundle on first click** (a brief **"Preparing VR…"** state). The bundle is **pre-warmed on hover**, or eagerly when a headset is detected, so the first entry feels instant. (Bundle-splitting / load budget: [07](./07-engineering-quality-security-accessibility.md).)
+4. `navigator.xr.requestSession("immersive-vr")` → the standard **WebXR comfort fade** → the **3D scene mounts** with the board as the curved **viewport-window panel** ~**1.5–2 m** ahead in the **Social reach zone** (§8.4).
+
+**Continuity (the seamless part).** Only the **renderer swaps** — **Konva 2D ↔ A-Frame 3D**. Everything else **carries over** and **nothing reloads**:
+- The **room**, the **Yjs document**, and the **user identity + colour** are the same live objects — this is the payoff of the single-source-of-truth invariant (§8.4).
+- The **viewport region carries over**: the VR board viewport rect `{x, y, w, h}` is **initialised from the user's 2D camera** (pan/zoom), so they literally **"step into" the same view** rather than landing somewhere unfamiliar.
+- **Awareness now also publishes head + hands + viewport** (in addition to cursor/selection). To other users you **do not vanish**: your cursor becomes an **"in VR"-badged marker** / your avatar appears, with a subtle **"X entered VR" toast** (§7.2, §8.4 cross-reality presence).
+
+**Exit.** The **headset exit gesture** or an **in-scene "Exit VR" button** ends the XR session → **fade back** → return to the **2D view at the same region** (the viewport rect carries back the same way it carried in). The top-bar button reverts to **"Enter VR"**.
+
+**Fallbacks by device.**
+| Device | What "Enter VR" does |
+| --- | --- |
+| **Desktop, no headset** | Non-immersive **"magic window" 3D preview** (mouse-orbit) and/or a **QR / helper** to open the room on a headset. |
+| **Mobile** | **Magic-window** (gyro-orbit) / **cardboard** stereoscopic mode. |
+| **Quest / headset browser** | Full **`immersive-vr`** session (the entry flow above). |
+
+**Performance & comfort.** The **VR bundle is lazy** — loaded only on the first Enter (see [07](./07-engineering-quality-security-accessibility.md)); the **WebXR fade** plays on enter and exit; the board **spawns in the Social reach zone** (§8.4); a **comfort vignette** is on by default (§8.1); the experience is **seated-first**. See [04 Technical Architecture](./04-technical-architecture.md) for the WebXR session lifecycle that backs this UX, and §8.5 for the in-world onboarding card shown on first entry.
 
 ---
 
@@ -2261,6 +2299,34 @@ For a room exceeding a single DO's comfortable connection/broadcast zone (~a few
 
 The VR client renders the **same Yjs document** — there is no separate sync path. A-Frame (declarative WebXR over Three.js) provides the scene, controllers, and headset integration; our networking is **not** networked-aframe's transport — we **adapt NAF's avatar/laser patterns but drive them from our Yjs + awareness layer** so 2D and VR share one source of truth.
 
+### 6.0 Session entry — the VR toggle and the 2D ↔ WebVR transition
+
+**Everyone starts in 2D.** Opening the board URL in **any** browser — including the headset's own browser — lands in the default 2D canvas core view (Konva, §1). VR is **never** entered automatically: it is gated behind a **headset-icon toggle in the top bar's top-right cluster** (beside Present/Share), labelled **"Enter VR"**, because `requestSession("immersive-vr")` requires a **user gesture**. The toggle is **always visible** and **reflects state** ("Enter VR" ↔ in-VR/"Exit VR").
+
+**Toggle enablement + fallback.** On mount the app calls `navigator.xr?.isSessionSupported("immersive-vr")`; the toggle is **enabled** only if it resolves `true` (Quest/headset browser). Otherwise it offers a **non-immersive fallback** — a "magic window" preview and/or a **QR/helper** to open the room on a headset (see fallback matrix below).
+
+**Lazy-load on first Enter.** The A-Frame/Three.js VR bundle is **code-split and loaded only on the first click** of the toggle (a brief "Preparing VR…"; pre-warmed on hover or when a headset is detected). This keeps the 2D core view's initial bundle lean — the VR engine never ships to users who never enter VR (the lazy-VR-bundle budget lives in [07](./07-engineering-quality-security-accessibility.md)).
+
+**Entry flow (renderer swap, no reload):**
+
+1. User clicks **"Enter VR"** (the required gesture) → lazy-load the VR bundle if not already loaded.
+2. `navigator.xr.requestSession("immersive-vr")` → standard WebXR comfort **fade** → mount the A-Frame scene with the board as the curved viewport-window panel ~1.5–2 m ahead (Social reach zone, §6.5).
+3. **Only the renderer swaps (Konva ↔ A-Frame).** Both renderers bind to the **same in-memory Yjs doc + awareness** (the same replica that was already syncing in 2D — §2, §3); **nothing reloads**, no new socket, no second document. The room, the Yjs doc, and the user's **identity/colour** all carry over unchanged.
+4. **Viewport-rect continuity:** the VR board viewport rect `{x,y,w,h}` is **initialised from the user's current 2D camera (pan/zoom)** via the same canvas↔display transform (§6.5), so the user "steps into" the exact region they were looking at.
+5. Awareness now **also publishes `xr` (head + hands + laser) plus the board-panel `viewport`** (§3.1); the user does **not** vanish to peers — their 2D cursor becomes an **"in VR"-badged marker / avatar**, with a subtle "X entered VR" toast.
+
+**Exit.** The headset exit gesture or an in-scene **"Exit VR"** button ends the XR session → fade back → unmount the A-Frame scene and re-bind the **Konva** renderer to the **same** Yjs doc → the 2D view resumes **at the same canvas region** (the viewport rect carries back). The toggle flips back to "Enter VR".
+
+**Fallbacks (non-immersive magic window).** When `immersive-vr` is unsupported, the same lazy VR bundle still powers a **non-immersive "magic window"** preview rendered into a normal `<canvas>` (mouse-orbit / device-orientation on mobile), so desktop and phone users get a 3D preview of the panel without a headset; a **QR/helper** deep-links the room onto a Quest. The session API differs (`inline` / no `requestSession("immersive-vr")`) but the renderer, Yjs binding, and viewport-rect model are identical.
+
+| Device | Path | Toggle behaviour |
+|---|---|---|
+| Quest / headset browser | full `immersive-vr` session | enabled → fade into immersive scene |
+| Desktop, no headset | non-immersive **magic window** (mouse-orbit) + **QR/helper** to a headset | shows preview / "open on headset" |
+| Mobile | **magic window** / cardboard (device-orientation) | enabled where supported; else preview |
+
+The session-entry sequence is diagrammed in §10.4; the world-space panel, viewport rect, and raycast→canvas math it lands in are in §6.5.
+
 ### 6.1 Two rendering fidelities
 
 | Path | How | When |
@@ -2491,10 +2557,12 @@ sequenceDiagram
   participant Y as Yjs doc (same replica)
   participant DO as Room DO
   participant B as Peers
-  U->>XR: tap "Enter VR" → requestSession('immersive-vr')
+  U->>U: isSessionSupported('immersive-vr')? → enable toggle
+  U->>U: tap top-right "Enter VR" toggle (user gesture)<br/>lazy-load A-Frame/Three.js bundle (first time)
+  U->>XR: requestSession('immersive-vr') → comfort fade
   XR-->>U: XR session + controllers
-  U->>U: mount A-Frame scene; map board plane to quad
-  U->>Y: subscribe (same doc) → render objects<br/>(CanvasTexture MVP → native geometry)
+  U->>U: renderer swap Konva→A-Frame (no reload);<br/>VR viewport rect ← current 2D camera (pan/zoom)
+  U->>Y: re-bind SAME doc + awareness → render objects<br/>(CanvasTexture MVP → native geometry)
   loop 20-30 Hz
     U->>DO: awareness xr:{head,hands,laser}
     DO-->>B: relay (2D peers see cursor at laser hit)
@@ -3624,32 +3692,25 @@ if (typeof window.marked === "undefined") {
 
   function escapeHtml(s){return s.replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
 
-  /* ───────────── Mockup asset-path rewrite ─────────────
-     This index.html lives at the repo ROOT, but the embedded docs (under /docs/)
-     reference mockup assets with a "../mockups/…" relative path. Rewrite any such
-     path to a root-relative "./mockups/…" so images + live links resolve here.
-     Applies to <img src>, and to <a href> that point at the mockups folder
-     (e.g. the "Live HTML: ../mockups/desktop.html" links in doc-03). */
-  function rewriteMockupPaths(container) {
-    function fix(url) {
-      if (!url) return url;
-      // strip leading "../"/"./" segments then look for a "mockups" segment
-      // (folder link "../mockups" or asset "../mockups/img/desktop.png")
-      var m = url.match(/^(?:\.\.?\/)+(mockups(?:\/.*)?)$/);
-      if (m) return "./" + m[1];
-      return url;
+  /* ───────────── Embedded mockup-asset enhancement (NO path rewriting) ─────────────
+     This index.html lives in /docs/, the SAME folder the docs live in, and the
+     embedded docs reference mockup assets with a "../mockups/…" relative path —
+     which already resolves CORRECTLY from docs/index.html (mockups/ sits one level
+     up at the repo root). So we do NOT rewrite paths anymore (no "../"→"./").
+     We only enhance the embedded mockup assets: lazy-load doc images, and open
+     mockup links in a new tab (e.g. the "Live HTML: ../mockups/desktop.html"
+     links in doc-03). Paths are left exactly as authored. */
+  function enhanceMockupAssets(container) {
+    // does this URL point at the mockups/ folder (any relative prefix)?
+    function isMockup(url) {
+      return !!url && /(?:^|\/)mockups\//.test(url);
     }
     container.querySelectorAll("img[src]").forEach(function (img) {
-      var raw = img.getAttribute("src");
-      var fixed = fix(raw);
-      if (fixed !== raw) img.setAttribute("src", fixed);
       img.setAttribute("loading", "lazy"); // lazy-load embedded doc images too
     });
     container.querySelectorAll("a[href]").forEach(function (a) {
-      var raw = a.getAttribute("href");
-      var fixed = fix(raw);
-      if (fixed !== raw) {
-        a.setAttribute("href", fixed);
+      // open mockup HTML/screenshot links in a new tab; never touch the href.
+      if (isMockup(a.getAttribute("href"))) {
         a.setAttribute("target", "_blank");
         a.setAttribute("rel", "noopener");
       }
@@ -3742,7 +3803,7 @@ if (typeof window.marked === "undefined") {
       var html = marked.parse(doc.md);
       html = extractMermaid(html);
       inner.innerHTML = html;
-      rewriteMockupPaths(inner); // resolve ../mockups/… → ./mockups/… for this root-level viewer
+      enhanceMockupAssets(inner); // ../mockups/… already resolves from docs/ — only lazy-load + open links in a new tab
     } else {
       // graceful degradation: show the raw markdown text (no HTML injection)
       var pre = document.createElement("pre");
@@ -3935,38 +3996,38 @@ if (typeof window.marked === "undefined") {
   var MOCKUPS = [
     {
       title: "Desktop canvas",
-      img: "./mockups/img/desktop.png",
-      live: "./mockups/desktop.html",
+      img: "../mockups/img/desktop.png",
+      live: "../mockups/desktop.html",
       cap: "Floating top bar + presence facepile, left tool dock, contextual Pen panel, minimap with per-user viewport rects, live labelled cursors + cursor chat."
     },
     {
       title: "Mobile / tablet",
-      img: "./mockups/img/mobile.png",
-      live: "./mockups/mobile.html",
+      img: "../mockups/img/mobile.png",
+      live: "../mockups/mobile.html",
       cap: "Compact top bar (3-avatar facepile) + share, floating bottom toolbar + FAB, peeking Pen bottom-sheet, touch pan/zoom hint."
     },
     {
       title: "VR — window mode",
-      img: "./mockups/img/vr.png",
-      live: "./mockups/vr.html",
+      img: "../mockups/img/vr.png",
+      live: "../mockups/vr.html",
       cap: "The infinite canvas seen through a finite curved board panel (the viewport window), wrist tool palette, head+hands avatar with laser, minimap + edge indicators, comfort vignette."
     },
     {
       title: "Onboarding / empty state / share",
-      img: "./mockups/img/onboarding.png",
-      live: "./mockups/onboarding.html",
+      img: "../mockups/img/onboarding.png",
+      live: "../mockups/onboarding.html",
       cap: "Ghost prompt, template gallery, share dialog with room URL + QR, first-run coachmarks."
     },
     {
       title: "Design-token style tile",
-      img: "./mockups/img/tokens.png",
-      live: "./mockups/tokens.html",
+      img: "../mockups/img/tokens.png",
+      live: "../mockups/tokens.html",
       cap: "Light + dark UI palettes, 12-colour CVD-safe identity palette, type/spacing/radius/elevation/motion tokens."
     },
     {
       title: "AI-generated alternative (aidesigner MCP · Ultradesign)",
-      img: "./mockups/img/ai-desktop.png",
-      live: "./mockups/ai/aidesigner-desktop-ultradesign.html",
+      img: "../mockups/img/ai-desktop.png",
+      live: "../mockups/ai/aidesigner-desktop-ultradesign.html",
       cap: "An independent visual direction generated from the same brief via the aidesigner MCP."
     }
   ];
