@@ -5,6 +5,8 @@ name = "coboard-worker"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
+# Skip Wrangler's first-run telemetry prompt so `pnpm dev` starts non-interactively.
+send_metrics = false
 
 # One Durable Object per room. Bound as "Main" so PartyServer routes it at
 # /parties/main/:roomId (see packages/shared PARTY).
