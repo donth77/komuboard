@@ -64,6 +64,47 @@ export function deleteObject(doc: Y.Doc, id: string): void {
   });
 }
 
+/** Delete several objects atomically (e.g. a multi-selection). */
+export function deleteObjects(doc: Y.Doc, ids: Iterable<string>): void {
+  doc.transact(() => {
+    const objs = objectsMap(doc);
+    const order = orderArray(doc);
+    for (const id of ids) {
+      objs.delete(id);
+      const idx = order.toArray().indexOf(id);
+      if (idx >= 0) order.delete(idx, 1);
+    }
+  });
+}
+
+/** Offset the geometry of one or more strokes in canvas space (drag-to-move). */
+export function translateObjects(doc: Y.Doc, ids: Iterable<string>, dx: number, dy: number): void {
+  if (!dx && !dy) return;
+  doc.transact(() => {
+    const objs = objectsMap(doc);
+    for (const id of ids) {
+      const m = objs.get(id);
+      if (!m) continue;
+      const pts = (m.get("points") as number[] | undefined) ?? [];
+      m.set(
+        "points",
+        pts.map((v, i) => (i % 2 === 0 ? v + dx : v + dy)),
+      );
+    }
+  });
+}
+
+/** Replace stroke geometry for several objects atomically (e.g. a resize bake). */
+export function setObjectsPoints(doc: Y.Doc, updates: ReadonlyArray<{ id: string; points: number[] }>): void {
+  doc.transact(() => {
+    const objs = objectsMap(doc);
+    for (const u of updates) {
+      const m = objs.get(u.id);
+      if (m) m.set("points", u.points);
+    }
+  });
+}
+
 /** Read a typed object out of its Y.Map (returns null for unknown types). */
 export function readObject(m: Y.Map<unknown>): BoardObject | null {
   if (m.get("type") !== "stroke") return null;

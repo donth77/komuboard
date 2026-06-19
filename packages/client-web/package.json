@@ -13,6 +13,7 @@
   "dependencies": {
     "@coboard/shared": "workspace:*",
     "konva": "^10.3.0",
+    "motion": "^12.40.0",
     "partysocket": "^1.1.4",
     "y-partyserver": "^2.2.0",
     "y-protocols": "^1.0.7",

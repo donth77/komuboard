@@ -304,13 +304,14 @@ input[type="range"] {
   color: var(--ink);
 }
 
-/* ---------- presence facepile ---------- */
-.facepile {
+/* ---------- presence avatar row ---------- */
+.avatar-presence-row {
   display: flex;
   align-items: center;
   padding-left: 7px;
+  position: relative; /* containing block for avatars popped out of flow while leaving */
 }
-.facepile .avatar {
+.avatar-presence-row .avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -323,15 +324,19 @@ input[type="range"] {
   background: var(--av, var(--accent));
   border: 2px solid var(--surface);
   cursor: default;
+  position: relative;
+  overflow: hidden;
 }
-.facepile .avatar:first-child {
+.avatar-presence-row .avatar:first-child {
   margin-left: 0;
 }
-.facepile .avatar.self {
+.avatar-presence-row .avatar.self {
   cursor: pointer;
+  z-index: 3; /* the user's own avatar sits stacked above everyone else in the row */
+  overflow: visible; /* don't clip its accent ring */
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 65%, transparent);
 }
-.facepile .avatar.more {
+.avatar-presence-row .avatar.more {
   background: var(--surface-2);
   color: var(--muted);
 }
@@ -449,17 +454,9 @@ input[type="range"] {
   font-weight: 700;
 }
 
-/* facepile join/leave animation */
-.facepile .avatar {
-  transition:
-    transform 200ms var(--ease),
-    opacity 200ms var(--ease);
-}
-.facepile .avatar.enter,
-.facepile .avatar.leave {
-  transform: scale(0.3);
-  opacity: 0;
-}
+/* avatar-presence-row join/leave motion is driven imperatively by <co-avatar-presence-row> via Motion
+   (spring enter-from-right + fade, fade/shrink exit, FLIP-reflow of neighbours).
+   It honours prefers-reduced-motion in JS, so no CSS transition is needed here. */
 
 /* ---------- keyboard hints + shortcuts modal ---------- */
 .kbd {
@@ -505,7 +502,18 @@ input[type="range"] {
   background: transparent;
   color: var(--muted);
   font-size: 15px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 7px;
   cursor: pointer;
+}
+.modal-x:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.modal-x:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .modal-body {
   padding: 6px 16px 14px;
@@ -700,4 +708,215 @@ input[type="range"] {
   * {
     transition: none !important;
   }
+}
+
+/* ---------- pen swatches: FigJam circles + custom rainbow + name tooltips ---------- */
+.pen-panel {
+  overflow: visible; /* let swatch tooltips escape the panel */
+}
+.pen-panel .swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 26px);
+  justify-content: center;
+  column-gap: 12px;
+  row-gap: 12px;
+}
+.pen-panel .sw {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+.pen-panel .sw.on {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+.sw-custom {
+  background: conic-gradient(
+    from 90deg,
+    #ff5a5a,
+    #ffb24d,
+    #ffe24d,
+    #6fe08a,
+    #4dd2ff,
+    #4d7bff,
+    #b072ff,
+    #ff5ec4,
+    #ff5a5a
+  ) !important;
+  border: 2px solid var(--surface) !important;
+}
+/* swatch name tooltip — FigJam dark pill with a downward tail */
+.pen-panel .sw::after,
+.pen-panel .sw::before {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 110ms var(--ease);
+  z-index: 70;
+}
+.pen-panel .sw::after {
+  content: attr(data-tip);
+  bottom: calc(100% + 9px);
+  background: #1e1e1e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.pen-panel .sw::before {
+  content: "";
+  bottom: calc(100% + 4px);
+  border: 5px solid transparent;
+  border-top-color: #1e1e1e;
+}
+.pen-panel .sw:hover::after,
+.pen-panel .sw:hover::before {
+  opacity: 1;
+}
+
+/* ---------- custom colour picker (FigJam-style) ---------- */
+.color-picker {
+  position: fixed;
+  z-index: 80;
+  width: 232px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  user-select: none;
+}
+.cp-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cp-eyedropper {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+.cp-eyedropper:hover {
+  background: var(--surface);
+}
+.cp-hex {
+  flex: 1;
+  min-width: 0;
+  font: 600 13px ui-monospace, "SF Mono", Menlo, monospace;
+  text-transform: uppercase;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.cp-hex:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.cp-hue {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.cp-sv {
+  position: relative;
+  height: 150px;
+  border-radius: 10px;
+  cursor: crosshair;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, var(--cp-hue, #f00));
+}
+.cp-thumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ---------- tool dock hover tooltips (name + shortcut, to the right) ---------- */
+.dock .tool {
+  position: relative;
+}
+.tool-tip {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #1e1e1e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: 8px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 110ms var(--ease);
+  z-index: 70;
+}
+.tool-tip::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: #1e1e1e;
+}
+/* keep the kbd pill legible on the dark tooltip in both themes */
+.tool-tip .kbd {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+.tool-tip .tip-soon {
+  color: #9aa4b2;
+}
+.dock .tool:hover .tool-tip {
+  opacity: 1;
+}
+
+/* profile colour swatches mirror the pen palette (circular + gap selection ring) */
+#profile-color-field .swatches {
+  gap: 10px;
+}
+#profile-color-field .sw {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+#profile-color-field .sw.on {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
 }

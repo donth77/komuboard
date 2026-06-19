@@ -3,10 +3,13 @@ import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import {
   addStroke,
+  deleteObjects,
   objectsMap,
   orderArray,
   randomId,
   readObject,
+  setObjectsPoints,
+  translateObjects,
   type PresenceState,
   type StrokeObject,
   type StrokeStyle,
@@ -24,35 +27,80 @@ export interface CanvasOptions {
 const CURSOR_HZ = 30;
 const LERP = 0.3;
 const GRID = 24;
+const SELECT_BLUE = "#4a9eff";
+// FigJam-style arrow pointer (Lucide mouse-pointer-2): used for the local CSS cursor
+// (black fill, white edge) AND remote presence cursors (filled in each user's colour).
+const CURSOR_PATH =
+  "M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z";
+const CURSOR_URL = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#1e1e1e" stroke="#ffffff" stroke-width="1.75" stroke-linejoin="round"><path d="${CURSOR_PATH}"/></svg>`,
+)}") 4 4, auto`;
+// Pen tool: a pen cursor matching the toolbar icon, hotspot at the writing tip (2,22).
+const PEN_CURSOR_URL = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#ffffff" stroke="#1e1e1e" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>`,
+)}") 2 22, auto`;
+
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function rectsIntersect(a: Rect, b: Rect): boolean {
+  return (
+    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+  );
+}
 
 /**
  * BoardCanvas — renders the room's Yjs document with Konva and drives M1
  * interaction: infinite pan/zoom (the dot grid tracks the camera), a freehand
  * pen (color/width/style/opacity) that writes strokes into the single shared
- * doc, and live labeled cursors that glide via an on-demand rAF interpolation
- * of the throttled awareness stream.
+ * doc, live labeled cursors, and a FigJam-style **select** tool (marquee +
+ * click select, a transform box with corner handles, drag-to-move and resize).
  */
 export class BoardCanvas {
   private readonly stage: Konva.Stage;
   private readonly content = new Konva.Layer();
   private readonly overlay = new Konva.Layer();
+  /** Top layer for selection chrome (marquee + transform box) — never wiped by renderObjects. */
+  private readonly uiLayer = new Konva.Layer();
+  private readonly transformer: Konva.Transformer;
+  /** Light-blue per-node outlines drawn under the union transform box for multi-selections. */
+  private readonly highlightGroup = new Konva.Group({ listening: false });
   private readonly objects: Y.Map<Y.Map<unknown>>;
   private readonly cursors = new Map<number, Konva.Group>();
   private readonly cursorTargets = new Map<number, { x: number; y: number }>();
+  /** Live map of object id → its rendered Konva node (rebuilt every render). */
+  private readonly nodeById = new Map<string, Konva.Line>();
+  private readonly selected = new Set<string>();
+  /** Local edit history (objects + z-order). Remote edits keep a different origin, so undo only reverts *your* changes. */
+  private readonly undoManager: Y.UndoManager;
 
-  private tool: ToolId = "pen";
+  private tool: ToolId = "select";
   private color = "#0e1116";
   private widthPx = 4;
   private style: StrokeStyle = "solid";
   private opacity = 1;
   private drawing: { id: string; points: number[]; line: Konva.Line } | null = null;
+  private marquee: Konva.Rect | null = null;
+  private marqueeStart: { x: number; y: number } | null = null;
+  private marqueeBase = new Set<string>();
+  private moveState: { startX: number; startY: number; dx: number; dy: number } | null = null;
   private lastCursorSent = 0;
   private raf = 0;
   private animating = false;
   private zoomListener: ((pct: number) => void) | null = null;
+  private selectionListener: ((count: number) => void) | null = null;
 
   constructor(private readonly opts: CanvasOptions) {
     this.objects = objectsMap(opts.doc);
+    // captureTimeout 0: each edit (one transaction) is its own undo step, so undo
+    // pops one stroke/move/delete at a time instead of merging rapid edits.
+    this.undoManager = new Y.UndoManager([this.objects, orderArray(opts.doc)], {
+      captureTimeout: 0,
+    });
     this.stage = new Konva.Stage({
       container: opts.container as HTMLDivElement,
       width: opts.container.clientWidth,
@@ -60,11 +108,32 @@ export class BoardCanvas {
     });
     this.stage.add(this.content);
     this.stage.add(this.overlay);
+    this.stage.add(this.uiLayer);
+
+    this.transformer = new Konva.Transformer({
+      rotateEnabled: false,
+      enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
+      borderStroke: SELECT_BLUE,
+      borderStrokeWidth: 1.5,
+      anchorStroke: SELECT_BLUE,
+      anchorFill: "#ffffff",
+      anchorSize: 9,
+      anchorCornerRadius: 2,
+      padding: 4,
+      // Never let a resize collapse the box to nothing.
+      boundBoxFunc: (oldBox, newBox) =>
+        newBox.width < 6 || newBox.height < 6 ? oldBox : newBox,
+    });
+    this.transformer.on("transformend", () => this.commitTransform());
+    this.transformer.on("transform", () => this.renderSelectionBoxes());
+    this.uiLayer.add(this.highlightGroup);
+    this.uiLayer.add(this.transformer);
 
     this.renderObjects();
     this.objects.observeDeep(() => this.renderObjects());
 
     this.bindPointer();
+    this.bindSelection();
     this.bindWheelZoom();
     this.bindResize();
     this.bindAwareness();
@@ -72,15 +141,19 @@ export class BoardCanvas {
 
     opts.awareness.setLocalStateField("user", opts.user.name);
     opts.awareness.setLocalStateField("color", opts.user.color);
-    this.setTool("pen");
+    this.setTool("select");
     this.zoomAroundCenter(0.6); // roomier default — 1:1 feels cramped on an empty board
   }
 
   setTool(tool: ToolId): void {
+    if (this.tool === "select" && tool !== "select") {
+      this.clearSelection();
+      this.cancelMarquee();
+    }
     this.tool = tool;
     this.stage.draggable(tool === "hand");
     this.stage.container().style.cursor =
-      tool === "hand" ? "grab" : tool === "pen" ? "crosshair" : "default";
+      tool === "hand" ? "grab" : tool === "pen" ? PEN_CURSOR_URL : CURSOR_URL;
   }
   setColor(color: string): void {
     this.color = color;
@@ -108,6 +181,8 @@ export class BoardCanvas {
   }
   private afterTransform(): void {
     this.scaleCursors();
+    this.styleTransformerForZoom();
+    this.renderSelectionBoxes();
     this.syncGrid();
     this.stage.batchDraw();
     this.notifyZoom();
@@ -188,22 +263,29 @@ export class BoardCanvas {
 
   private renderObjects(): void {
     this.content.destroyChildren();
+    this.nodeById.clear();
     for (const id of orderArray(this.opts.doc).toArray()) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
       if (obj?.type === "stroke") {
-        this.content.add(
-          new Konva.Line({
-            points: obj.points,
-            ...this.lineConfig(obj.color, obj.width, obj.style, obj.opacity),
-          }),
-        );
+        const line = new Konva.Line({
+          points: obj.points,
+          ...this.lineConfig(obj.color, obj.width, obj.style, obj.opacity),
+        });
+        // Make stored strokes selectable: hittable along their stroke + tagged with id.
+        line.listening(true);
+        line.hitStrokeWidth(Math.max(obj.width, 14));
+        line.name("obj");
+        line.setAttr("objId", obj.id);
+        this.content.add(line);
+        this.nodeById.set(obj.id, line);
       }
     }
     this.content.batchDraw();
+    this.reattachTransformer();
   }
 
-  // ---- pointer / drawing ----
+  // ---- pen / drawing ----
   private bindPointer(): void {
     this.stage.on("pointerdown", () => {
       if (this.tool !== "pen") return;
@@ -252,6 +334,249 @@ export class BoardCanvas {
       this.opts.awareness.setLocalStateField("cursor", null); // hide my cursor for peers
     });
     window.addEventListener("blur", () => this.opts.awareness.setLocalStateField("cursor", null));
+  }
+
+  // ---- selection (FigJam-style: marquee + click select, move, resize) ----
+  private bindSelection(): void {
+    this.stage.on("pointerdown", (e) => {
+      if (this.tool !== "select") return;
+      if (this.isOnTransformer(e.target)) return; // a handle drag → let the transformer resize
+      const shift = (e.evt as PointerEvent).shiftKey;
+      const id = this.objIdOf(e.target);
+      if (id) {
+        if (shift) {
+          if (this.selected.has(id)) this.selected.delete(id);
+          else this.selected.add(id);
+          this.reattachTransformer();
+          if (this.selected.has(id)) this.beginMove();
+        } else {
+          if (!this.selected.has(id)) this.setSelection([id]);
+          this.beginMove();
+        }
+      } else {
+        if (!shift) this.clearSelection();
+        this.beginMarquee(shift);
+      }
+    });
+    this.stage.on("pointermove", () => {
+      if (this.moveState) this.updateMove();
+      else if (this.marquee) this.updateMarquee();
+    });
+    const end = (): void => {
+      if (this.moveState) this.endMove();
+      else if (this.marquee) this.endMarquee();
+    };
+    this.stage.on("pointerup", end);
+    // A release that lands outside the stage still ends the gesture.
+    window.addEventListener("pointerup", end);
+  }
+
+  /** Walk up from a hit node to its owning object id (null for empty canvas). */
+  private objIdOf(node: Konva.Node): string | null {
+    let n: Konva.Node | null = node;
+    while (n && n !== this.stage) {
+      const id = n.getAttr("objId");
+      if (typeof id === "string") return id;
+      n = n.getParent();
+    }
+    return null;
+  }
+
+  private isOnTransformer(node: Konva.Node): boolean {
+    let n: Konva.Node | null = node;
+    while (n && n !== this.stage) {
+      if (n === this.transformer) return true;
+      n = n.getParent();
+    }
+    return false;
+  }
+
+  private setSelection(ids: string[]): void {
+    this.selected.clear();
+    for (const id of ids) if (this.nodeById.has(id)) this.selected.add(id);
+    this.reattachTransformer();
+  }
+  clearSelection(): void {
+    if (!this.selected.size) return;
+    this.selected.clear();
+    this.reattachTransformer();
+  }
+  /** Select every object on the board (⌘A). */
+  selectAll(): void {
+    this.setSelection([...this.nodeById.keys()]);
+  }
+  deleteSelection(): void {
+    if (!this.selected.size) return;
+    const ids = [...this.selected];
+    this.selected.clear();
+    deleteObjects(this.opts.doc, ids); // observer re-renders; reattach drops the gone ids
+  }
+  hasSelection(): boolean {
+    return this.selected.size > 0;
+  }
+  /** Undo / redo your own edits (remote edits are untracked, so they're never reverted). */
+  undo(): void {
+    this.undoManager.undo();
+  }
+  redo(): void {
+    this.undoManager.redo();
+  }
+  setSelectionListener(cb: (count: number) => void): void {
+    this.selectionListener = cb;
+    this.notifySelection();
+  }
+  private notifySelection(): void {
+    this.selectionListener?.(this.selected.size);
+  }
+
+  /** Point the transformer at the currently-selected nodes (called after every render). */
+  private reattachTransformer(): void {
+    for (const id of [...this.selected]) if (!this.nodeById.has(id)) this.selected.delete(id);
+    const nodes = [...this.selected]
+      .map((id) => this.nodeById.get(id))
+      .filter((n): n is Konva.Line => !!n);
+    this.transformer.nodes(nodes);
+    this.styleTransformerForZoom();
+    this.renderSelectionBoxes();
+    this.notifySelection();
+  }
+
+  /** Keep the transform box border + handles a constant screen size at any zoom. */
+  private styleTransformerForZoom(): void {
+    const inv = 1 / this.stage.scaleX();
+    this.transformer.anchorSize(9 * inv);
+    this.transformer.borderStrokeWidth(1.5 * inv);
+    this.transformer.anchorStrokeWidth(1.5 * inv);
+    this.transformer.padding(4 * inv);
+    this.transformer.forceUpdate();
+  }
+
+  // ---- move (drag the whole selection as one unit) ----
+  private beginMove(): void {
+    const p = this.point();
+    this.moveState = { startX: p.x, startY: p.y, dx: 0, dy: 0 };
+    this.stage.container().style.cursor = "move";
+  }
+  private updateMove(): void {
+    if (!this.moveState) return;
+    const p = this.point();
+    this.moveState.dx = p.x - this.moveState.startX;
+    this.moveState.dy = p.y - this.moveState.startY;
+    for (const id of this.selected) {
+      this.nodeById.get(id)?.position({ x: this.moveState.dx, y: this.moveState.dy });
+    }
+    this.transformer.forceUpdate();
+    this.renderSelectionBoxes();
+    this.content.batchDraw();
+  }
+  private endMove(): void {
+    const m = this.moveState;
+    this.moveState = null;
+    this.stage.container().style.cursor = this.tool === "select" ? CURSOR_URL : "grab";
+    if (!m) return;
+    if (Math.abs(m.dx) < 0.01 && Math.abs(m.dy) < 0.01) return; // a click, not a drag
+    translateObjects(this.opts.doc, [...this.selected], m.dx, m.dy); // → re-render at new coords
+  }
+
+  // ---- resize bake: fold the transformer's scale/translate into the points ----
+  private commitTransform(): void {
+    const updates: { id: string; points: number[] }[] = [];
+    for (const id of this.selected) {
+      const node = this.nodeById.get(id);
+      if (!node) continue;
+      const tr = node.getTransform();
+      const pts = node.points();
+      const out: number[] = [];
+      for (let i = 0; i < pts.length; i += 2) {
+        const moved = tr.point({ x: pts[i] ?? 0, y: pts[i + 1] ?? 0 });
+        out.push(moved.x, moved.y);
+      }
+      updates.push({ id, points: out });
+    }
+    if (updates.length) setObjectsPoints(this.opts.doc, updates); // → re-render at baked coords
+  }
+
+  // ---- marquee (rubber-band) selection — resolves live while you drag (FigJam-style) ----
+  private beginMarquee(additive: boolean): void {
+    const p = this.point();
+    this.marqueeStart = p;
+    this.marqueeBase = new Set(additive ? this.selected : []);
+    this.marquee = new Konva.Rect({
+      x: p.x,
+      y: p.y,
+      width: 0,
+      height: 0,
+      fill: "rgba(74, 158, 255, 0.12)",
+      stroke: SELECT_BLUE,
+      strokeWidth: 1 / this.stage.scaleX(),
+      listening: false,
+    });
+    this.uiLayer.add(this.marquee);
+    this.marquee.moveToBottom();
+  }
+  private updateMarquee(): void {
+    if (!this.marquee || !this.marqueeStart) return;
+    const p = this.point();
+    const s = this.marqueeStart;
+    const box: Rect = {
+      x: Math.min(p.x, s.x),
+      y: Math.min(p.y, s.y),
+      width: Math.abs(p.x - s.x),
+      height: Math.abs(p.y - s.y),
+    };
+    this.marquee.setAttrs(box);
+    this.applyMarquee(box); // show the resulting selection live, before release
+  }
+  private endMarquee(): void {
+    if (!this.marquee) return;
+    const box: Rect = {
+      x: this.marquee.x(),
+      y: this.marquee.y(),
+      width: this.marquee.width(),
+      height: this.marquee.height(),
+    };
+    this.cancelMarquee();
+    this.applyMarquee(box);
+  }
+  private applyMarquee(box: Rect): void {
+    const hits = new Set(this.marqueeBase);
+    if (box.width >= 2 || box.height >= 2) {
+      for (const [id, node] of this.nodeById) {
+        if (rectsIntersect(box, node.getClientRect({ relativeTo: this.content }))) hits.add(id);
+      }
+    }
+    this.setSelection([...hits]);
+  }
+  private cancelMarquee(): void {
+    this.marquee?.destroy();
+    this.marquee = null;
+    this.marqueeStart = null;
+    this.uiLayer.batchDraw();
+  }
+
+  /** Light-blue per-node outlines for a multi-selection (the union gets the transform box). */
+  private renderSelectionBoxes(): void {
+    this.highlightGroup.destroyChildren();
+    if (this.selected.size > 1) {
+      const sw = 1.2 / this.stage.scaleX();
+      for (const id of this.selected) {
+        const node = this.nodeById.get(id);
+        if (!node) continue;
+        const r = node.getClientRect({ relativeTo: this.content });
+        this.highlightGroup.add(
+          new Konva.Rect({
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.height,
+            stroke: "#8fbcff",
+            strokeWidth: sw,
+            listening: false,
+          }),
+        );
+      }
+    }
+    this.uiLayer.batchDraw();
   }
 
   // ---- pan / zoom ----
@@ -346,17 +671,17 @@ export class BoardCanvas {
     // Matches the design-mockup cursor: a filled pointer caret with a white edge.
     group.add(
       new Konva.Path({
-        data: "M5 3l5 16 2.6-6.6L19 10 5 3z",
+        data: CURSOR_PATH,
         fill: color,
         stroke: "#fff",
-        strokeWidth: 1.3,
+        strokeWidth: 1.5,
         lineJoin: "round",
         shadowColor: "rgba(0,0,0,0.25)",
         shadowBlur: 3,
         shadowOffsetY: 1,
       }),
     );
-    const label = new Konva.Label({ x: 14, y: 16 });
+    const label = new Konva.Label({ x: 16, y: 18 });
     label.add(new Konva.Tag({ fill: color, cornerRadius: 9 }));
     label.add(
       new Konva.Text({ text: name, fill: "#fff", fontSize: 12, padding: 5, fontStyle: "600" }),

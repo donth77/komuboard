@@ -4,7 +4,6 @@ import YProvider from "y-partyserver/provider";
 import type { Awareness } from "y-protocols/awareness";
 import {
   PARTY,
-  USER_COLORS,
   pickUserColor,
   randomGuestName,
   randomId,
@@ -13,10 +12,18 @@ import {
   setUserProfile,
   usersMap,
   type PresenceState,
-  type StrokeStyle,
 } from "@coboard/shared";
 import { BoardCanvas, type ToolId } from "./canvas";
 import { createAppStore } from "./store";
+import { createDialog } from "./dialog";
+import "./avatar-presence-row";
+import type { PresencePerson } from "./avatar-presence-row";
+import { icon } from "./icons";
+import "./tool-dock";
+import "./pen-panel";
+import type { PenChange } from "./pen-panel";
+import "./zoombar";
+import type { ZoomDetail } from "./zoombar";
 
 declare global {
   interface Window {
@@ -42,35 +49,7 @@ const applyTheme = (t: Theme): void => {
 let theme: Theme = storedTheme() ?? systemTheme();
 applyTheme(theme);
 
-// --------------------------------------------------------------------------
-// Lucide-style inline icons.
-// --------------------------------------------------------------------------
-const ICONS: Record<string, string> = {
-  select: '<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/>',
-  hand: '<path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8a8 8 0 0 0 8 8a8 8 0 0 0 8-8v-3a2 2 0 0 0-4 0"/>',
-  pen: '<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
-  sticky: '<path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10l6-6V5a2 2 0 0 0-2-2z"/><path d="M15 21v-4a2 2 0 0 1 2-2h4"/>',
-  text: '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
-  rect: '<rect x="3" y="3" width="18" height="18" rx="2"/>',
-  ellipse: '<circle cx="12" cy="12" r="9"/>',
-  fit: '<path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>',
-  expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
-  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
-};
-const icon = (name: string, cls = "ico"): string =>
-  `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] ?? ""}</svg>`;
-
-// icon, key, label, tool (null = not yet wired — lands in the next M1 increment)
-const TOOLS: ReadonlyArray<readonly [string, string, string, ToolId | null]> = [
-  ["select", "v", "Select", "select"],
-  ["hand", "h", "Hand / pan", "hand"],
-  ["pen", "p", "Pen", "pen"],
-  ["sticky", "s", "Sticky note", null],
-  ["text", "t", "Text", null],
-  ["rect", "r", "Rectangle", null],
-  ["ellipse", "o", "Ellipse", null],
-];
+// Icons now live in ./icons; the tool list lives inside <co-tool-dock>.
 
 // --------------------------------------------------------------------------
 // Realtime: one Yjs document per room, synced via Y-PartyServer.
@@ -121,11 +100,9 @@ const identity = loadIdentity();
 const user: PresenceState = { name: identity.name, color: identity.color };
 window.__coboard = { doc: ydoc, provider, awareness: provider.awareness };
 
-// pen state (defaults: draw in your presence color)
-const SWATCHES = Array.from(
-  new Set([user.color, "#0e1116", "#dc2626", "#f59e0b", "#16a34a", "#2563eb", "#7c3aed"]),
-);
-let penColor = user.color;
+// pen state — FigJam-style fixed palette; a trailing rainbow swatch opens the custom picker.
+const SWATCHES = ["#0e1116", "#dc2626", "#f59e0b", "#facc15", "#16a34a", "#2563eb", "#7c3aed", "#ec4899", "#ffffff"];
+const penColor = "#0e1116";
 
 // --------------------------------------------------------------------------
 // Shell.
@@ -140,90 +117,17 @@ app.innerHTML = `
     <button class="iconbtn" id="theme-toggle" type="button" aria-label="Toggle light / dark theme"></button>
     <div class="spacer"></div>
     <div class="devstatus" title="connection status">WS <b data-testid="status">connecting…</b> · <b data-testid="synced">syncing…</b></div>
-    <div class="facepile" id="facepile" data-testid="facepile" title="People here — click your avatar to rename"></div>
+    <co-avatar-presence-row id="presence-row" data-testid="presence-row" title="People here — click your avatar to rename"></co-avatar-presence-row>
   </header>
 
   <main class="canvas" id="board"></main>
 
-  <aside class="dock" aria-label="Tools">
-    ${TOOLS.map(
-      ([name, key, label, tool]) =>
-        `<button class="tool${tool === "pen" ? " active" : ""}${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" title="${label} (${key.toUpperCase()})${tool ? "" : " — coming soon"}" aria-label="${label}">${icon(name)}</button>`,
-    ).join("")}
-  </aside>
+  <co-tool-dock></co-tool-dock>
 
-  <section class="panel pen-panel" id="pen-panel" aria-label="Pen properties">
-    <div class="panel-head">Pen</div>
-    <div class="panel-sec">
-      <div class="panel-label">Color</div>
-      <div class="swatches" id="pen-swatches">
-        ${SWATCHES.map(
-          (c) =>
-            `<button class="sw${c === penColor ? " on" : ""}" type="button" data-color="${c}" style="--sw:${c}" aria-label="${c}"></button>`,
-        ).join("")}
-      </div>
-    </div>
-    <div class="panel-sec">
-      <div class="panel-label">Stroke width · <b id="pen-w-val">24</b> px</div>
-      <input type="range" id="pen-width" min="1" max="96" value="24" />
-    </div>
-    <div class="panel-sec">
-      <div class="panel-label">Style</div>
-      <div class="seg" id="pen-style">
-        <button class="seg-opt on" type="button" data-style="solid">Solid</button>
-        <button class="seg-opt" type="button" data-style="dashed">Dashed</button>
-        <button class="seg-opt" type="button" data-style="highlight">Highlight</button>
-      </div>
-    </div>
-    <div class="panel-sec">
-      <div class="panel-label">Opacity · <b id="pen-o-val">100</b>%</div>
-      <input type="range" id="pen-opacity" min="10" max="100" value="100" />
-    </div>
-  </section>
+  <co-pen-panel></co-pen-panel>
 
-  <div class="zoombar">
-    <button class="zb" id="zoom-out" type="button" aria-label="Zoom out">−</button>
-    <span class="zb pct"><input id="zoom-pct" type="text" inputmode="numeric" value="100" aria-label="Zoom percent" title="Type a zoom % and press Enter" />%</span>
-    <button class="zb" id="zoom-in" type="button" aria-label="Zoom in">+</button>
-    <span class="zb-sep"></span>
-    <button class="zb" id="zoom-fit" type="button" aria-label="Zoom to fit">${icon("fit", "ico-sm")}</button>
-    <button class="zb" id="fullscreen" type="button" aria-label="Toggle fullscreen">${icon("expand", "ico-sm")}</button>
-  </div>
+  <co-zoombar></co-zoombar>
   <div class="hint-chip">Press <kbd class="kbd">?</kbd> for shortcuts · <kbd class="kbd">⌘</kbd>+scroll to zoom · <kbd class="kbd">space</kbd> to pan</div>
-
-  <div class="modal-backdrop hidden" id="shortcuts">
-    <div class="modal" role="dialog" aria-label="Keyboard shortcuts" aria-modal="true">
-      <div class="modal-head"><span>Keyboard shortcuts</span><button class="modal-x" id="shortcuts-x" type="button" aria-label="Close">✕</button></div>
-      <div class="modal-body">
-        <div class="kbd-row"><span>Select</span><kbd class="kbd">V</kbd></div>
-        <div class="kbd-row"><span>Hand / pan</span><kbd class="kbd">H</kbd></div>
-        <div class="kbd-row"><span>Pen</span><kbd class="kbd">P</kbd></div>
-        <div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>
-        <div class="kbd-row"><span>Zoom in / out</span><span><kbd class="kbd">⌘</kbd> + scroll</span></div>
-        <div class="kbd-row"><span>Toggle this menu</span><kbd class="kbd">?</kbd></div>
-      </div>
-    </div>
-  </div>
-
-  <dialog class="dialog" id="profile">
-    <div class="dialog-head"><span>Your profile</span><button type="button" class="modal-x" id="profile-x" aria-label="Close">✕</button></div>
-    <div class="dialog-body">
-      <div class="avatar-edit">
-        <div class="avatar-preview" id="profile-avatar"></div>
-        <div class="avatar-edit-actions">
-          <button type="button" class="btn-soft" id="profile-photo-btn">Upload photo</button>
-          <button type="button" class="btn-link" id="profile-photo-clear">Remove</button>
-          <input type="file" id="profile-photo-input" accept="image/*" hidden />
-        </div>
-      </div>
-      <label class="field"><span>Display name</span><input type="text" id="profile-name" maxlength="40" placeholder="Your name" /></label>
-      <div class="field"><span>Color</span><div class="swatches" id="profile-swatches"></div></div>
-    </div>
-    <div class="dialog-foot">
-      <button type="button" class="btn-ghost" id="profile-cancel">Cancel</button>
-      <button type="button" class="btn-primary" id="profile-save">Save</button>
-    </div>
-  </dialog>
 `;
 
 // --------------------------------------------------------------------------
@@ -237,7 +141,7 @@ canvas.setWidth(24);
 provider.awareness.setLocalStateField("id", identity.id);
 
 // Publish my profile into the shared doc (synced once + persisted, never in
-// awareness), and keep the facepile in sync when anyone's profile changes.
+// awareness), and keep the avatar row in sync when anyone's profile changes.
 function publishProfile(): void {
   setUserProfile(ydoc, identity.id, {
     name: identity.name,
@@ -246,35 +150,56 @@ function publishProfile(): void {
   });
 }
 publishProfile();
-usersMap(ydoc).observe(() => renderFacepile());
+usersMap(ydoc).observe(() => renderPresenceRow());
 
 // --------------------------------------------------------------------------
-// Tools + pen properties panel.
+// Tool dock + pen properties panel (<co-tool-dock>, <co-pen-panel>).
 // --------------------------------------------------------------------------
-const penPanel = document.getElementById("pen-panel");
-const toolButtons = Array.from(app.querySelectorAll<HTMLButtonElement>(".tool[data-tool]"));
-let currentTool: ToolId = "pen";
-function activateTool(tool: ToolId): void {
+const dock = document.querySelector("co-tool-dock");
+const penPanelEl = document.querySelector("co-pen-panel");
+if (penPanelEl) {
+  penPanelEl.swatches = SWATCHES;
+  penPanelEl.color = penColor;
+}
+let currentTool: ToolId = "select";
+// Apply a tool to the canvas + panel visibility (does NOT touch the dock highlight).
+function applyTool(tool: ToolId): void {
   currentTool = tool;
   canvas.setTool(tool);
-  for (const b of toolButtons) b.classList.toggle("active", b.getAttribute("data-tool") === tool);
-  penPanel?.classList.toggle("hidden", tool !== "pen");
+  penPanelEl?.classList.toggle("hidden", tool !== "pen");
 }
-for (const btn of toolButtons) {
-  const tool = btn.getAttribute("data-tool") as ToolId | "";
-  if (tool) btn.addEventListener("click", () => activateTool(tool));
+// Programmatic selection (keyboard) also drives the dock's own highlight.
+function selectTool(tool: ToolId): void {
+  if (dock) dock.tool = tool;
+  applyTool(tool);
 }
+dock?.addEventListener("tool-change", (e) =>
+  applyTool((e as CustomEvent<{ tool: ToolId }>).detail.tool),
+);
+applyTool(currentTool); // sync initial state: select is default → pen panel hidden
+penPanelEl?.addEventListener("pen-change", (e) => {
+  const d = (e as CustomEvent<PenChange>).detail;
+  if (d.color !== undefined) canvas.setColor(d.color);
+  if (d.width !== undefined) canvas.setWidth(d.width);
+  if (d.style !== undefined) canvas.setStyle(d.style);
+  if (d.opacity !== undefined) canvas.setOpacity(d.opacity);
+});
 
-// Shortcuts overlay.
-const shortcutsEl = document.getElementById("shortcuts");
-function toggleShortcuts(show?: boolean): void {
-  if (!shortcutsEl) return;
-  const next = show ?? shortcutsEl.classList.contains("hidden");
-  shortcutsEl.classList.toggle("hidden", !next);
-}
-document.getElementById("shortcuts-x")?.addEventListener("click", () => toggleShortcuts(false));
-shortcutsEl?.addEventListener("click", (e) => {
-  if (e.target === shortcutsEl) toggleShortcuts(false);
+// Shortcuts overlay (reusable <co-dialog>).
+const shortcutsDialog = createDialog({
+  title: "Keyboard shortcuts",
+  width: 340,
+  body:
+    '<div class="kbd-row"><span>Select</span><kbd class="kbd">V</kbd></div>' +
+    '<div class="kbd-row"><span>Hand / pan</span><kbd class="kbd">H</kbd></div>' +
+    '<div class="kbd-row"><span>Pen</span><kbd class="kbd">P</kbd></div>' +
+    '<div class="kbd-row"><span>Select all</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">A</kbd></span></div>' +
+    '<div class="kbd-row"><span>Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">⌫</kbd></span></div>' +
+    '<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">Z</kbd></span></div>' +
+    '<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">⇧</kbd> <kbd class="kbd">Z</kbd></span></div>' +
+    '<div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
+    '<div class="kbd-row"><span>Zoom in / out</span><span><kbd class="kbd">⌘</kbd> + scroll</span></div>' +
+    '<div class="kbd-row"><span>Toggle this menu</span><kbd class="kbd">?</kbd></div>',
 });
 
 function isTyping(el: EventTarget | null): boolean {
@@ -287,13 +212,10 @@ const KEY_TOOL: Record<string, ToolId> = { v: "select", h: "hand", p: "pen" };
 let spacePanning = false;
 window.addEventListener("keydown", (e) => {
   if (isTyping(e.target)) return;
+  if (document.querySelector("dialog[open]")) return; // an open dialog owns the keyboard (Esc closes it)
   if (e.key === "?") {
-    toggleShortcuts();
+    shortcutsDialog.open();
     e.preventDefault();
-    return;
-  }
-  if (e.key === "Escape") {
-    toggleShortcuts(false);
     return;
   }
   if (e.key === " " && !e.repeat) {
@@ -302,10 +224,35 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     return;
   }
+  if (e.key === "Escape") {
+    canvas.clearSelection();
+    return;
+  }
+  if (e.key === "Delete" || e.key === "Backspace") {
+    canvas.deleteSelection();
+    e.preventDefault();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+    if (e.shiftKey) canvas.redo();
+    else canvas.undo();
+    e.preventDefault();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+    canvas.redo();
+    e.preventDefault();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+    canvas.selectAll();
+    e.preventDefault();
+    return;
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const tool = KEY_TOOL[e.key.toLowerCase()];
   if (tool) {
-    activateTool(tool);
+    selectTool(tool);
     e.preventDefault();
   }
 });
@@ -316,38 +263,8 @@ window.addEventListener("keyup", (e) => {
   }
 });
 
-const swatchWrap = document.getElementById("pen-swatches");
-swatchWrap?.addEventListener("click", (e) => {
-  const target = (e.target as HTMLElement).closest<HTMLElement>(".sw");
-  if (!target) return;
-  penColor = target.getAttribute("data-color") ?? penColor;
-  canvas.setColor(penColor);
-  swatchWrap.querySelectorAll(".sw").forEach((s) => s.classList.toggle("on", s === target));
-});
-
-const widthInput = document.getElementById("pen-width") as HTMLInputElement | null;
-const widthVal = document.getElementById("pen-w-val");
-widthInput?.addEventListener("input", () => {
-  const w = Number(widthInput.value);
-  canvas.setWidth(w);
-  if (widthVal) widthVal.textContent = String(w);
-});
-
-const styleSeg = document.getElementById("pen-style");
-styleSeg?.addEventListener("click", (e) => {
-  const target = (e.target as HTMLElement).closest<HTMLElement>(".seg-opt");
-  if (!target) return;
-  canvas.setStyle((target.getAttribute("data-style") as StrokeStyle) ?? "solid");
-  styleSeg.querySelectorAll(".seg-opt").forEach((s) => s.classList.toggle("on", s === target));
-});
-
-const opacityInput = document.getElementById("pen-opacity") as HTMLInputElement | null;
-const opacityVal = document.getElementById("pen-o-val");
-opacityInput?.addEventListener("input", () => {
-  const pct = Number(opacityInput.value);
-  canvas.setOpacity(pct / 100);
-  if (opacityVal) opacityVal.textContent = String(pct);
-});
+// Pen color / width / style / opacity edits are handled inside <co-pen-panel>,
+// surfaced via the "pen-change" listener above.
 
 // --------------------------------------------------------------------------
 // Theme toggle.
@@ -383,17 +300,15 @@ store.subscribe((state) => {
   dotEl.dataset.state = state.status;
 });
 
-// Presence facepile — avatars from awareness; click your own to rename.
-const facepileEl = document.getElementById("facepile");
+// Presence avatar row — avatars from awareness; click your own to rename.
+const presenceRowEl = document.querySelector("co-avatar-presence-row");
 const onlineEl = document.getElementById("online");
-const MAX_FACES = 5;
-const avatarEls = new Map<string, HTMLElement>();
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   return (((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?").slice(0, 2);
 }
-function renderFacepile(): void {
-  if (!facepileEl) return;
+function renderPresenceRow(): void {
+  if (!presenceRowEl) return;
   const self = provider.awareness.clientID;
   // Dedup connections by stable identity id (multiple tabs => one person).
   const people = new Map<string, { name: string; color: string; me: boolean }>();
@@ -408,70 +323,52 @@ function renderFacepile(): void {
     if (clientId === self) entry.me = true;
     people.set(id, entry);
   });
-  const list = [...people.entries()].sort((a, b) => (a[1].me ? -1 : b[1].me ? 1 : 0));
+  const list: PresencePerson[] = [...people.entries()]
+    .map(([id, p]) => {
+      const profile = usersMap(ydoc).get(id);
+      return {
+        id,
+        name: profile?.name ?? p.name,
+        color: profile?.color ?? p.color,
+        photo: profile?.photo,
+        me: p.me,
+      };
+    })
+    .sort((a, b) => (a.me ? -1 : b.me ? 1 : 0));
   if (onlineEl) onlineEl.textContent = String(list.length);
-  const shown = list.slice(0, MAX_FACES);
-  const shownIds = new Set(shown.map(([id]) => id));
-  for (const [id, p] of shown) {
-    const profile = usersMap(ydoc).get(id);
-    const name = profile?.name ?? p.name;
-    const color = profile?.color ?? p.color;
-    const photo = profile?.photo;
-    let el = avatarEls.get(id);
-    if (!el) {
-      el = document.createElement("span");
-      el.className = "avatar enter";
-      avatarEls.set(id, el);
-      const created = el;
-      requestAnimationFrame(() => created.classList.remove("enter"));
-    }
-    el.style.setProperty("--av", color);
-    el.classList.toggle("self", p.me);
-    el.title = p.me ? `${name} (you)` : name;
-    if (photo) {
-      el.style.backgroundImage = `url("${photo}")`;
-      el.classList.add("has-photo");
-      el.textContent = "";
-    } else {
-      el.style.backgroundImage = "";
-      el.classList.remove("has-photo");
-      el.textContent = initials(name);
-    }
-    facepileEl.appendChild(el); // (re)order to match the sorted list
-  }
-  for (const [id, el] of avatarEls) {
-    if (!shownIds.has(id)) {
-      avatarEls.delete(id);
-      el.classList.add("leave");
-      window.setTimeout(() => el.remove(), 220);
-    }
-  }
-  const extra = list.length - shown.length;
-  let more = facepileEl.querySelector<HTMLElement>(".avatar.more");
-  if (extra > 0) {
-    if (!more) {
-      more = document.createElement("span");
-      more.className = "avatar more";
-    }
-    more.textContent = `+${extra}`;
-    facepileEl.appendChild(more);
-  } else if (more) {
-    more.remove();
-  }
+  presenceRowEl.people = list; // the <co-avatar-presence-row> element renders + animates
 }
-provider.awareness.on("change", renderFacepile);
-renderFacepile();
-facepileEl?.addEventListener("click", (e) => {
-  if ((e.target as HTMLElement).closest(".avatar.self")) openProfile();
-});
+provider.awareness.on("change", renderPresenceRow);
+renderPresenceRow();
+presenceRowEl?.addEventListener("rename", () => openProfile());
+// The provider only drops our presence on the legacy "unload" event, which modern
+// browsers routinely skip on tab close (bfcache). Announce departure on pagehide so
+// remaining peers remove our avatar immediately instead of waiting for a timeout.
+window.addEventListener("pagehide", () => provider.awareness.setLocalState(null));
 
 // ---- profile dialog (native <dialog>, fully custom-styled + animated) ----
-const dialog = document.getElementById("profile") as HTMLDialogElement | null;
+const profileDialog = createDialog({
+  title: "Your profile",
+  width: 360,
+  body:
+    '<div class="avatar-edit"><div class="avatar-preview" id="profile-avatar"></div>' +
+    '<div class="avatar-edit-actions">' +
+    '<button type="button" class="btn-soft" id="profile-photo-btn">Upload photo</button>' +
+    '<button type="button" class="btn-link" id="profile-photo-clear">Remove</button>' +
+    '<input type="file" id="profile-photo-input" accept="image/*" hidden /></div></div>' +
+    '<label class="field"><span>Display name</span><input type="text" id="profile-name" maxlength="40" placeholder="Your name" /></label>' +
+    '<div class="field" id="profile-color-field"><span>Color</span><div class="swatches" id="profile-swatches"></div></div>',
+  footer:
+    '<button type="button" class="btn-ghost" data-dialog-close>Cancel</button>' +
+    '<button type="button" class="btn-primary" id="profile-save">Save</button>',
+});
 const dName = document.getElementById("profile-name") as HTMLInputElement | null;
 const dAvatar = document.getElementById("profile-avatar");
 const dSwatches = document.getElementById("profile-swatches");
 const dPhotoInput = document.getElementById("profile-photo-input") as HTMLInputElement | null;
-const PROFILE_SWATCHES = USER_COLORS.slice(0, 8);
+const dPhotoClear = document.getElementById("profile-photo-clear");
+// Avatar colours mirror the pen palette, minus white (a white avatar would be invisible).
+const PROFILE_SWATCHES = SWATCHES.filter((c) => c.toLowerCase() !== "#ffffff");
 let draft: { name: string; color: string; photo?: string } = {
   name: identity.name,
   color: identity.color,
@@ -490,6 +387,8 @@ function renderDraftAvatar(): void {
     dAvatar.classList.remove("has-photo");
     dAvatar.textContent = initials(draft.name || "Guest");
   }
+  // "Remove" only applies to an uploaded photo — the default initials avatar can't be removed.
+  if (dPhotoClear) dPhotoClear.style.display = draft.photo ? "" : "none";
 }
 function renderProfileSwatches(): void {
   if (!dSwatches) return;
@@ -503,12 +402,9 @@ function openProfile(): void {
   if (dName) dName.value = draft.name;
   renderProfileSwatches();
   renderDraftAvatar();
-  dialog?.showModal();
+  profileDialog.open();
   dName?.focus();
   dName?.select();
-}
-function closeProfile(): void {
-  dialog?.close();
 }
 
 dName?.addEventListener("input", () => {
@@ -536,11 +432,7 @@ dPhotoInput?.addEventListener("change", () => {
   });
   dPhotoInput.value = "";
 });
-document.getElementById("profile-cancel")?.addEventListener("click", closeProfile);
-document.getElementById("profile-x")?.addEventListener("click", closeProfile);
-dialog?.addEventListener("click", (e) => {
-  if (e.target === dialog) closeProfile(); // click on the backdrop
-});
+// close is handled by <co-dialog>: header ✕, the Cancel [data-dialog-close], and backdrop click
 document.getElementById("profile-save")?.addEventListener("click", () => {
   identity.name = (draft.name.trim() || identity.name).slice(0, 40);
   identity.color = draft.color;
@@ -554,8 +446,8 @@ document.getElementById("profile-save")?.addEventListener("click", () => {
   provider.awareness.setLocalStateField("user", identity.name);
   provider.awareness.setLocalStateField("color", identity.color);
   publishProfile();
-  renderFacepile();
-  closeProfile();
+  renderPresenceRow();
+  profileDialog.close();
 });
 
 /** Resize a chosen image to a small square JPEG data URL (avatar thumbnail). */
@@ -574,35 +466,20 @@ async function fileToAvatarDataUrl(file: File): Promise<string> {
   return c.toDataURL("image/jpeg", 0.82);
 }
 
-// Zoom + fullscreen widget.
-const zoomInput = document.getElementById("zoom-pct") as HTMLInputElement | null;
+// Zoom + fullscreen widget (<co-zoombar>).
+const zoombar = document.querySelector("co-zoombar");
 canvas.setZoomListener((pct) => {
-  // don't clobber what the user is typing
-  if (zoomInput && document.activeElement !== zoomInput) zoomInput.value = String(pct);
+  if (zoombar) zoombar.percent = pct;
 });
-function applyZoomInput(): void {
-  if (!zoomInput) return;
-  const pct = parseInt(zoomInput.value.replace(/[^0-9]/g, ""), 10);
-  if (Number.isFinite(pct) && pct > 0) canvas.zoomTo(pct / 100);
-  else zoomInput.value = String(canvas.getZoomPercent());
-}
-zoomInput?.addEventListener("focus", () => zoomInput.select());
-zoomInput?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    applyZoomInput();
-    zoomInput.blur();
-  } else if (e.key === "Escape") {
-    zoomInput.value = String(canvas.getZoomPercent());
-    zoomInput.blur();
-  }
-});
-zoomInput?.addEventListener("blur", applyZoomInput);
-document.getElementById("zoom-in")?.addEventListener("click", () => canvas.zoomBy(1.25));
-document.getElementById("zoom-out")?.addEventListener("click", () => canvas.zoomBy(1 / 1.25));
-document.getElementById("zoom-fit")?.addEventListener("click", () => canvas.zoomToFit());
-document.getElementById("fullscreen")?.addEventListener("click", () => {
-  if (document.fullscreenElement) void document.exitFullscreen();
-  else void document.documentElement.requestFullscreen?.();
+zoombar?.addEventListener("zoom", (e) => {
+  const d = (e as CustomEvent<ZoomDetail>).detail;
+  if (d.action === "in") canvas.zoomBy(1.25);
+  else if (d.action === "out") canvas.zoomBy(1 / 1.25);
+  else if (d.action === "fit") canvas.zoomToFit();
+  else if (d.action === "fullscreen") {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen?.();
+  } else if (d.action === "set" && d.value) canvas.zoomTo(d.value / 100);
 });
 
 // Read the real connection state directly (robust to provider event quirks),

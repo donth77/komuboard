@@ -35,3 +35,9 @@ Thumbs.db
 
 # Stray root screenshot (canonical mockup PNGs live in mockups/img/)
 /coboard-desktop-light.png
+
+# Dropped reference screenshots + scratch verification captures (root only)
+/Screenshot*.png
+/v-*.png
+/sel-*.png
+/fp-*.png

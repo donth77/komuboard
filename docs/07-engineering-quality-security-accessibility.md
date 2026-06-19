@@ -125,7 +125,15 @@ Both bind to **the same `(doc, viewport)` pair** and translate it to pixels/geom
 
 Zustand holds **only ephemeral/local UI state** — current tool, selected ids, camera/viewport, modal open, theme. **Document state lives in Yjs, never duplicated into Zustand** (duplicating it is how 2D/VR drift starts). The boundary is explicit and lint-enforced where feasible: a component reads document data through the typed Yjs accessors + observers, and reads UI state through Zustand.
 
-### 3.5 Conventions, automation & decision records
+### 3.5 UI chrome: composition model (Web Components)
+
+The DOM **chrome** — top bar, tool dock, properties panels, dialogs, share/onboarding sheets, minimap, presence facepile — is built from **native Web Components (custom elements)**, no UI framework required (the board itself is Konva canvas; VR is A-Frame). This is the framework-agnostic counterpart to §3.4: document state lives in Yjs, UI state in Zustand, and **chrome lives in `<co-*>` custom elements** with property-in / `CustomEvent`-out interfaces — app glue does the Yjs/awareness wiring, elements are presentation + local interaction. Rationale and trade-offs: **[ADR-0005](./adr/0005-ui-chrome-web-components.md)**.
+
+- **Light DOM, not Shadow DOM.** Elements share Coboard's global design system — CSS tokens **and** utility classes (`.btn-primary`, `.swatches`, `.kbd`, `.avatar`, …). Shadow DOM was rejected: custom properties pierce a shadow boundary but **class selectors do not**, so it would force per-component style duplication (and the global `prefers-reduced-motion` reset would stop applying).
+- **A11y bonus of light DOM:** one DOM tree means no cross-root ARIA fragmentation — important for the §5.1 semantic mirror and the live-region announcer — and keeps `axe-core` / Playwright selectors simple. Trade-off: no style encapsulation, so rely on disciplined prefixed class names + the single shared stylesheet.
+- **Vanilla now, [Lit](https://lit.dev) (~6 KB, MIT) optional** if boilerplate grows — within the §2.7 bundle budget, not a "heavy framework"; interops with React 19 if the React-optional path ([04 §9](./04-technical-architecture.md)) is taken. Shipped: `<co-dialog>`, `<co-avatar-presence-row>`, `<co-tool-dock>`, `<co-pen-panel>`, `<co-zoombar>` (in `packages/client-web/src/`), over a shared `icons.ts`.
+
+### 3.6 Conventions, automation & decision records
 
 - **ESLint + Prettier** with a shared config across packages; lint + typecheck are required CI checks ([06](./06-implementation-roadmap.md)).
 - **Conventional commits**, enabling automated changelogs and clear history.
@@ -135,7 +143,7 @@ Zustand holds **only ephemeral/local UI state** — current tool, selected ids, 
 - **Error-handling patterns.** Typed `Result`/error unions on fallible boundaries (network, storage, asset upload); a top-level error boundary in 2D and a VR-session error path that drops back to 2D rather than crashing; structured logging in the Worker. Never swallow; never `throw` raw strings.
 - **Component & module docs.** Each package has a README describing its boundary; public exports in `shared` are TSDoc-commented because they are the contract everyone else builds on.
 
-### 3.6 Testing
+### 3.7 Testing
 
 The **test pyramid, CI matrix, and coverage targets live in [06 — Implementation Roadmap](./06-implementation-roadmap.md)** (Vitest unit/integration, Playwright E2E, WebXR emulator). We do not repeat it here. The maintainability hook is only this: the `shared` contract (§3.1) and the viewport math (§3.3) carry the **highest-value unit tests** in the repo — a property test that a point round-trips canvas → UV → canvas for arbitrary viewport rects is worth more than any UI test.
 
@@ -203,7 +211,7 @@ Coboard is **anonymous-first and public-by-link** ([01](./01-product-vision-and-
 
 ### 4.9 Supply chain
 
-- **Lockfile + pinned versions + `pnpm audit`** in CI (also §3.5). Renovate keeps pins current with review.
+- **Lockfile + pinned versions + `pnpm audit`** in CI (also §3.6). Renovate keeps pins current with review.
 - **Subresource Integrity (SRI) on CDN `<script>`.** `index.html` was updated: `marked` is now **vendored inline** (no CDN), so only `mermaid` still loads from `cdn.jsdelivr.net`. Remaining hardening gap: **add Subresource Integrity (SRI) to the still-CDN-hosted `mermaid` `<script>`** (`integrity="sha384-…" crossorigin="anonymous"`) so a compromised/swapped CDN asset fails to execute, **or bundle `mermaid` too** (vendor it inline like `marked`) to drop the CDN dependency entirely. For product surfaces, prefer **self-hosting/bundling** via the Vite pipeline over CDN.
 
 ### 4.10 Security checklist
