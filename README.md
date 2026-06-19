@@ -102,15 +102,15 @@ coboard/
 
 ## Dev quickstart
 
-> **Status:** M0 foundations are scaffolded — a pnpm monorepo with a deployable Cloudflare Worker + Durable Object (PartyServer) WebSocket echo and a Vite web shell that connects to it. The realtime canvas core lands in M1 (see [docs/06](./docs/06-implementation-roadmap.md)).
+> **Status:** M1 in progress — a pnpm monorepo with a deployable Cloudflare Worker + Durable Object (Y-PartyServer) syncing a per-room Yjs document, and a Vite web client with a Konva canvas: freehand pen, select/move/resize, infinite pan/zoom, and live cursors + presence + shared selections. See [docs/06](./docs/06-implementation-roadmap.md) for the roadmap.
 
 ```bash
-# Install all workspace dependencies (Node 20+, pnpm 9)
+# Install all workspace dependencies (Node 22+, pnpm 9)
 pnpm install
 
 # Run the full local dev stack: worker (wrangler @ :8787) + web (vite @ :5173)
 pnpm dev
-# then open http://127.0.0.1:5173/?room=demo in two tabs to watch peers + the WS round-trip
+# then open http://127.0.0.1:5173/?room=demo in two tabs to watch strokes, cursors, and selections sync
 
 # Quality gates
 pnpm typecheck && pnpm lint && pnpm test   # vitest unit tests
