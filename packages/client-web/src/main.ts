@@ -4,11 +4,14 @@ import YProvider from "y-partyserver/provider";
 import type { Awareness } from "y-protocols/awareness";
 import {
   PARTY,
+  USER_COLORS,
   pickUserColor,
   randomGuestName,
   randomId,
   randomRoomId,
   roomIdFromUrl,
+  setUserProfile,
+  usersMap,
   type PresenceState,
   type StrokeStyle,
 } from "@coboard/shared";
@@ -89,7 +92,13 @@ const ydoc = new Y.Doc();
 const provider = new YProvider(host, room, ydoc, { party: PARTY });
 // Stable per-browser identity: multiple tabs read as the same person; open a
 // private/incognito window (separate storage) to appear as a new user.
-function loadIdentity(): { id: string; name: string; color: string } {
+interface Identity {
+  id: string;
+  name: string;
+  color: string;
+  photo?: string;
+}
+function loadIdentity(): Identity {
   let id = localStorage.getItem("coboard-uid");
   if (!id) {
     id = randomId("u");
@@ -106,7 +115,7 @@ function loadIdentity(): { id: string; name: string; color: string } {
     color = pickUserColor(seed);
     localStorage.setItem("coboard-color", color);
   }
-  return { id, name, color };
+  return { id, name, color, photo: localStorage.getItem("coboard-photo") ?? undefined };
 }
 const identity = loadIdentity();
 const user: PresenceState = { name: identity.name, color: identity.color };
@@ -195,6 +204,26 @@ app.innerHTML = `
       </div>
     </div>
   </div>
+
+  <dialog class="dialog" id="profile">
+    <div class="dialog-head"><span>Your profile</span><button type="button" class="modal-x" id="profile-x" aria-label="Close">✕</button></div>
+    <div class="dialog-body">
+      <div class="avatar-edit">
+        <div class="avatar-preview" id="profile-avatar"></div>
+        <div class="avatar-edit-actions">
+          <button type="button" class="btn-soft" id="profile-photo-btn">Upload photo</button>
+          <button type="button" class="btn-link" id="profile-photo-clear">Remove</button>
+          <input type="file" id="profile-photo-input" accept="image/*" hidden />
+        </div>
+      </div>
+      <label class="field"><span>Display name</span><input type="text" id="profile-name" maxlength="40" placeholder="Your name" /></label>
+      <div class="field"><span>Color</span><div class="swatches" id="profile-swatches"></div></div>
+    </div>
+    <div class="dialog-foot">
+      <button type="button" class="btn-ghost" id="profile-cancel">Cancel</button>
+      <button type="button" class="btn-primary" id="profile-save">Save</button>
+    </div>
+  </dialog>
 `;
 
 // --------------------------------------------------------------------------
@@ -206,6 +235,18 @@ const canvas = new BoardCanvas({ container: boardEl, doc: ydoc, awareness: provi
 canvas.setColor(penColor);
 canvas.setWidth(24);
 provider.awareness.setLocalStateField("id", identity.id);
+
+// Publish my profile into the shared doc (synced once + persisted, never in
+// awareness), and keep the facepile in sync when anyone's profile changes.
+function publishProfile(): void {
+  setUserProfile(ydoc, identity.id, {
+    name: identity.name,
+    color: identity.color,
+    photo: identity.photo,
+  });
+}
+publishProfile();
+usersMap(ydoc).observe(() => renderFacepile());
 
 // --------------------------------------------------------------------------
 // Tools + pen properties panel.
@@ -372,6 +413,10 @@ function renderFacepile(): void {
   const shown = list.slice(0, MAX_FACES);
   const shownIds = new Set(shown.map(([id]) => id));
   for (const [id, p] of shown) {
+    const profile = usersMap(ydoc).get(id);
+    const name = profile?.name ?? p.name;
+    const color = profile?.color ?? p.color;
+    const photo = profile?.photo;
     let el = avatarEls.get(id);
     if (!el) {
       el = document.createElement("span");
@@ -380,10 +425,18 @@ function renderFacepile(): void {
       const created = el;
       requestAnimationFrame(() => created.classList.remove("enter"));
     }
-    el.style.setProperty("--av", p.color);
+    el.style.setProperty("--av", color);
     el.classList.toggle("self", p.me);
-    el.title = p.me ? `${p.name} (you)` : p.name;
-    el.textContent = initials(p.name);
+    el.title = p.me ? `${name} (you)` : name;
+    if (photo) {
+      el.style.backgroundImage = `url("${photo}")`;
+      el.classList.add("has-photo");
+      el.textContent = "";
+    } else {
+      el.style.backgroundImage = "";
+      el.classList.remove("has-photo");
+      el.textContent = initials(name);
+    }
     facepileEl.appendChild(el); // (re)order to match the sorted list
   }
   for (const [id, el] of avatarEls) {
@@ -409,15 +462,117 @@ function renderFacepile(): void {
 provider.awareness.on("change", renderFacepile);
 renderFacepile();
 facepileEl?.addEventListener("click", (e) => {
-  if (!(e.target as HTMLElement).closest(".avatar.self")) return;
-  const next = window.prompt("Your display name", identity.name);
-  if (!next || !next.trim()) return;
-  identity.name = next.trim().slice(0, 40);
-  user.name = identity.name;
-  localStorage.setItem("coboard-name", identity.name);
-  provider.awareness.setLocalStateField("user", identity.name);
-  renderFacepile();
+  if ((e.target as HTMLElement).closest(".avatar.self")) openProfile();
 });
+
+// ---- profile dialog (native <dialog>, fully custom-styled + animated) ----
+const dialog = document.getElementById("profile") as HTMLDialogElement | null;
+const dName = document.getElementById("profile-name") as HTMLInputElement | null;
+const dAvatar = document.getElementById("profile-avatar");
+const dSwatches = document.getElementById("profile-swatches");
+const dPhotoInput = document.getElementById("profile-photo-input") as HTMLInputElement | null;
+const PROFILE_SWATCHES = USER_COLORS.slice(0, 8);
+let draft: { name: string; color: string; photo?: string } = {
+  name: identity.name,
+  color: identity.color,
+  photo: identity.photo,
+};
+
+function renderDraftAvatar(): void {
+  if (!dAvatar) return;
+  dAvatar.style.setProperty("--av", draft.color);
+  if (draft.photo) {
+    dAvatar.style.backgroundImage = `url("${draft.photo}")`;
+    dAvatar.classList.add("has-photo");
+    dAvatar.textContent = "";
+  } else {
+    dAvatar.style.backgroundImage = "";
+    dAvatar.classList.remove("has-photo");
+    dAvatar.textContent = initials(draft.name || "Guest");
+  }
+}
+function renderProfileSwatches(): void {
+  if (!dSwatches) return;
+  dSwatches.innerHTML = PROFILE_SWATCHES.map(
+    (c) =>
+      `<button type="button" class="sw${c === draft.color ? " on" : ""}" data-color="${c}" style="--sw:${c}" aria-label="${c}"></button>`,
+  ).join("");
+}
+function openProfile(): void {
+  draft = { name: identity.name, color: identity.color, photo: identity.photo };
+  if (dName) dName.value = draft.name;
+  renderProfileSwatches();
+  renderDraftAvatar();
+  dialog?.showModal();
+  dName?.focus();
+  dName?.select();
+}
+function closeProfile(): void {
+  dialog?.close();
+}
+
+dName?.addEventListener("input", () => {
+  draft.name = dName.value;
+  renderDraftAvatar();
+});
+dSwatches?.addEventListener("click", (e) => {
+  const t = (e.target as HTMLElement).closest<HTMLElement>(".sw");
+  if (!t) return;
+  draft.color = t.getAttribute("data-color") ?? draft.color;
+  renderProfileSwatches();
+  renderDraftAvatar();
+});
+document.getElementById("profile-photo-btn")?.addEventListener("click", () => dPhotoInput?.click());
+document.getElementById("profile-photo-clear")?.addEventListener("click", () => {
+  draft.photo = undefined;
+  renderDraftAvatar();
+});
+dPhotoInput?.addEventListener("change", () => {
+  const file = dPhotoInput.files?.[0];
+  if (!file) return;
+  void fileToAvatarDataUrl(file).then((url) => {
+    draft.photo = url;
+    renderDraftAvatar();
+  });
+  dPhotoInput.value = "";
+});
+document.getElementById("profile-cancel")?.addEventListener("click", closeProfile);
+document.getElementById("profile-x")?.addEventListener("click", closeProfile);
+dialog?.addEventListener("click", (e) => {
+  if (e.target === dialog) closeProfile(); // click on the backdrop
+});
+document.getElementById("profile-save")?.addEventListener("click", () => {
+  identity.name = (draft.name.trim() || identity.name).slice(0, 40);
+  identity.color = draft.color;
+  identity.photo = draft.photo;
+  user.name = identity.name;
+  user.color = identity.color;
+  localStorage.setItem("coboard-name", identity.name);
+  localStorage.setItem("coboard-color", identity.color);
+  if (identity.photo) localStorage.setItem("coboard-photo", identity.photo);
+  else localStorage.removeItem("coboard-photo");
+  provider.awareness.setLocalStateField("user", identity.name);
+  provider.awareness.setLocalStateField("color", identity.color);
+  publishProfile();
+  renderFacepile();
+  closeProfile();
+});
+
+/** Resize a chosen image to a small square JPEG data URL (avatar thumbnail). */
+async function fileToAvatarDataUrl(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const size = 96;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d");
+  if (!ctx) return "";
+  const scale = Math.max(size / bitmap.width, size / bitmap.height);
+  const w = bitmap.width * scale;
+  const h = bitmap.height * scale;
+  ctx.drawImage(bitmap, (size - w) / 2, (size - h) / 2, w, h);
+  return c.toDataURL("image/jpeg", 0.82);
+}
 
 // Zoom + fullscreen widget.
 const zoomInput = document.getElementById("zoom-pct") as HTMLInputElement | null;

@@ -143,3 +143,27 @@ export function randomRoomId(): string {
 export function randomGuestName(): string {
   return `${capitalize(pickWord(ADJECTIVES))} ${capitalize(pickWord(ANIMALS))}`;
 }
+
+// --- Persistent user profiles ----------------------------------------------
+// Profiles live in the Yjs document (synced once via the CRDT, persisted), NOT
+// in awareness — awareness is re-broadcast on every cursor move, so a photo
+// there would wreck the cost model. Full R2-backed photo uploads land in M3.
+
+export interface UserProfile {
+  name: string;
+  color: string;
+  /** Small data-URL avatar (M1 local thumbnail); R2 uploads come in M3. */
+  photo?: string;
+}
+
+export function usersMap(doc: Y.Doc): Y.Map<UserProfile> {
+  return doc.getMap<UserProfile>("users");
+}
+
+export function setUserProfile(doc: Y.Doc, id: string, profile: UserProfile): void {
+  usersMap(doc).set(id, profile);
+}
+
+export function readUserProfile(doc: Y.Doc, id: string): UserProfile | undefined {
+  return usersMap(doc).get(id);
+}
