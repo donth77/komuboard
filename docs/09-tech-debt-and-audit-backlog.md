@@ -1,0 +1,89 @@
+# Coboard — Technical Debt & Audit Backlog
+
+> _A living tracker of concrete code-level findings from the M1 audits (performance, optimization, code quality, organization) — what's been addressed and what remains, with locations and recommended timing. This is the actionable, file-level companion to the planning-level "potential issues" register in [docs/07](./07-engineering-quality-security-accessibility.md)._
+
+**Related documents:** [README](../README.md) · [04 — Technical Architecture](./04-technical-architecture.md) · [05 — Scaling & Cost](./05-scaling-and-cost.md) · [06 — Implementation Roadmap](./06-implementation-roadmap.md) · [07 — Engineering Quality, Security, Accessibility](./07-engineering-quality-security-accessibility.md)
+
+---
+
+## How to read this
+
+Status: ✅ done · 🔜 do now · ⏭ soon · 🅿️ defer. Severity: **High** / Med / Low. File:line references are as-of the audit and will drift — treat them as starting points, not anchors.
+
+> ⚠️ **Collision note:** `canvas.ts` and `main.ts` are actively developed. Several high-value items live there; "do now" for those is gated on the file being free of in-flight work, to avoid clobbering. Items in `shared/`, `worker/`, and the test suite are collision-free.
+
+---
+
+## Recently addressed (✅)
+
+These shipped across the M1 hardening + refactor pass and are verified (typecheck, lint, unit, e2e, build all green):
+
+| Area        | What                                                                                                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Feature     | Remote-peer **selection presence** (colored outlines via Yjs awareness).                                                                                                                                     |
+| Performance | Gated presence/connection work off the ~30 Hz×peers awareness tick; **incremental `renderObjects`** (in-place move/resize); client-rect cache; marquee broadcast throttle; `destroy()` listener/rAF cleanup. |
+| Safety      | Worker `onLoad` **corrupt-BLOB guard** (degrade to empty doc, never brick a room); `readObject` rejects malformed CRDT data; profile photo URLs validated before CSS `url()`.                                |
+| Quality     | Removed dead code (ping/echo protocol, dead `opacity`/`rttMs`); deduped `initials`; O(n) `deleteObjects`; a11y (`aria-labelledby`, picker keyboard nav).                                                     |
+| Refactor    | Extracted **`ViewportController`** (camera/pan/zoom/grid) out of `BoardCanvas`.                                                                                                                              |
+| Tests       | New `schema.test.ts` (mutations, convergence, persistence round-trip) + **worker `persistence.test.ts`** (encode/load round-trip, corrupt-BLOB degradation, eviction-sim).                                   |
+
+---
+
+## Performance / optimization
+
+| ID  | Item                                                                                                                                                                                                                                                                                                                                          | Sev      | Location                            | Timing           |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------- | ---------------- |
+| P1  | `onAwarenessChange` ignores the `{added,updated,removed}`+`origin` delta → runs the **full 5-function peer sweep** (cursors, ownership-yield, remote drag/resize, remote selections, remote draws) on **every local cursor/draw/drag broadcast** (~30 Hz) and every cursor-only tick; 4 of 5 sweeps ungated. Gate on `origin`/changed-fields. | **High** | `canvas.ts:169`                     | 🔜 (canvas free) |
+| P2  | Glide rAF loop calls `renderRemoteSelections(true)`, bypassing the `lastRemoteSelKey` dedup → `getClientRect` per gliding node **per frame**. Derive outline rects from the known live transform instead.                                                                                                                                     | **High** | `canvas.ts:1332`                    | 🔜 (canvas free) |
+| P3  | Awareness written **field-by-field** (cursor/draw/drag/resize/selection), not coalesced per frame → up to ~2× the documented "one update/frame" message budget (cost-model lever, see docs/04 §3.2, docs/05). Batch per-frame fields onto one rAF tick.                                                                                       | Med      | `canvas.ts` (×5 setLocalStateField) | 🔜 (with P1)     |
+| P4  | `cull()` issues `content.batchDraw()` even when no node visibility flipped; only matters on very dense (>~1200 obj) boards.                                                                                                                                                                                                                   | Low      | `canvas.ts:395`                     | 🅿️               |
+
+## Correctness
+
+| ID  | Item                                                                                                                                                                                                                                                                                                                   | Sev | Location                 | Timing            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------------------------ | ----------------- |
+| C1  | Remote-gesture **commit-vs-cancel** detection uses a head/tail-vertex heuristic with undocumented failure modes; `committedXforms` can wedge if a peer's `drag`/`resize` awareness field lingers post-commit. Land a regression test now; replace the heuristic with an explicit commit signal only if a bug surfaces. | Med | `canvas.ts:455`, `:1033` | ⏭ (add test now) |
+
+## Code quality & contracts
+
+| ID  | Item                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Sev      | Location                                         | Timing           |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------ | ---------------- |
+| Q1  | **`PresenceState` is no longer authoritative.** The awareness payload grew (`id`, `draw`, `drag`, `resize`) but the type only declares `name`/`color`/`cursor?`/`selection?`; every consumer reads untyped `state["..."]` with inline casts, and the `DrawState`/`ResizeNode` shapes live privately in `canvas.ts`. Extend `PresenceState`, move those types into `schema.ts`, add a typed `readPresence()`. Prevents the VR renderer from inheriting the drift. | **High** | `schema.ts:147`; reads in `canvas.ts`, `main.ts` | 🔜 (shared side) |
+| Q2  | Awareness identity field is keyed `"user"` on the wire but named `name` in `PresenceState` — a naming mismatch (the value _is_ used, contra an earlier audit claim that it was dead). Unify on one key across setter/getter/type/docs.                                                                                                                                                                                                                           | Med      | `canvas.ts:277`, `main.ts:575`                   | 🔜 (with Q1)     |
+| Q3  | Pen **defaults** (`#0e1116`, width `14`) hard-coded in 3 places (`main.ts`, `canvas.ts`, `draw-bar.ts`) → latent drift. Hoist `DEFAULT_PEN` + `SWATCHES` into one shared module.                                                                                                                                                                                                                                                                                 | Med      | 3 files                                          | ⏭               |
+| Q4  | Default peer color `"#2563eb"` / name `"Guest"` fallbacks + awareness field-name string literals duplicated across `canvas.ts`/`main.ts`. Centralize (fold into Q1's typed reader).                                                                                                                                                                                                                                                                              | Med      | `canvas.ts`, `main.ts`                           | ⏭ (with Q1)     |
+| Q5  | Magic numbers: interpolation snap epsilons, `1000/CURSOR_HZ` recomputed at 4 sites, `26` sheet-tab coupled to CSS, `640px` breakpoint inline ×3. Name them / share constants.                                                                                                                                                                                                                                                                                    | Low      | `canvas.ts`, `draw-bar.ts`                       | 🅿️               |
+
+## Organization (god-class / monolith)
+
+| ID  | Item                                                                                                                                                                                                                                                                                                      | Sev | Location                                                              | Timing               |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | --------------------------------------------------------------------- | -------------------- |
+| O1  | **`main.ts` is a 677-line god-module** wiring ~13 concerns; `src/ui/` exists but is empty. Extract (highest ROI first): `profile-dialog` → `prefs` (theme/grid) → `app-menu` → `realtime`/`identity`. Leave canvas/tool/keyboard glue as the composition root.                                            | Med | `main.ts`                                                             | ⏭ (collision-gated) |
+| O2  | **`canvas.ts` is a ~1350-line god-class.** Cleanest seam first: **`PresenceLayer`** (cursors + remote selections + remote draws, ~350 lines, lowest coupling) → then untangle `ensureAnim` to enable a `RemoteGestureController` (interpolation/ownership) → `SelectionController` last (most entangled). | Med | `canvas.ts`                                                           | ⏭ (collision-gated) |
+| O3  | Duplicated UI patterns: swatch-render + color-picker attach (×2), floating-popover + outside-click (×4: draw-bar / color-picker / avatar overflow / app-menu). Extract `ui/swatches.ts` + `openPopover()`. (Removing `pen-panel` already dropped the duplicated sheet-handle + a swatch/popover copy.)    | Med | `draw-bar.ts`, `main.ts`, `color-picker.ts`, `avatar-presence-row.ts` | ⏭                   |
+| O4  | ~~Two pen UIs with different style vocabularies.~~ **Resolved:** `<co-pen-panel>` removed — `<co-draw-bar>` (brush × dash = 4, incl. `highlight-dashed`) is the single canonical surface.                                                                                                                 | Low | `draw-bar.ts`                                                         | ✅                   |
+
+## Testing
+
+| ID  | Item                                                                                                                                                                                                                                                                                                                                                                        | Sev      | Location         | Timing |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- | ------ |
+| T1  | **Worker DO/eviction integration test.** The persistence _core_ is now unit-tested (`persistence.test.ts`), but the SQL execution + real Durable Object lifecycle (`CREATE TABLE`, the `doc_corrupt` stash, actual eviction→reload) need `@cloudflare/vitest-pool-workers`. Deferred from the unit pass to avoid fragile infra; land before the persistence milestone gate. | **High** | `worker/`        | ⏭     |
+| T2  | Draw-bar interpolation/ownership edge cases untested: live-preview→commit **style/opacity preservation** (esp. the 4th `highlight-dashed` style), peer **cancel mid-gesture** (snap-back, no doc mutation), **multi-node resize**. Schedule before the VR renderer reuses these fields.                                                                                     | Med      | `e2e/`           | ⏭     |
+| T3  | The `BoardWindow` test-hook type in `e2e/helpers.ts` is a hand-maintained mirror of the real `__coboard` shape and can silently drift; eventually assert/derive it against the real types.                                                                                                                                                                                  | Low      | `e2e/helpers.ts` | 🅿️     |
+
+## Hygiene & docs
+
+| ID  | Item                                                                                                                                                                                                                                                                                                                                                         | Sev | Location               | Timing          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ---------------------- | --------------- |
+| H1  | `y-protocols` is declared in `shared`'s deps but unused there (the real importer, `client-web`, already declares it). Remove from `shared`.                                                                                                                                                                                                                  | Low | `shared/package.json`  | ⏭              |
+| H2  | `shared` emits a `dist/` build (incl. compiled test files) that nothing consumes — consumers import its source. Make it source-only (`noEmit`) or exclude tests + point `exports` at `dist`.                                                                                                                                                                 | Low | `shared/tsconfig.json` | 🅿️              |
+| H3  | Docs drift: `docs/04` §3.1/§3.2 `AwarenessState` lists fields the code never sets (`authorId`, `tool`), names the identity field `name` (code uses `user`), omits `draw`/`drag`/`resize`, and claims per-frame coalescing the code doesn't do. README "Status" predates the draw-bar feature set. Update alongside Q1/P3 so code and contract land together. | Med | `docs/04`, `README.md` | ⏭ (with Q1/P3) |
+
+---
+
+## Suggested sequencing
+
+1. **Now, collision-free:** worker DO integration test (T1) · `PresenceState` typing (Q1/Q2, shared side) · `y-protocols` dep tidy (H1).
+2. **Now, once `canvas.ts` is free:** P1 (delta-gate the awareness handler — naturally absorbs P3 and the ownership-sweep churn) → P2 (stop forcing the per-frame outline rebuild) → add the C1 commit-handoff test.
+3. **Soon:** Q3 pen-defaults + O3 swatch/popover dedup → O1 `main.ts` decomposition into `src/ui/` → O2 `PresenceLayer` extraction.
+4. **Defer:** P4, Q5, O4, H2, T3, and C1's protocol redesign (only if a stale-transform bug appears).

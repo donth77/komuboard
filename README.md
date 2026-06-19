@@ -25,6 +25,7 @@ Read in numeric order; each doc cross-links the others.
 | 06  | [docs/06-implementation-roadmap.md](./docs/06-implementation-roadmap.md)                                         | Milestones M0–M5, granular task checklists, repo layout, CI/CD, testing strategy, risk register, KPIs, definition-of-done.                                                                          |
 | 07  | [docs/07-engineering-quality-security-accessibility.md](./docs/07-engineering-quality-security-accessibility.md) | Performance & optimization, code maintainability, security & privacy, deep accessibility (WCAG 2.2 AA + XR), and a potential-issues / challenges register.                                          |
 | 08  | [docs/08-localization-i18n-plan.md](./docs/08-localization-i18n-plan.md)                                         | Localization / i18n plan: why React isn't required, the vanilla `data-i18n` sweep + change-notifier, dynamic-string handling, Konva/VR text, plurals via `Intl`, string inventory, migration steps. |
+| 09  | [docs/09-tech-debt-and-audit-backlog.md](./docs/09-tech-debt-and-audit-backlog.md)                               | Live tech-debt / audit backlog: concrete file-level findings from the M1 performance / quality / organization audits — what's addressed vs remaining, with severities and recommended timing.       |
 
 ## UI mockups
 
@@ -81,6 +82,7 @@ coboard/
 │   ├── 06-implementation-roadmap.md
 │   ├── 07-engineering-quality-security-accessibility.md
 │   ├── 08-localization-i18n-plan.md
+│   ├── 09-tech-debt-and-audit-backlog.md
 │   └── adr/                  # architecture decision records (one per ratified decision)
 ├── mockups/                  # high-fidelity HTML UI mockups + PNG screenshots
 │   ├── desktop.html          # desktop canvas + toolbar mockup (+ desktop.png)

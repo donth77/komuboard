@@ -1,5 +1,5 @@
 import { YServer } from "y-partyserver";
-import * as Y from "yjs";
+import { encodeDocUpdate, loadStoredDoc } from "./persistence";
 
 /**
  * Board — one Durable Object per room, hosting the room's single Yjs document
@@ -24,14 +24,11 @@ export class Board extends YServer {
       .exec("SELECT data FROM ydoc WHERE id = ?", DOC_ROW_ID)
       .toArray();
     const stored = rows[0]?.data;
-    if (!(stored instanceof ArrayBuffer)) return; // no (or unexpected) saved state → start empty
-    try {
-      Y.applyUpdate(this.document, new Uint8Array(stored));
-    } catch (err) {
-      // A corrupt/incompatible BLOB must NOT brick the room: degrade to an empty document
-      // rather than letting onLoad reject, which would fail every connection to this room
-      // with no recovery path. Stash the bad bytes for forensics instead of overwriting them.
-      console.error("[board] discarding unreadable stored doc; starting empty", err);
+    if (loadStoredDoc(this.document, stored) === "corrupt") {
+      // A corrupt/incompatible BLOB must NOT brick the room: loadStoredDoc kept the doc
+      // empty rather than throwing (which would fail every connection with no recovery).
+      // Stash the bad bytes for forensics instead of overwriting them on the next save.
+      console.error("[board] discarding unreadable stored doc; starting empty");
       this.ctx.storage.sql.exec(
         "INSERT OR REPLACE INTO ydoc (id, data) VALUES (?, ?)",
         CORRUPT_ROW_ID,
@@ -41,16 +38,11 @@ export class Board extends YServer {
   }
 
   override async onSave(): Promise<void> {
-    const update = Y.encodeStateAsUpdate(this.document);
-    const blob = update.buffer.slice(
-      update.byteOffset,
-      update.byteOffset + update.byteLength,
-    ) as ArrayBuffer;
     // Table is created in onLoad, which always runs before any save — no need to repeat it here.
     this.ctx.storage.sql.exec(
       "INSERT OR REPLACE INTO ydoc (id, data) VALUES (?, ?)",
       DOC_ROW_ID,
-      blob,
+      encodeDocUpdate(this.document),
     );
   }
 }
