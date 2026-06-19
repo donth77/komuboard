@@ -22,12 +22,12 @@ export class CoZoombar extends HTMLElement {
     if (this.#wired) return;
     this.#wired = true;
     this.innerHTML =
-      '<button class="zb" data-act="out" type="button" aria-label="Zoom out" title="Zoom out">−</button>' +
-      '<span class="zb pct"><input type="text" inputmode="numeric" value="100" aria-label="Zoom level (percent)" title="Zoom level — type a % and press Enter" />%</span>' +
-      '<button class="zb" data-act="in" type="button" aria-label="Zoom in" title="Zoom in">+</button>' +
+      '<button class="zb" data-act="out" type="button" aria-label="Zoom out" data-tip="Zoom out">−</button>' +
+      '<span class="zb pct" data-tip="Zoom level"><input type="text" inputmode="numeric" value="100" aria-label="Zoom level (percent)" />%</span>' +
+      '<button class="zb" data-act="in" type="button" aria-label="Zoom in" data-tip="Zoom in">+</button>' +
       '<span class="zb-sep"></span>' +
-      `<button class="zb" data-act="reset" type="button" aria-label="Reset zoom to 50%" title="Reset zoom to 50%">${icon("fit", "ico-sm")}</button>` +
-      `<button class="zb" data-act="fullscreen" type="button" aria-label="Toggle fullscreen" title="Toggle fullscreen">${icon("expand", "ico-sm")}</button>`;
+      `<button class="zb" data-act="reset" type="button" aria-label="Reset zoom" data-tip="Reset zoom">${icon("fit", "ico-sm")}</button>` +
+      `<button class="zb" data-act="fullscreen" type="button" aria-label="Toggle fullscreen" data-tip="Toggle fullscreen">${icon("expand", "ico-sm")}</button>`;
     this.#input = this.querySelector("input") ?? undefined;
 
     this.addEventListener("click", (e) => {

@@ -12,7 +12,7 @@ import type { ToolId } from "./canvas";
 const TOOLS: ReadonlyArray<readonly [string, string, string, ToolId | null]> = [
   ["select", "v", "Select", "select"],
   ["hand", "h", "Hand", "hand"],
-  ["pen", "p", "Pen", "pen"],
+  ["pen", "p", "Draw", "pen"],
   ["sticky", "s", "Sticky note", null],
   ["text", "t", "Text", null],
   ["rect", "r", "Rectangle", null],

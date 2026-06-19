@@ -27,6 +27,12 @@ export interface CanvasOptions {
 
 const CURSOR_HZ = 30;
 const LERP = 0.3;
+// At/above this many strokes the board viewport-culls (hides off-screen nodes so a
+// dense board only draws what's near the screen). Smaller boards draw everything —
+// zero overhead, no behavior change. Tunable.
+const CULL_MIN_OBJECTS = 1200;
+// Off-screen pre-warm ring as a fraction of the viewport, so nothing pops at the edge.
+const CULL_MARGIN = 0.25;
 const SELECT_BLUE = "#4a9eff";
 // Konva attr that tags a rendered node with its object id (the select tool's hit→id contract).
 // One const so the writer (renderObjects) and reader (objIdOf) can't drift on a string literal.
@@ -54,6 +60,39 @@ function rectsIntersect(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
+/** A *remote* peer's in-progress stroke, streamed over awareness while they draw. */
+interface DrawState {
+  id: string;
+  points: number[];
+  color: string;
+  width: number;
+  style: StrokeStyle;
+  opacity: number;
+}
+
+/** One node's live transform (position + scale) in a *remote* peer's in-progress resize. */
+interface ResizeNode {
+  id: string;
+  x: number;
+  y: number;
+  sx: number;
+  sy: number;
+}
+
+const MAX_PREVIEW_VERTS = 128; // cap broadcast live-stroke vertices (cost); the committed stroke is full-res
+/** Stride a flat [x,y,…] list down to ≤ maxVerts vertices, always keeping the last (the pen tip). */
+function downsamplePoints(pts: number[], maxVerts: number): number[] {
+  const verts = pts.length >> 1;
+  if (verts <= maxVerts) return pts;
+  const stride = Math.ceil(verts / maxVerts);
+  const out: number[] = [];
+  for (let i = 0; i < verts; i += stride) out.push(pts[i * 2] as number, pts[i * 2 + 1] as number);
+  const lx = pts[pts.length - 2] as number;
+  const ly = pts[pts.length - 1] as number;
+  if (out[out.length - 2] !== lx || out[out.length - 1] !== ly) out.push(lx, ly);
+  return out;
+}
+
 /**
  * BoardCanvas — renders the room's Yjs document with Konva and drives M1
  * interaction: infinite pan/zoom (the dot grid tracks the camera), a freehand
@@ -75,6 +114,9 @@ export class BoardCanvas {
   private readonly cursorTargets = new Map<number, { x: number; y: number }>();
   /** Colored outlines showing what each *remote* peer has selected (drawn in their cursor color). */
   private readonly remoteSelections = new Konva.Group({ listening: false });
+  /** Outline rects reused across renders, keyed `clientId:objId` — avoids per-frame Konva churn
+   *  while a peer's selection glides during an interpolated drag/resize. */
+  private readonly remoteSelRects = new Map<string, Konva.Rect>();
   /** Live map of object id → its rendered Konva node (rebuilt every render). */
   private readonly nodeById = new Map<string, Konva.Line>();
   private readonly selected = new Set<string>();
@@ -95,16 +137,41 @@ export class BoardCanvas {
   private moveState: { startX: number; startY: number; dx: number; dy: number } | null = null;
   private pinch: { dist: number; cx: number; cy: number } | null = null;
   private lastCursorSent = 0;
+  /** Throttle clocks for the live drag / resize broadcasts (ms). */
+  private lastDragSent = 0;
+  private lastResizeSent = 0;
+  /** True while the local user is actively resizing via the transformer handles. */
+  private resizing = false;
+  /** Live transform (position + scale) showing a *remote* peer's in-progress drag or resize,
+   *  per object id. A drag carries scale 1; a resize carries the scale too. */
+  private readonly remoteXforms = new Map<
+    string,
+    { x: number; y: number; sx: number; sy: number }
+  >();
+  /** Ids whose remote drag/resize has already committed to the doc — guards against the
+   *  (briefly) still-present awareness re-applying the transform on top of the baked geometry. */
+  private readonly committedXforms = new Set<string>();
+  /** Throttle clock for the live in-progress-stroke broadcast (ms). */
+  private lastDrawSent = 0;
+  /** Ephemeral preview lines for *remote* peers' in-progress strokes, keyed by stroke id. */
+  private readonly remoteDraws = new Map<string, Konva.Line>();
+  private readonly remoteDrawGroup = new Konva.Group({ listening: false });
   /** Last selection broadcast on awareness (sorted, joined) — skips republishing an unchanged set. */
   private lastPublishedSelection = "";
   /** Throttle clock for selection broadcasts during a live marquee drag (ms). */
   private lastSelectionSent = 0;
   /** Signature of the last-rendered remote selections — lets cursor-only awareness ticks skip the rebuild. */
   private lastRemoteSelKey = "";
+  /** Union of remote peers' selected ids from the previous awareness tick — lets us spot an id a
+   *  peer has *just* selected (last-writer-wins ownership; see yieldSelectionToPeers). */
+  private prevRemoteSel = new Set<string>();
   /** Awareness listener kept as a field so destroy() can detach it (it fires after the stage is gone otherwise). */
   private readonly onAwarenessChange = (): void => {
     this.syncCursors();
-    this.renderRemoteSelections();
+    this.yieldSelectionToPeers(); // release any node a peer has just taken over (selected/dragged)…
+    const xformsMoved = this.renderRemoteXforms(); // …then apply peers' live drags + resizes…
+    this.renderRemoteSelections(xformsMoved); // …so force the outline rebuild when they do
+    this.renderRemoteDraws(); // peers' in-progress strokes
   };
   /** Window listeners kept as fields so destroy() can detach them (else they leak / fire on a dead stage). */
   private readonly onWindowBlur = (): void => {
@@ -119,6 +186,10 @@ export class BoardCanvas {
   private readonly rectCache = new Map<string, Rect>();
   /** Drawn object ids in z-order from the last render — a same-order change updates nodes in place. */
   private renderedOrder: string[] = [];
+  /** World-space bbox per object id, for viewport culling (populated only on dense boards). */
+  private readonly cullRects = new Map<string, Rect>();
+  /** True while off-screen nodes are hidden — lets us restore them once if the board shrinks. */
+  private culled = false;
   private raf = 0;
   private animating = false;
   private selectionListener: ((count: number) => void) | null = null;
@@ -139,7 +210,9 @@ export class BoardCanvas {
     this.stage.add(this.overlay);
     this.stage.add(this.uiLayer);
     // Peers' selection outlines sit in the overlay, in world space (so they pan/zoom
-    // with the board) and below the cursors (which are added to the overlay lazily).
+    // with the board) and below the cursors (which are added to the overlay lazily). Peers'
+    // in-progress strokes render below the outlines, like content.
+    this.overlay.add(this.remoteDrawGroup);
     this.overlay.add(this.remoteSelections);
 
     this.transformer = new Konva.Transformer({
@@ -148,6 +221,7 @@ export class BoardCanvas {
       borderStroke: SELECT_BLUE,
       borderStrokeWidth: 1.5,
       anchorStroke: SELECT_BLUE,
+      anchorStrokeWidth: 1.5,
       anchorFill: "#ffffff",
       anchorSize: 9,
       anchorCornerRadius: 2,
@@ -155,15 +229,35 @@ export class BoardCanvas {
       // Never let a resize collapse the box to nothing.
       boundBoxFunc: (oldBox, newBox) => (newBox.width < 6 || newBox.height < 6 ? oldBox : newBox),
     });
-    this.transformer.on("transformend", () => this.commitTransform());
-    this.transformer.on("transform", () => this.renderSelectionBoxes());
+    this.transformer.on("transformstart", () => {
+      this.resizing = true;
+    });
+    this.transformer.on("transform", () => {
+      this.renderSelectionBoxes();
+      // A transformer-anchor drag captures the pointer, so the stage's normal pointermove (which
+      // publishes the cursor) doesn't fire — publish here too, else the resizer's cursor freezes
+      // for peers. publishCursor self-throttles, so calling it every transform tick is fine.
+      this.publishCursor(this.point());
+      // Stream the live resize to peers (throttled). Ephemeral — commitTransform bakes it on end.
+      const now = Date.now();
+      if (now - this.lastResizeSent >= 1000 / CURSOR_HZ) {
+        this.lastResizeSent = now;
+        this.broadcastResize();
+      }
+    });
+    this.transformer.on("transformend", () => {
+      this.resizing = false;
+      this.commitTransform(); // bake the scale into points (→ doc) first…
+      this.opts.awareness.setLocalStateField("resize", null); // …then end the live preview
+    });
     this.uiLayer.add(this.highlightGroup);
     this.uiLayer.add(this.transformer);
 
     // Camera owns the stage transform; re-sync our viewport-dependent chrome on any change.
     this.viewport = new ViewportController(this.stage, opts.container, () => {
+      this.cull(); // re-cull for the new viewport before the redraw below
       this.scaleCursors();
-      this.styleTransformerForZoom();
+      this.refreshTransformer();
       this.renderSelectionBoxes();
       this.renderRemoteSelections(true); // zoom changes screen-space geometry → force rebuild
     });
@@ -172,6 +266,8 @@ export class BoardCanvas {
     this.objects.observeDeep(() => this.renderObjects());
 
     this.bindPointer();
+    // Hand-pan moves the viewport without a zoom transform, so re-cull on drag too.
+    this.stage.on("dragmove", () => this.cull());
     this.bindSelection();
     this.bindTouch();
     this.bindDragCursor();
@@ -214,6 +310,9 @@ export class BoardCanvas {
   zoomBy(factor: number): void {
     this.viewport.zoomBy(factor);
   }
+  zoomStep(dir: number): void {
+    this.viewport.zoomStep(dir);
+  }
   resetZoom(): void {
     this.viewport.resetZoom();
   }
@@ -241,6 +340,65 @@ export class BoardCanvas {
     return r;
   }
 
+  /** World-space bbox of a stroke straight from its points (+ stroke half-width).
+      Visibility-independent (no getClientRect), so culling never depends on draw state. */
+  private strokeBBox(obj: StrokeObject): Rect {
+    const p = obj.points;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i + 1 < p.length; i += 2) {
+      const x = p[i] as number;
+      const y = p[i + 1] as number;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    if (minX > maxX) return { x: 0, y: 0, width: 0, height: 0 };
+    const pad = (obj.style.includes("highlight") ? obj.width * 1.6 : obj.width) / 2 + 1;
+    return {
+      x: minX - pad,
+      y: minY - pad,
+      width: maxX - minX + pad * 2,
+      height: maxY - minY + pad * 2,
+    };
+  }
+
+  /**
+   * Viewport culling — dense boards only (≥ CULL_MIN_OBJECTS). Hides Konva nodes whose
+   * world bbox is outside the viewport expanded by a margin ring, so a big board only
+   * *draws* what's near the screen. Selected nodes stay visible (the transform box needs
+   * their bounds; off-screen nodes can't be clicked/marquee'd anyway). Sparse boards keep
+   * everything visible — no overhead, no behavior change. Cheap (one AABB test per node)
+   * and runs on every viewport change (zoom, pan) + render.
+   */
+  private cull(): void {
+    if (this.nodeById.size < CULL_MIN_OBJECTS) {
+      if (!this.culled) return; // sparse and nothing hidden → nothing to do
+      for (const n of this.nodeById.values()) n.visible(true); // dropped below threshold → restore all
+      this.culled = false;
+      this.content.batchDraw();
+      return;
+    }
+    this.culled = true;
+    const v = this.viewport.worldViewport();
+    const mx = v.width * CULL_MARGIN;
+    const my = v.height * CULL_MARGIN;
+    const view: Rect = {
+      x: v.x - mx,
+      y: v.y - my,
+      width: v.width + mx * 2,
+      height: v.height + my * 2,
+    };
+    for (const [id, node] of this.nodeById) {
+      const r = this.cullRects.get(id);
+      node.visible(this.selected.has(id) || !r || rectsIntersect(r, view));
+    }
+    this.content.batchDraw();
+  }
+
   // ---- stroke styling (shared by stored strokes + the live preview) ----
   private lineConfig(
     color: string,
@@ -248,12 +406,14 @@ export class BoardCanvas {
     style: StrokeStyle,
     opacity: number,
   ): Konva.LineConfig {
-    const highlight = style === "highlight";
+    // brush (highlight) and dash are independent: `highlight-dashed` is both at once.
+    const highlight = style === "highlight" || style === "highlight-dashed";
+    const dashed = style === "dashed" || style === "highlight-dashed";
     return {
       stroke: color,
       strokeWidth: highlight ? width * 1.6 : width,
       opacity: highlight ? Math.min(opacity, 0.4) : opacity,
-      dash: style === "dashed" ? [Math.max(2, width * 2.5), Math.max(2, width * 2)] : [],
+      dash: dashed ? [Math.max(2, width * 2.5), Math.max(2, width * 2)] : [],
       lineCap: "round",
       lineJoin: "round",
       globalCompositeOperation: highlight ? "multiply" : "source-over",
@@ -263,6 +423,7 @@ export class BoardCanvas {
 
   private renderObjects(): void {
     this.rectCache.clear(); // geometry is about to change → drop cached client rects
+    this.cullRects.clear();
     const order = orderArray(this.opts.doc).toArray();
     // Resolve the drawable strokes in z-order.
     const drawn: string[] = [];
@@ -275,6 +436,7 @@ export class BoardCanvas {
         objById.set(id, obj);
       }
     }
+    const dense = drawn.length >= CULL_MIN_OBJECTS; // compute cull bboxes only when culling is on
     // Fast path: same ids in the same z-order (a move/resize/no-op) → update the existing
     // Konva.Lines in place instead of destroying + recreating every node. Structural changes
     // (add / remove / reorder) fall back to a full rebuild.
@@ -286,14 +448,35 @@ export class BoardCanvas {
         const obj = objById.get(id);
         const line = this.nodeById.get(id);
         if (!obj || !line) continue;
+        if (dense) this.cullRects.set(id, this.strokeBBox(obj));
         // A prior local drag/resize leaves a transform on the node; the doc stores baked
-        // absolute coords, so clear the transform before re-applying geometry + style.
-        line.position({ x: 0, y: 0 });
-        line.scale({ x: 1, y: 1 });
+        // absolute coords, so clear the transform before re-applying geometry + style. If a
+        // *remote* peer is mid drag/resize on this node, a changed head OR tail vertex means
+        // their gesture just committed (a scale pins at most one vertex, so head+tail can't both
+        // be unchanged) → drop the live transform. Unchanged = an unrelated edit landed mid-
+        // gesture → keep the preview so it doesn't snap back.
+        const xf = this.remoteXforms.get(id);
+        const old = line.points();
+        const np = obj.points;
+        const committed =
+          !!xf &&
+          (old[0] !== np[0] ||
+            old[1] !== np[1] ||
+            old[old.length - 2] !== np[np.length - 2] ||
+            old[old.length - 1] !== np[np.length - 1]);
         line.setAttrs(this.lineConfig(obj.color, obj.width, obj.style, obj.opacity));
         line.listening(true);
-        line.points(obj.points);
+        line.points(np);
         line.hitStrokeWidth(Math.max(obj.width, 14));
+        if (!xf || committed) {
+          line.position({ x: 0, y: 0 });
+          line.scale({ x: 1, y: 1 });
+          if (xf) {
+            this.remoteXforms.delete(id);
+            this.committedXforms.add(id); // until the lagging awareness clears
+          }
+        }
+        // else: an ongoing remote gesture — leave the rAF-interpolated transform in place
       }
     } else {
       this.content.destroyChildren();
@@ -301,6 +484,7 @@ export class BoardCanvas {
       for (const id of drawn) {
         const obj = objById.get(id);
         if (!obj) continue;
+        if (dense) this.cullRects.set(id, this.strokeBBox(obj));
         const line = new Konva.Line({
           points: obj.points,
           ...this.lineConfig(obj.color, obj.width, obj.style, obj.opacity),
@@ -314,9 +498,24 @@ export class BoardCanvas {
       }
       this.renderedOrder = drawn;
     }
+    this.cull(); // hide off-screen nodes (dense boards) before the draw
     this.content.batchDraw();
     this.reattachTransformer();
     this.renderRemoteSelections(true); // objects moved/resized/deleted/added → force (geometry not in the cache key)
+    this.pruneCommittedDraws(); // a peer's stroke just committed → drop its live preview (no double-draw)
+  }
+
+  /** Remove any remote-draw preview now backed by a committed node (clean draw→commit handoff). */
+  private pruneCommittedDraws(): void {
+    if (!this.remoteDraws.size) return;
+    let pruned = false;
+    for (const [id, line] of this.remoteDraws) {
+      if (!this.nodeById.has(id)) continue;
+      line.destroy();
+      this.remoteDraws.delete(id);
+      pruned = true;
+    }
+    if (pruned) this.overlay.batchDraw();
   }
 
   // ---- pen / drawing ----
@@ -339,6 +538,20 @@ export class BoardCanvas {
       this.drawing.points.push(p.x, p.y);
       this.drawing.line.points(this.drawing.points);
       this.content.batchDraw();
+      // Stream the in-progress stroke to peers (throttled like cursors). It's ephemeral —
+      // addStroke commits the finished stroke on finish(), so no doc/undo churn mid-draw.
+      const now = Date.now();
+      if (now - this.lastDrawSent >= 1000 / CURSOR_HZ) {
+        this.lastDrawSent = now;
+        this.opts.awareness.setLocalStateField("draw", {
+          id: this.drawing.id,
+          points: downsamplePoints(this.drawing.points, MAX_PREVIEW_VERTS),
+          color: this.color,
+          width: this.widthPx,
+          style: this.style,
+          opacity: this.opacity,
+        });
+      }
     });
 
     const finish = (): void => {
@@ -357,10 +570,11 @@ export class BoardCanvas {
           opacity: this.opacity,
           authorId: String(this.opts.awareness.clientID),
         };
-        addStroke(this.opts.doc, stroke);
+        addStroke(this.opts.doc, stroke); // commit first…
       } else {
         this.content.batchDraw();
       }
+      this.opts.awareness.setLocalStateField("draw", null); // …then end the live preview
     };
     this.stage.on("pointerup", finish);
     this.stage.on("pointerleave", () => {
@@ -425,11 +639,13 @@ export class BoardCanvas {
   private setSelection(ids: string[]): void {
     this.selected.clear();
     for (const id of ids) if (this.nodeById.has(id)) this.selected.add(id);
+    this.cull(); // keep selected (possibly off-screen) nodes visible so the transform box bounds them
     this.reattachTransformer();
   }
   clearSelection(): void {
     if (!this.selected.size) return;
     this.selected.clear();
+    this.cull(); // re-hide any off-screen nodes that were kept visible only because selected
     this.reattachTransformer();
   }
   /** Select every object on the board (⌘A). */
@@ -449,10 +665,28 @@ export class BoardCanvas {
   remoteSelectionCount(): number {
     return this.remoteSelections.getChildren().length;
   }
+  /** Test/debug hook: how many remote-peer in-progress stroke previews are currently drawn. */
+  remoteDrawCount(): number {
+    return this.remoteDraws.size;
+  }
+  /** Test/debug hook: the screen-space (container-relative) centre of a transformer anchor
+   *  (e.g. "bottom-right"), or null if nothing is selected. */
+  transformerAnchorPos(name: string): { x: number; y: number } | null {
+    const anchor = this.transformer.findOne(`.${name}`);
+    if (!anchor) return null;
+    const r = anchor.getClientRect({ relativeTo: this.stage });
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }
   /** Test/debug hook: a rendered object's content-relative bounding rect (null if not drawn). */
   nodeContentRect(id: string): Rect | null {
     const node = this.nodeById.get(id);
     return node ? node.getClientRect({ relativeTo: this.content }) : null;
+  }
+  /** Test/debug hook: total object nodes vs. how many are currently drawn (viewport-culling check). */
+  drawnNodeCount(): { total: number; visible: number } {
+    let visible = 0;
+    for (const node of this.nodeById.values()) if (node.visible()) visible++;
+    return { total: this.nodeById.size, visible };
   }
   /** Undo / redo your own edits (remote edits are untracked, so they're never reverted). */
   undo(): void {
@@ -498,19 +732,20 @@ export class BoardCanvas {
       .map((id) => this.nodeById.get(id))
       .filter((n): n is Konva.Line => !!n);
     this.transformer.nodes(nodes);
-    this.styleTransformerForZoom();
+    this.refreshTransformer();
     this.renderSelectionBoxes();
     this.notifySelection();
     this.publishSelection();
   }
 
-  /** Keep the transform box border + handles a constant screen size at any zoom. */
-  private styleTransformerForZoom(): void {
-    const inv = this.viewport.screenPx(1);
-    this.transformer.anchorSize(9 * inv);
-    this.transformer.borderStrokeWidth(1.5 * inv);
-    this.transformer.anchorStrokeWidth(1.5 * inv);
-    this.transformer.padding(4 * inv);
+  /**
+   * Re-derive the transform box after a camera change. Konva draws the box border + handles
+   * in screen space, so they keep a constant size at any zoom on their own — only the box's
+   * position/size needs refreshing here. The chrome dimensions (anchorSize, padding, stroke
+   * widths) are set once at construction; scaling them by 1/zoom was a double-compensation
+   * that ballooned the box when zoomed far out.
+   */
+  private refreshTransformer(): void {
     this.transformer.forceUpdate();
   }
 
@@ -531,17 +766,43 @@ export class BoardCanvas {
     this.transformer.forceUpdate();
     this.renderSelectionBoxes();
     this.content.batchDraw();
+    // Stream the in-progress move to peers (throttled like cursors). The doc only commits
+    // on release (endMove), so this preview is ephemeral — no undo/persistence churn.
+    const now = Date.now();
+    if (now - this.lastDragSent >= 1000 / CURSOR_HZ) {
+      this.lastDragSent = now;
+      this.opts.awareness.setLocalStateField("drag", {
+        ids: [...this.selected],
+        dx: this.moveState.dx,
+        dy: this.moveState.dy,
+      });
+    }
   }
   private endMove(): void {
     const m = this.moveState;
     this.moveState = null;
     this.stage.container().style.cursor = this.tool === "select" ? CURSOR_URL : "grab";
-    if (!m) return;
-    if (Math.abs(m.dx) < 0.01 && Math.abs(m.dy) < 0.01) return; // a click, not a drag
-    translateObjects(this.opts.doc, [...this.selected], m.dx, m.dy); // → re-render at new coords
+    // Commit the move to the doc first (peers re-render at the baked coords), then stop the
+    // live preview — this ordering lets the committed geometry land before the offset clears.
+    if (m && (Math.abs(m.dx) >= 0.01 || Math.abs(m.dy) >= 0.01)) {
+      translateObjects(this.opts.doc, [...this.selected], m.dx, m.dy);
+    }
+    this.opts.awareness.setLocalStateField("drag", null);
   }
 
   // ---- resize bake: fold the transformer's scale/translate into the points ----
+  /** Broadcast each selected node's live transform (position + scale) so peers can mirror an
+   *  in-progress resize. Cleared on transformend, where commitTransform bakes it into the doc. */
+  private broadcastResize(): void {
+    const nodes: ResizeNode[] = [];
+    for (const id of this.selected) {
+      const node = this.nodeById.get(id);
+      if (!node) continue;
+      nodes.push({ id, x: node.x(), y: node.y(), sx: node.scaleX(), sy: node.scaleY() });
+    }
+    this.opts.awareness.setLocalStateField("resize", nodes.length ? { nodes } : null);
+  }
+
   private commitTransform(): void {
     const updates: { id: string; points: number[] }[] = [];
     for (const id of this.selected) {
@@ -605,6 +866,7 @@ export class BoardCanvas {
     const hits = new Set(this.marqueeBase);
     if (box.width >= 2 || box.height >= 2) {
       for (const [id, node] of this.nodeById) {
+        if (!node.visible()) continue; // culled (off-screen) → can't be inside an on-screen marquee
         if (rectsIntersect(box, this.nodeRect(id, node))) hits.add(id);
       }
     }
@@ -654,43 +916,205 @@ export class BoardCanvas {
     // the rebuild. Geometry (move/resize/delete) and zoom aren't in the signature, so
     // those callers pass force=true; node membership only changes via renderObjects,
     // which is one of those forced callers — so the cached path stays correct.
-    const peers: { color: string; ids: string[] }[] = [];
+    const peers: { clientId: number; color: string; ids: string[] }[] = [];
     const parts: string[] = [];
     this.opts.awareness.getStates().forEach((state, clientId) => {
       if (clientId === self) return;
       const ids = state["selection"] as string[] | undefined;
       if (!ids?.length) return;
       const color = String(state["color"] ?? "#2563eb");
-      peers.push({ color, ids });
+      peers.push({ clientId, color, ids });
       parts.push(`${clientId}:${color}:${ids.join(",")}`);
     });
     const key = parts.sort().join("|");
     if (!force && key === this.lastRemoteSelKey) return;
     this.lastRemoteSelKey = key;
 
-    this.remoteSelections.destroyChildren();
     const inv = this.viewport.screenPx(1);
     const pad = 4 * inv;
-    for (const { color, ids } of peers) {
+    const seen = new Set<string>();
+    // Reuse one rect per (peer, object): update attrs in place rather than destroy + recreate,
+    // so the per-frame outline refresh during an interpolated remote drag/resize is allocation-free.
+    for (const { clientId, color, ids } of peers) {
       for (const id of ids) {
         const node = this.nodeById.get(id);
-        if (!node) continue;
+        if (!node || !node.visible()) continue; // skip culled (off-screen) peers' selections
         const r = this.nodeRect(id, node);
-        this.remoteSelections.add(
-          new Konva.Rect({
-            x: r.x - pad,
-            y: r.y - pad,
-            width: r.width + pad * 2,
-            height: r.height + pad * 2,
-            stroke: color,
-            strokeWidth: 1.5 * inv,
-            cornerRadius: 2 * inv,
-            listening: false,
-          }),
-        );
+        const rkey = `${clientId}:${id}`;
+        seen.add(rkey);
+        let rect = this.remoteSelRects.get(rkey);
+        if (!rect) {
+          rect = new Konva.Rect({ listening: false });
+          this.remoteSelections.add(rect);
+          this.remoteSelRects.set(rkey, rect);
+        }
+        rect.setAttrs({
+          x: r.x - pad,
+          y: r.y - pad,
+          width: r.width + pad * 2,
+          height: r.height + pad * 2,
+          stroke: color,
+          strokeWidth: 1.5 * inv,
+          cornerRadius: 2 * inv,
+        });
       }
     }
+    // drop rects for selections that are gone (deselected, deleted, or culled off-screen)
+    for (const [rkey, rect] of this.remoteSelRects) {
+      if (seen.has(rkey)) continue;
+      rect.destroy();
+      this.remoteSelRects.delete(rkey);
+    }
     this.overlay.batchDraw();
+  }
+
+  /**
+   * Last-writer-wins selection ownership. A node can be the *active* selection of only one
+   * peer at a time: when another user selects (or starts dragging) a node I currently have
+   * selected, they've taken it over, so I drop it from my selection here. This implements
+   * "a newer selection overrides an older one" and fixes the stale transform box that used to
+   * linger at a node's old spot while a peer dragged it out from under my selection.
+   *
+   * Decided without cross-client clocks: an id that *just* entered some peer's selection this
+   * tick (absent last tick) was selected after mine, so I yield it; an id a peer is actively
+   * dragging is unconditionally theirs. My own in-progress gesture is never disturbed.
+   */
+  private yieldSelectionToPeers(): void {
+    const self = this.opts.awareness.clientID;
+    const remoteSel = new Set<string>();
+    const dragging = new Set<string>();
+    this.opts.awareness.getStates().forEach((state, clientId) => {
+      if (clientId === self) return;
+      const ids = state["selection"] as string[] | undefined;
+      if (ids) for (const id of ids) remoteSel.add(id);
+      // a peer actively dragging OR resizing a node owns it → force-yield it below
+      const drag = state["drag"] as { ids?: string[] } | undefined;
+      if (drag?.ids) for (const id of drag.ids) dragging.add(id);
+      const resize = state["resize"] as { nodes?: { id?: string }[] } | undefined;
+      if (resize?.nodes) for (const n of resize.nodes) if (n?.id) dragging.add(n.id);
+    });
+    // Never disturb an in-progress local gesture (drag/marquee); just record remote state below.
+    if (this.selected.size && !this.moveState && !this.marquee) {
+      let changed = false;
+      for (const id of [...this.selected]) {
+        if (dragging.has(id) || (remoteSel.has(id) && !this.prevRemoteSel.has(id))) {
+          this.selected.delete(id); // a peer took it over → release my transform box
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.cull(); // re-hide any off-screen node kept visible only because it was selected
+        this.reattachTransformer(); // detach the box from the yielded nodes + rebroadcast my selection
+      }
+    }
+    this.prevRemoteSel = remoteSel;
+  }
+
+  /**
+   * Track every *remote* peer's in-progress drag AND resize: record their live transform (position
+   * + scale) as a per-node interpolation target that the rAF loop glides toward, so moves/resizes
+   * stream over awareness like cursors and the doc only commits on release. Returns true if a node
+   * was snapped here (a cancelled gesture) so the caller refreshes outlines; ongoing gestures glide
+   * in the loop, which refreshes outlines itself. Commit handoff is reconciled in renderObjects.
+   */
+  private renderRemoteXforms(): boolean {
+    const self = this.opts.awareness.clientID;
+    const next = new Map<string, { x: number; y: number; sx: number; sy: number }>();
+    const active = new Set<string>(); // ids in any peer's drag/resize, committed or not
+    this.opts.awareness.getStates().forEach((state, clientId) => {
+      if (clientId === self) return;
+      // drag: one shared offset across the moved ids
+      const d = state["drag"] as { ids?: string[]; dx?: number; dy?: number } | undefined;
+      if (d?.ids?.length) {
+        const x = d.dx ?? 0;
+        const y = d.dy ?? 0;
+        for (const id of d.ids) {
+          active.add(id);
+          if (!this.committedXforms.has(id)) next.set(id, { x, y, sx: 1, sy: 1 });
+        }
+      }
+      // resize: a per-node position + scale
+      const r = state["resize"] as { nodes?: Partial<ResizeNode>[] } | undefined;
+      if (r?.nodes?.length) {
+        for (const n of r.nodes) {
+          if (!n?.id) continue;
+          active.add(n.id);
+          if (!this.committedXforms.has(n.id)) {
+            next.set(n.id, { x: n.x ?? 0, y: n.y ?? 0, sx: n.sx ?? 1, sy: n.sy ?? 1 });
+          }
+        }
+      }
+    });
+    // release each commit guard once its peer's gesture awareness has fully cleared
+    for (const id of this.committedXforms) if (!active.has(id)) this.committedXforms.delete(id);
+
+    const localOwns = (id: string): boolean =>
+      (this.moveState !== null || this.resizing) && this.selected.has(id);
+
+    let changed = false;
+    // reset nodes whose remote gesture ended without a doc commit (e.g. the peer cancelled)
+    for (const id of [...this.remoteXforms.keys()]) {
+      if (next.has(id)) continue;
+      this.remoteXforms.delete(id);
+      const node = this.nodeById.get(id);
+      if (
+        node &&
+        (node.x() !== 0 || node.y() !== 0 || node.scaleX() !== 1 || node.scaleY() !== 1)
+      ) {
+        node.position({ x: 0, y: 0 });
+        node.scale({ x: 1, y: 1 });
+        this.rectCache.delete(id); // cached client rect is now stale → let the outline recompute
+        changed = true;
+      }
+    }
+    // record each peer's transform as the interpolation *target*; the rAF loop glides nodes
+    // toward it (same LERP as cursors → the object stays glued under the peer's caret) rather
+    // than snapping at the 30 Hz awareness rate, which looked stepped on fast gestures.
+    for (const [id, xf] of next) {
+      if (localOwns(id)) continue; // a local gesture owns this node
+      if (this.nodeById.has(id)) this.remoteXforms.set(id, xf);
+    }
+    if (this.remoteXforms.size) this.ensureAnim();
+    if (changed) this.content.batchDraw();
+    return changed;
+  }
+
+  /**
+   * Render every *remote* peer's in-progress stroke as an ephemeral preview so drawing streams
+   * live (the doc only commits the finished stroke via addStroke). Previews are keyed by the
+   * eventual stroke id and dropped the moment the committed node appears (here or in
+   * renderObjects/pruneCommittedDraws) or the peer's draw awareness clears (e.g. cancel).
+   */
+  private renderRemoteDraws(): void {
+    const self = this.opts.awareness.clientID;
+    const active = new Set<string>();
+    let changed = false;
+    this.opts.awareness.getStates().forEach((state, clientId) => {
+      if (clientId === self) return;
+      const d = state["draw"] as Partial<DrawState> | undefined;
+      if (!d?.id || !d.points?.length) return;
+      active.add(d.id);
+      if (this.nodeById.has(d.id)) return; // already committed → the real node renders it
+      let line = this.remoteDraws.get(d.id);
+      if (!line) {
+        line = new Konva.Line({ listening: false });
+        this.remoteDrawGroup.add(line);
+        this.remoteDraws.set(d.id, line);
+      }
+      line.setAttrs(
+        this.lineConfig(d.color ?? "#000000", d.width ?? 4, d.style ?? "solid", d.opacity ?? 1),
+      );
+      line.points(d.points);
+      changed = true;
+    });
+    // drop previews that committed (a node now exists) or ended (no longer broadcast)
+    for (const [id, line] of this.remoteDraws) {
+      if (active.has(id) && !this.nodeById.has(id)) continue;
+      line.destroy();
+      this.remoteDraws.delete(id);
+      changed = true;
+    }
+    if (changed) this.overlay.batchDraw();
   }
 
   // ---- touch: pinch-to-zoom + two-finger pan (mobile) ----
@@ -737,14 +1161,20 @@ export class BoardCanvas {
     if (this.drawing) {
       this.drawing.line.destroy();
       this.drawing = null;
+      this.opts.awareness.setLocalStateField("draw", null); // cancelled → stop the live preview
       this.content.batchDraw();
     }
     if (this.marquee) this.cancelMarquee();
     if (this.moveState) {
       for (const id of this.selected) this.nodeById.get(id)?.position({ x: 0, y: 0 });
       this.moveState = null;
+      this.opts.awareness.setLocalStateField("drag", null); // cancelled → stop the live preview
       this.transformer.forceUpdate();
       this.content.batchDraw();
+    }
+    if (this.resizing) {
+      this.resizing = false;
+      this.opts.awareness.setLocalStateField("resize", null); // cancelled → stop the live preview
     }
   }
 
@@ -806,7 +1236,7 @@ export class BoardCanvas {
       }
     }
     this.overlay.batchDraw();
-    this.ensureCursorAnim();
+    this.ensureAnim();
   }
 
   private buildCursor(color: string, name: string): Konva.Group {
@@ -840,14 +1270,17 @@ export class BoardCanvas {
   }
 
   /**
-   * Glide remote cursors toward their latest reported position. The rAF loop
-   * runs ONLY while cursors are actually moving, then stops — no idle cost.
+   * Glide remote cursors AND remote-dragged/resized objects toward their latest reported targets
+   * (same LERP, so a dragged object stays glued under the peer's caret instead of stepping at the
+   * 30 Hz awareness rate). The rAF loop runs ONLY while something is actually moving, then stops —
+   * no idle cost. Objects' outlines are refreshed in-loop so they track the gliding nodes.
    */
-  private ensureCursorAnim(): void {
+  private ensureAnim(): void {
     if (this.animating) return;
     this.animating = true;
     const step = (): void => {
       let moving = false;
+      // remote cursors
       this.cursors.forEach((group, id) => {
         const t = this.cursorTargets.get(id);
         if (!t) return;
@@ -861,6 +1294,43 @@ export class BoardCanvas {
         group.position({ x: p.x + dx * LERP, y: p.y + dy * LERP });
         moving = true;
       });
+      // remote-dragged / resized objects (position + scale)
+      let contentMoved = false;
+      this.remoteXforms.forEach((tf, id) => {
+        const node = this.nodeById.get(id);
+        if (!node) return;
+        const x = node.x();
+        const y = node.y();
+        const sx = node.scaleX();
+        const sy = node.scaleY();
+        const dx = tf.x - x;
+        const dy = tf.y - y;
+        const dsx = tf.sx - sx;
+        const dsy = tf.sy - sy;
+        if (
+          Math.abs(dx) < 0.05 &&
+          Math.abs(dy) < 0.05 &&
+          Math.abs(dsx) < 0.0005 &&
+          Math.abs(dsy) < 0.0005
+        ) {
+          if (x !== tf.x || y !== tf.y || sx !== tf.sx || sy !== tf.sy) {
+            node.position({ x: tf.x, y: tf.y });
+            node.scale({ x: tf.sx, y: tf.sy });
+            this.rectCache.delete(id);
+            contentMoved = true;
+          }
+          return;
+        }
+        node.position({ x: x + dx * LERP, y: y + dy * LERP });
+        node.scale({ x: sx + dsx * LERP, y: sy + dsy * LERP });
+        this.rectCache.delete(id);
+        moving = true;
+        contentMoved = true;
+      });
+      if (contentMoved) {
+        this.content.batchDraw();
+        this.renderRemoteSelections(true); // keep peers' outlines glued to the gliding nodes
+      }
       this.overlay.batchDraw();
       if (moving) {
         this.raf = requestAnimationFrame(step);
@@ -873,6 +1343,7 @@ export class BoardCanvas {
 
   destroy(): void {
     cancelAnimationFrame(this.raf);
+    this.viewport.stopZoomAnim(); // stop any in-flight zoom-step rAF before the stage is gone
     this.opts.awareness.off("change", this.onAwarenessChange);
     window.removeEventListener("blur", this.onWindowBlur);
     window.removeEventListener("pointerup", this.onWindowPointerUp);

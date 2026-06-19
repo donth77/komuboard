@@ -13,11 +13,14 @@ export type BoardWindow = {
     provider: { wsconnected: boolean };
     awareness: {
       clientID: number;
-      getLocalState(): { selection?: string[] } | null;
-      getStates(): Map<number, { selection?: string[] }>;
+      getLocalState(): { selection?: string[]; cursor?: { x: number; y: number } } | null;
+      getStates(): Map<number, { selection?: string[]; cursor?: { x: number; y: number } }>;
     };
     canvas?: {
+      hasSelection(): boolean;
       remoteSelectionCount(): number;
+      remoteDrawCount(): number;
+      transformerAnchorPos(name: string): { x: number; y: number } | null;
       nodeContentRect(id: string): { x: number; y: number; width: number; height: number } | null;
       getZoomPercent(): number;
     };
@@ -69,5 +72,12 @@ export function objectIds(page: Page): Promise<string[]> {
 export function remoteSelectionCount(page: Page): Promise<number> {
   return page.evaluate(
     () => (window as unknown as BoardWindow).__coboard.canvas?.remoteSelectionCount() ?? -1,
+  );
+}
+
+/** Whether a page currently holds its own (local) selection — i.e. shows the transform box. */
+export function hasSelection(page: Page): Promise<boolean> {
+  return page.evaluate(
+    () => (window as unknown as BoardWindow).__coboard.canvas?.hasSelection() ?? false,
   );
 }

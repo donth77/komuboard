@@ -16,16 +16,20 @@ import {
 import { BoardCanvas, type ToolId } from "./canvas";
 import { createAppStore } from "./store";
 import { createDialog } from "./dialog";
+import { settingsControlsHTML, syncSettingsControls } from "./settings-controls";
 import "./avatar-presence-row";
 import type { PresencePerson } from "./avatar-presence-row";
 import "./tool-dock";
 import "./pen-panel";
+import "./draw-bar";
 import type { PenChange } from "./pen-panel";
 import { COLOR_NAMES } from "./pen-panel";
 import "./zoombar";
 import type { ZoomDetail } from "./zoombar";
 import "./topbar";
 import "./drawer";
+import "./tooltip"; // body-level singleton tooltip for every [data-tip] element (always top-most)
+import { icon } from "./icons";
 import { initials, safePhotoUrl } from "./util";
 
 declare global {
@@ -51,6 +55,23 @@ const applyTheme = (t: Theme): void => {
 };
 let theme: Theme = storedTheme() ?? systemTheme();
 applyTheme(theme);
+
+// --------------------------------------------------------------------------
+// Grid style: dots (FigJam) vs lines (Figma). A per-viewer preference, persisted
+// locally and applied as data-grid on the .canvas board element (never synced to
+// the doc — two people in a room can view different grids). The LOD/crossfade
+// rendering lives in styles.css + ViewportController.syncGrid().
+// --------------------------------------------------------------------------
+const GRID_KEY = "coboard-grid";
+type GridMode = "dots" | "lines";
+const storedGrid = (): GridMode | null => {
+  const v = localStorage.getItem(GRID_KEY);
+  return v === "dots" || v === "lines" ? v : null;
+};
+let gridMode: GridMode = storedGrid() ?? "dots";
+const applyGrid = (g: GridMode): void => {
+  document.getElementById("board")?.setAttribute("data-grid", g);
+};
 
 // Icons now live in ./icons; the tool list lives inside <co-tool-dock>.
 
@@ -126,15 +147,17 @@ if (!app) throw new Error("#app root missing");
 app.innerHTML = `
   <co-topbar id="topbar" room="${room}"></co-topbar>
 
-  <main class="canvas" id="board"></main>
+  <main class="canvas" id="board" data-grid="${gridMode}"></main>
 
   <div class="zoom-pill" id="zoom-pill" aria-hidden="true">100%</div>
 
   <co-tool-dock></co-tool-dock>
 
-  <div class="sheet-wrap"><co-pen-panel></co-pen-panel></div>
+  <div class="sheet-wrap"><co-pen-panel></co-pen-panel><co-draw-bar></co-draw-bar></div>
 
   <co-zoombar></co-zoombar>
+
+  <button class="help-btn" id="help-btn" type="button" data-tip="Help" aria-label="Help">${icon("help")}</button>
 
   <co-drawer room="${room}"></co-drawer>
 `;
@@ -172,10 +195,16 @@ usersMap(ydoc).observe(() => renderPresenceRow());
 // --------------------------------------------------------------------------
 const dock = document.querySelector("co-tool-dock");
 const penPanelEl = document.querySelector("co-pen-panel");
+const drawBarEl = document.querySelector("co-draw-bar");
 if (penPanelEl) {
   penPanelEl.swatches = SWATCHES;
   penPanelEl.color = penColor;
 }
+if (drawBarEl) {
+  drawBarEl.swatches = SWATCHES;
+  drawBarEl.color = penColor;
+}
+const mobileMql = window.matchMedia("(max-width: 640px)");
 let currentTool: ToolId = "select";
 // Apply a tool to the canvas + panel visibility (does NOT touch the dock highlight).
 function applyTool(tool: ToolId): void {
@@ -184,21 +213,40 @@ function applyTool(tool: ToolId): void {
   const isPen = tool === "pen";
   penPanelEl?.classList.toggle("hidden", !isPen);
   penPanelEl?.classList.remove("collapsed"); // pen → fully expand; non-pen → no tab (hidden wins)
+  drawBarEl?.classList.toggle("hidden", !isPen); // desktop draw bar shows alongside the Draw tool
+  drawBarEl?.classList.remove("collapsed"); // pen → fully expand the mobile sheet; non-pen → hidden wins
   app?.classList.toggle("pen-open", isPen); // dock top merges with the sheet/tab while pen is active
+}
+// Show/hide the draw menu (desktop bar + mobile sheet) without changing the active tool —
+// re-clicking the already-selected Draw icon toggles it. `pen-open` tracks "menu visible".
+function toggleDrawMenu(): void {
+  // Mobile: the Draw tool stays selected, so keep the sheet in place — collapse it to the pull-tab
+  // (tap again to expand). Switching to another tool is what hides it fully (see applyTool).
+  if (mobileMql.matches) {
+    drawBarEl?.classList.toggle("collapsed");
+    return;
+  }
+  // Desktop: toggle the floating bar's visibility entirely (no tab affordance there).
+  const open = !!app?.classList.contains("pen-open");
+  drawBarEl?.classList.toggle("hidden", open);
+  penPanelEl?.classList.toggle("hidden", open);
+  app?.classList.toggle("pen-open", !open);
 }
 // Programmatic selection (keyboard) also drives the dock's own highlight.
 function selectTool(tool: ToolId): void {
   if (dock) dock.tool = tool;
   applyTool(tool);
 }
-dock?.addEventListener("tool-change", (e) =>
-  applyTool((e as CustomEvent<{ tool: ToolId }>).detail.tool),
-);
+dock?.addEventListener("tool-change", (e) => {
+  const tool = (e as CustomEvent<{ tool: ToolId }>).detail.tool;
+  // Clicking Draw while it's already active toggles its menu (the pen tool stays selected).
+  if (tool === "pen" && currentTool === "pen") toggleDrawMenu();
+  else applyTool(tool);
+});
 applyTool(currentTool); // sync initial state: select is default → pen panel hidden
 
 // Mobile: tapping the canvas dismisses the pen sheet (slides it out of the way; the pen
 // tool stays selected — tap Pen again to bring it back).
-const mobileMql = window.matchMedia("(max-width: 640px)");
 boardEl.addEventListener(
   "pointerdown",
   () => {
@@ -208,7 +256,8 @@ boardEl.addEventListener(
   },
   true,
 );
-penPanelEl?.addEventListener("pen-change", (e) => {
+// Both <co-pen-panel> and <co-draw-bar> emit `pen-change` (bubbling) → handle once on #app.
+app?.addEventListener("pen-change", (e) => {
   const d = (e as CustomEvent<PenChange>).detail;
   if (d.color !== undefined) canvas.setColor(d.color);
   if (d.width !== undefined) canvas.setWidth(d.width);
@@ -297,35 +346,98 @@ window.addEventListener("keyup", (e) => {
 // surfaced via the "pen-change" listener above.
 
 // --------------------------------------------------------------------------
-// Theme toggle.
+// Settings: theme + grid style. The same controls render in two places — the
+// desktop gear → Settings dialog and the mobile drawer — and, since everything is
+// light DOM, one delegated click handler + syncSettings() keep every instance in
+// step (see settings-controls.ts). Both prefs are per-viewer, persisted locally.
 // --------------------------------------------------------------------------
 const topbar = document.querySelector("co-topbar");
 const drawer = document.querySelector("co-drawer");
-const syncThemeBtn = (): void => {
-  if (topbar) topbar.theme = theme; // top-bar button glyph
-  if (drawer) drawer.theme = theme; // drawer item glyph
-};
-syncThemeBtn();
+
+const syncSettings = (): void => syncSettingsControls(theme, gridMode);
+
 function toggleTheme(): void {
   theme = theme === "dark" ? "light" : "dark";
   localStorage.setItem(THEME_KEY, theme);
   applyTheme(theme);
-  syncThemeBtn();
+  syncSettings();
 }
-topbar?.addEventListener("theme-toggle", toggleTheme);
-drawer?.addEventListener("theme-toggle", toggleTheme);
+function setGridMode(g: GridMode): void {
+  if (g === gridMode) return;
+  gridMode = g;
+  localStorage.setItem(GRID_KEY, g);
+  applyGrid(g);
+  syncSettings();
+}
+
+// The settings controls live in both the dialog and the drawer (light DOM), so a
+// single delegated handler covers every instance.
+document.addEventListener("click", (e) => {
+  const t = e.target as HTMLElement | null;
+  const g = t?.closest<HTMLElement>("[data-grid-opt]")?.dataset.gridOpt;
+  if (g === "dots" || g === "lines") setGridMode(g);
+  else if (t?.closest("[data-theme-toggle]")) toggleTheme();
+});
+syncSettings();
+
+// Follow the OS theme until the user picks one explicitly (then the stored pref wins).
 darkMedia.addEventListener("change", () => {
   if (storedTheme()) return;
   theme = systemTheme();
   applyTheme(theme);
-  syncThemeBtn();
+  syncSettings();
 });
 
-// Mobile slide-out drawer (<co-drawer>): the hamburger opens it; it closes itself
-// on scrim click. Its Theme item surfaces as a "theme-toggle" event (wired above).
+// App menu: the hamburger opens a dropdown on desktop (branding + grid/theme — this replaces the
+// old gear dialog) and the slide-out drawer on mobile (which hosts the same shared controls).
+let appMenu: HTMLElement | null = null;
+let onMenuPointer: ((e: PointerEvent) => void) | null = null;
+function closeAppMenu(): void {
+  appMenu?.remove();
+  appMenu = null;
+  if (onMenuPointer) {
+    document.removeEventListener("pointerdown", onMenuPointer, true);
+    onMenuPointer = null;
+  }
+}
+function toggleAppMenu(): void {
+  if (appMenu) {
+    closeAppMenu();
+    return;
+  }
+  const navBtn = topbar?.querySelector<HTMLElement>(".nav-btn");
+  if (!navBtn) return;
+  const menu = document.createElement("div");
+  menu.className = "app-menu";
+  menu.setAttribute("role", "menu");
+  menu.innerHTML =
+    '<div class="app-menu-head"><span class="logo">◳</span> <strong>Coboard</strong></div>' +
+    `<div class="app-menu-body">${settingsControlsHTML()}</div>`;
+  document.body.appendChild(menu);
+  appMenu = menu;
+  const r = navBtn.getBoundingClientRect();
+  menu.style.left = `${r.left}px`;
+  menu.style.top = `${r.bottom + 8}px`;
+  syncSettings(); // reflect current grid/theme in the freshly-rendered controls
+  onMenuPointer = (ev) => {
+    const t = ev.target as Node;
+    if (menu.contains(t) || navBtn.contains(t)) return;
+    closeAppMenu();
+  };
+  document.addEventListener("pointerdown", onMenuPointer, true);
+}
 topbar?.addEventListener("nav-toggle", () => {
-  if (drawer) drawer.open = true;
+  if (mobileMql.matches) {
+    if (drawer) drawer.open = true;
+  } else {
+    toggleAppMenu();
+  }
 });
+mobileMql.addEventListener("change", closeAppMenu); // breakpoint flip → drop a stale desktop menu
+
+// Help → keyboard-shortcuts dialog: a floating "?" button on desktop, a drawer item on mobile.
+document.getElementById("help-btn")?.addEventListener("click", () => shortcutsDialog.open());
+drawer?.addEventListener("help", () => shortcutsDialog.open());
 
 // --------------------------------------------------------------------------
 // Status / presence dev readout.
@@ -336,6 +448,7 @@ store.subscribe((state) => {
 
 // Presence avatar row — avatars from awareness; click your own to rename.
 const presenceRowEl = document.querySelector("co-avatar-presence-row");
+if (presenceRowEl) presenceRowEl.max = 7; // show up to 7 avatars, then a clickable "+N" overflow
 let lastPresenceKey = "";
 function renderPresenceRow(): void {
   if (!presenceRowEl) return;
@@ -520,8 +633,8 @@ canvas.setZoomListener((pct) => {
 });
 zoombar?.addEventListener("zoom", (e) => {
   const d = (e as CustomEvent<ZoomDetail>).detail;
-  if (d.action === "in") canvas.zoomBy(1.25);
-  else if (d.action === "out") canvas.zoomBy(1 / 1.25);
+  if (d.action === "in") canvas.zoomStep(1);
+  else if (d.action === "out") canvas.zoomStep(-1);
   else if (d.action === "reset") canvas.resetZoom();
   else if (d.action === "fullscreen") {
     if (document.fullscreenElement) void document.exitFullscreen();

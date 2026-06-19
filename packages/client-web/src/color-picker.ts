@@ -95,7 +95,7 @@ export class CoColorPicker extends HTMLElement {
     this.innerHTML =
       '<div class="cp-top">' +
       (ED
-        ? '<button class="cp-eyedropper" type="button" title="Pick from screen" aria-label="Eyedropper">' +
+        ? '<button class="cp-eyedropper" type="button" data-tip="Pick from screen" aria-label="Eyedropper">' +
           '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 0 1 3 3L18 9l.4.4a2.1 2.1 0 0 1 0 3 2.1 2.1 0 0 1-3 0l-3.8-3.8a2.1 2.1 0 0 1 0-3 2.1 2.1 0 0 1 3 0Z"/></svg></button>'
         : "") +
       '<input class="cp-hex" type="text" spellcheck="false" aria-label="Hex colour" />' +

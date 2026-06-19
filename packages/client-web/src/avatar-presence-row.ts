@@ -62,6 +62,9 @@ export class CoAvatarPresenceRow extends HTMLElement {
   #avatars = new Map<string, HTMLElement>();
   #people: PresencePerson[] = [];
   #wired = false;
+  /** Open "+N" overflow popover (a scrollable list of the hidden collaborators), or null. */
+  #overflowPop: HTMLElement | null = null;
+  #onDocPointer: ((e: PointerEvent) => void) | null = null;
 
   connectedCallback(): void {
     this.classList.add("avatar-presence-row"); // reuse the global stylesheet
@@ -69,8 +72,21 @@ export class CoAvatarPresenceRow extends HTMLElement {
     this.#wired = true;
     this.addEventListener("click", (e) => {
       const t = e.target as HTMLElement | null;
+      const more = t?.closest(".avatar.more");
+      if (more instanceof HTMLElement) {
+        this.#toggleOverflow(more);
+        return;
+      }
       if (t?.closest?.(".avatar.self")) {
         this.dispatchEvent(new CustomEvent("rename", { bubbles: true }));
+      }
+    });
+    // The "+N" chip is keyboard-operable (role=button) → Enter/Space opens its overflow list.
+    this.addEventListener("keydown", (e) => {
+      const t = e.target as HTMLElement | null;
+      if ((e.key === "Enter" || e.key === " ") && t?.classList.contains("more")) {
+        e.preventDefault();
+        this.#toggleOverflow(t);
       }
     });
   }
@@ -95,7 +111,9 @@ export class CoAvatarPresenceRow extends HTMLElement {
   #paint(el: HTMLElement, p: PresencePerson): void {
     el.style.setProperty("--av", p.color);
     el.classList.toggle("self", p.me);
-    el.title = p.me ? `${p.name} (you)` : p.name;
+    const label = p.me ? `${p.name} (you)` : p.name;
+    el.dataset.tip = label; // unified hover pill (drops below — top-edge; see styles.css)
+    el.setAttribute("aria-label", label); // keep the accessible name (data-tip is visual only)
     const photo = safePhotoUrl(p.photo);
     if (photo) {
       el.style.backgroundImage = `url("${photo}")`;
@@ -109,6 +127,10 @@ export class CoAvatarPresenceRow extends HTMLElement {
   }
 
   #render(): void {
+    this.#closeOverflow(); // membership/profiles changed → don't leave a stale overflow list open
+    // Single-player (just me, or nobody yet): hide the whole row — there's no one else to show.
+    // Inline display beats the `.avatar-presence-row { display: flex }` rule; "" restores it.
+    this.style.display = this.#people.length <= 1 ? "none" : "";
     const reduce = prefersReducedMotion();
     const shown = this.#people.slice(0, this.max);
     const shownIds = new Set(shown.map((p) => p.id));
@@ -139,8 +161,12 @@ export class CoAvatarPresenceRow extends HTMLElement {
       if (!more) {
         more = document.createElement("span");
         more.className = "avatar more";
+        more.setAttribute("role", "button");
+        more.setAttribute("tabindex", "0");
+        more.setAttribute("aria-haspopup", "true");
       }
       more.textContent = `+${extra}`;
+      more.setAttribute("aria-label", `Show ${extra} more ${extra === 1 ? "person" : "people"}`);
       this.appendChild(more);
     } else if (more) {
       more.remove();
@@ -182,6 +208,63 @@ export class CoAvatarPresenceRow extends HTMLElement {
     // Enter — spring in from the right + fade (à la the reference).
     for (const el of entering) {
       void animate(el, { opacity: [0, 1], x: [30, 0] }, SPRING);
+    }
+  }
+
+  // ---- "+N" overflow popover: a scrollable list of the collaborators beyond `max` ----
+  #toggleOverflow(anchor: HTMLElement): void {
+    if (this.#overflowPop) this.#closeOverflow();
+    else this.#openOverflow(anchor);
+  }
+
+  #openOverflow(anchor: HTMLElement): void {
+    const overflow = this.#people.slice(this.max);
+    if (!overflow.length) return;
+    const pop = document.createElement("div");
+    pop.className = "presence-overflow";
+    pop.setAttribute("role", "menu");
+    pop.setAttribute("aria-label", "More collaborators");
+    for (const p of overflow) {
+      const item = document.createElement("div");
+      item.className = "po-item";
+      const av = document.createElement("span");
+      av.className = "po-av";
+      av.style.setProperty("--av", p.color);
+      const photo = safePhotoUrl(p.photo);
+      if (photo) {
+        av.classList.add("has-photo");
+        av.style.backgroundImage = `url("${photo}")`;
+      } else {
+        av.textContent = initials(p.name);
+      }
+      const name = document.createElement("span");
+      name.className = "po-name";
+      name.textContent = p.me ? `${p.name} (you)` : p.name; // textContent → names can't inject markup
+      item.append(av, name);
+      pop.appendChild(item);
+    }
+    document.body.appendChild(pop);
+    this.#overflowPop = pop;
+    anchor.setAttribute("aria-expanded", "true");
+    // Anchor under the chip, right-aligned to it (the row lives at the top-right of the bar).
+    const r = anchor.getBoundingClientRect();
+    pop.style.top = `${r.bottom + 8}px`;
+    pop.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+    this.#onDocPointer = (ev) => {
+      const tt = ev.target as Node;
+      if (pop.contains(tt) || anchor.contains(tt)) return;
+      this.#closeOverflow();
+    };
+    document.addEventListener("pointerdown", this.#onDocPointer, true);
+  }
+
+  #closeOverflow(): void {
+    this.#overflowPop?.remove();
+    this.#overflowPop = null;
+    this.querySelector(".avatar.more")?.setAttribute("aria-expanded", "false");
+    if (this.#onDocPointer) {
+      document.removeEventListener("pointerdown", this.#onDocPointer, true);
+      this.#onDocPointer = null;
     }
   }
 }

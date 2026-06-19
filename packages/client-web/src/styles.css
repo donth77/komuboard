@@ -139,13 +139,235 @@ body {
   background: var(--surface-2);
   color: var(--ink);
 }
+/* the brand wordmark now lives at the top of the hamburger dropdown; the bar shows just the
+   menu button in its place (on every breakpoint). */
+.brand .logo,
+.brand-name {
+  display: none;
+}
+
+/* ---------- hamburger dropdown (desktop) — branding + the shared grid/theme controls ---------- */
+.app-menu {
+  position: fixed;
+  z-index: 80;
+  width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.app-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 15px;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  border-bottom: 1px solid var(--border);
+}
+.app-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 15px;
+}
+
+/* ---------- floating "?" help button (desktop) → keyboard shortcuts ---------- */
+.help-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 25;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+.help-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+/* id re-asserts ONLY `position` to beat the global `[data-tip] { position: relative }` — keeping
+   `display` at class specificity so the mobile `.help-btn { display: none }` hide still wins. */
+#help-btn {
+  position: absolute;
+}
 
 /* ---------- canvas ---------- */
+/* Infinite grid. ViewportController.syncGrid() feeds the level-of-detail (LOD) numbers in
+   as custom properties: --grid-fine / --grid-coarse (the two tier spacings), --grid-fade
+   (the fine tier's opacity), and --gx-/--gy- (per-tier background positions, offset by half
+   a tile so a line/dot lands on the world origin). The LOD keeps the on-screen spacing near
+   GRID_TARGET_PX so the grid never collapses to a solid fill when zoomed out; the fine tier
+   crossfades against the solid coarse tier so steps are seamless. Drawn in screen space
+   (constant line/dot size), matching how Figma (lines) / FigJam (dots) do it.
+   --grid-dot = dot radius, --grid-line = half line thickness. */
 .canvas {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(var(--grid) 1.6px, transparent 1.6px) -1px -1px / 24px 24px;
   touch-action: none;
+
+  /* ---- DOTS (default, FigJam-style) ---- */
+  /* Fallback (no relative-color syntax): single tier — still LOD-sized, just no crossfade. */
+  background-image: radial-gradient(
+    var(--grid) var(--grid-dot, 1.6px),
+    transparent var(--grid-dot, 1.6px)
+  );
+  background-size: var(--grid-fine, 24px) var(--grid-fine, 24px);
+  background-position: var(--gx-fine, 0px) var(--gy-fine, 0px);
+  /* Enhanced: fine (fading) + coarse (solid). */
+  background-image:
+    radial-gradient(
+      rgb(from var(--grid) r g b / var(--grid-fade, 1)) var(--grid-dot, 1.6px),
+      transparent var(--grid-dot, 1.6px)
+    ),
+    radial-gradient(var(--grid) var(--grid-dot, 1.6px), transparent var(--grid-dot, 1.6px));
+  background-size:
+    var(--grid-fine, 24px) var(--grid-fine, 24px),
+    var(--grid-coarse, 48px) var(--grid-coarse, 48px);
+  background-position:
+    var(--gx-fine, 0px) var(--gy-fine, 0px),
+    var(--gx-coarse, 0px) var(--gy-coarse, 0px);
+}
+
+/* ---- LINES (Figma-style) ---- two tiers of centered 1px lines (H + V) that crossfade. */
+.canvas[data-grid="lines"] {
+  /* Fallback (no relative-color syntax): single tier of crisp lines, no crossfade. */
+  background-image:
+    linear-gradient(
+      to bottom,
+      transparent calc(50% - var(--grid-line, 0.5px)),
+      var(--grid) calc(50% - var(--grid-line, 0.5px)) calc(50% + var(--grid-line, 0.5px)),
+      transparent calc(50% + var(--grid-line, 0.5px))
+    ),
+    linear-gradient(
+      to right,
+      transparent calc(50% - var(--grid-line, 0.5px)),
+      var(--grid) calc(50% - var(--grid-line, 0.5px)) calc(50% + var(--grid-line, 0.5px)),
+      transparent calc(50% + var(--grid-line, 0.5px))
+    );
+  background-size:
+    var(--grid-fine, 24px) var(--grid-fine, 24px),
+    var(--grid-fine, 24px) var(--grid-fine, 24px);
+  background-position:
+    0px var(--gy-fine, 0px),
+    var(--gx-fine, 0px) 0px;
+  /* Enhanced: fine H + fine V (fading) over coarse H + coarse V (solid). */
+  background-image:
+    linear-gradient(
+      to bottom,
+      transparent calc(50% - var(--grid-line, 0.5px)),
+      rgb(from var(--grid) r g b / var(--grid-fade, 1)) calc(50% - var(--grid-line, 0.5px))
+        calc(50% + var(--grid-line, 0.5px)),
+      transparent calc(50% + var(--grid-line, 0.5px))
+    ),
+    linear-gradient(
+      to right,
+      transparent calc(50% - var(--grid-line, 0.5px)),
+      rgb(from var(--grid) r g b / var(--grid-fade, 1)) calc(50% - var(--grid-line, 0.5px))
+        calc(50% + var(--grid-line, 0.5px)),
+      transparent calc(50% + var(--grid-line, 0.5px))
+    ),
+    linear-gradient(
+      to bottom,
+      transparent calc(50% - var(--grid-line, 0.5px)),
+      var(--grid) calc(50% - var(--grid-line, 0.5px)) calc(50% + var(--grid-line, 0.5px)),
+      transparent calc(50% + var(--grid-line, 0.5px))
+    ),
+    linear-gradient(
+      to right,
+      transparent calc(50% - var(--grid-line, 0.5px)),
+      var(--grid) calc(50% - var(--grid-line, 0.5px)) calc(50% + var(--grid-line, 0.5px)),
+      transparent calc(50% + var(--grid-line, 0.5px))
+    );
+  background-size:
+    var(--grid-fine, 24px) var(--grid-fine, 24px),
+    var(--grid-fine, 24px) var(--grid-fine, 24px),
+    var(--grid-coarse, 48px) var(--grid-coarse, 48px),
+    var(--grid-coarse, 48px) var(--grid-coarse, 48px);
+  background-position:
+    0px var(--gy-fine, 0px),
+    var(--gx-fine, 0px) 0px,
+    0px var(--gy-coarse, 0px),
+    var(--gx-coarse, 0px) 0px;
+}
+
+/* settings dialog rows (gear → Settings) */
+.set-row {
+  display: grid;
+  grid-template-columns: 1fr 168px; /* label | a fixed-width control column shared by every row */
+  align-items: center;
+  gap: 16px;
+}
+.set-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+/* the grid seg fills the control column; the narrower theme switch sits centered in it
+   so both rows' controls line up instead of the switch floating at the right edge */
+.set-row .theme-switch {
+  justify-self: center;
+}
+
+/* two-way theme switch (sun ↔ moon) — used in the Settings dialog + the drawer.
+   role="switch"; data-theme (set by syncSettingsControls) drives the knob + highlight. */
+.theme-switch {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  width: 64px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.theme-switch-ic {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--muted);
+  transition: color var(--dur) var(--ease);
+}
+.theme-switch-ic .ico {
+  width: 15px;
+  height: 15px;
+}
+.theme-switch-knob {
+  position: absolute;
+  z-index: 0;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: transform var(--dur) var(--ease);
+}
+.theme-switch[data-theme="dark"] .theme-switch-knob {
+  transform: translateX(32px);
+}
+/* highlight whichever icon the knob sits under */
+.theme-switch[data-theme="light"] .sun,
+.theme-switch[data-theme="dark"] .moon {
+  color: var(--ink);
 }
 
 /* ---------- floating tool dock (left) ---------- */
@@ -350,6 +572,67 @@ input[type="range"] {
 .avatar-presence-row .avatar.more {
   background: var(--surface-2);
   color: var(--muted);
+  cursor: pointer;
+  z-index: 4; /* the "+N" chip stacks above everyone, including the user's own avatar (z-index 3) */
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+.avatar-presence-row .avatar.more:hover {
+  background: var(--border);
+  color: var(--ink);
+}
+.avatar-presence-row .avatar.more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* "+N" overflow → a scrollable popover listing the collaborators beyond the visible cap */
+.presence-overflow {
+  position: fixed;
+  z-index: 80;
+  width: 224px;
+  max-height: min(60vh, 340px);
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.po-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.po-item:hover {
+  background: var(--surface-2);
+}
+.po-av {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--av, var(--accent));
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+.po-name {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---------- zoom / fullscreen widget ---------- */
@@ -755,23 +1038,20 @@ input[type="range"] {
   ) !important;
   border: 2px solid var(--surface) !important;
 }
-/* swatch name tooltip — FigJam dark pill with a downward tail (any .sw[data-tip]) */
-.sw[data-tip] {
-  position: relative;
+/* Hover/focus tooltip — a single FigJam-style dark pill rendered in <body> at the very top of
+   the stacking order (see tooltip.ts), so it's ALWAYS painted above every chrome layer no
+   matter which stacking context the hovered element lives in. (A ::after pseudo-pill was
+   trapped in each host's context — a top-bar pill could be covered by a side panel.) Any
+   element with [data-tip] opts in; tooltip.ts prefers the pill above the element, auto-flips
+   it below at the top edge, and clamps it to the viewport so it never clips. Matches the dock's
+   .tool-tip pill so every tooltip in the app reads the same. */
+[data-tip] {
+  position: relative; /* harmless containing block for any ::after rings (e.g. swatches); the pill itself is .co-tip */
 }
-.sw[data-tip]::after,
-.sw[data-tip]::before {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 110ms var(--ease);
-  z-index: 70;
-}
-.sw[data-tip]::after {
-  content: attr(data-tip);
-  bottom: calc(100% + 9px);
+.co-tip {
+  position: fixed;
+  z-index: 2147483000; /* above every chrome layer, incl. body-level popovers like the colour picker (z 80) */
+  display: none;
   background: #1e1e1e;
   color: #fff;
   font-size: 12px;
@@ -779,16 +1059,27 @@ input[type="range"] {
   padding: 5px 9px;
   border-radius: 8px;
   white-space: nowrap;
+  pointer-events: none;
 }
-.sw[data-tip]::before {
+.co-tip.show {
+  display: block;
+}
+.co-tip::after {
   content: "";
-  bottom: calc(100% + 4px);
+  position: absolute;
+  left: var(--tail-x, 50%);
+  transform: translateX(-50%);
   border: 5px solid transparent;
+}
+.co-tip:not(.below)::after {
+  /* pill sits above the element → tail points down at it */
+  top: 100%;
   border-top-color: #1e1e1e;
 }
-.sw[data-tip]:hover::after,
-.sw[data-tip]:hover::before {
-  opacity: 1;
+.co-tip.below::after {
+  /* pill sits below the element → tail points up at it */
+  bottom: 100%;
+  border-bottom-color: #1e1e1e;
 }
 
 /* ---------- custom colour picker (FigJam-style) ---------- */
@@ -916,8 +1207,14 @@ input[type="range"] {
 .tool-tip .tip-soon {
   color: #9aa4b2;
 }
-.dock .tool:hover .tool-tip {
+/* no tooltip for the currently-selected tool — you already know what it is */
+.dock .tool:not(.active):hover .tool-tip {
   opacity: 1;
+}
+/* while the draw menu is open it sits where these right-side tooltips would render,
+   so they'd stack behind it — suppress dock tooltips for the duration (#app id wins) */
+#app.pen-open .dock .tool:not(.active):hover .tool-tip {
+  opacity: 0;
 }
 
 /* profile colour swatches mirror the pen palette (circular + gap selection ring) */
@@ -937,7 +1234,7 @@ input[type="range"] {
 
 /* ---------- hamburger (mobile only) ---------- */
 .nav-btn {
-  display: none;
+  display: inline-grid; /* the hamburger shows on every breakpoint (desktop → dropdown, mobile → drawer) */
 }
 
 /* ---------- pen bottom-sheet grab handle (mobile only) ---------- */
@@ -1047,11 +1344,13 @@ input[type="range"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  padding: 11px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
+  width: auto;
+  /* extend past the drawer's 16px side padding so the row + its hover span the full drawer width */
+  margin: 4px -16px 0;
+  padding: 12px 16px; /* keep the label/icon aligned with the rest of the drawer */
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--ink);
   font: inherit;
   font-size: 14px;
@@ -1067,15 +1366,218 @@ input[type="range"] {
   color: var(--muted);
 }
 
+/* ---------- compact draw bar (desktop) — slim alternative to the pen panel ----------
+   A floating vertical column next to the tool dock: pen/highlighter brushes plus
+   style/colour/width buttons that open small popovers. Reclaims canvas space vs the
+   right-hand panel. The old <co-pen-panel> stays in the DOM (mobile sheet + revert). */
+.draw-bar {
+  position: absolute;
+  left: 84px; /* just right of the 16px dock (≈56px wide) with a gap */
+  top: calc(56px + (100vh - 56px) / 2);
+  transform: translateY(-50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+.draw-bar.hidden {
+  display: none;
+}
+/* the button row: a vertical stack on desktop (becomes a horizontal row on the mobile sheet) */
+.db-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.db-btn {
+  position: relative; /* anchor for .db-tip */
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+.db-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.db-btn.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.db-btn .ico {
+  width: 21px;
+  height: 21px;
+}
+/* colour button shows the current ink as a filled dot */
+.db-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow:
+    inset 0 0 0 1.5px var(--surface),
+    0 0 0 1px var(--border);
+}
+
+/* button tooltips (name only, to the right — mirrors the dock's dark pill) */
+.db-tip {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1e1e1e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: 8px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 110ms var(--ease);
+  z-index: 70;
+}
+.db-tip::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: #1e1e1e;
+}
+/* show on hover, but never for the selected button (active brush / open popover) */
+.db-btn:not(.active):hover .db-tip {
+  opacity: 1;
+}
+/* while a popover menu is open to the right, suppress all tips so none stack under it */
+.draw-bar.pop-open .db-tip {
+  display: none;
+}
+
+/* draw-bar popovers (style / colour / width) — float to the right of the bar */
+.db-popover {
+  position: fixed;
+  z-index: 80;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  user-select: none;
+}
+.db-pop-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 9px;
+}
+.db-pop-label b {
+  color: var(--ink);
+}
+.db-popover input[type="range"] {
+  display: block;
+  width: 184px;
+}
+/* circular swatches (mirror the pen palette) */
+.db-popover .swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 26px);
+  justify-content: center;
+  column-gap: 12px;
+  row-gap: 12px;
+}
+.db-popover .sw {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+.db-popover .sw.on {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+/* style segments hold solid/dotted line icons */
+.db-popover .seg-opt {
+  display: grid;
+  place-items: center;
+  padding: 8px 18px;
+}
+.db-popover .seg-opt .ico {
+  width: 24px;
+  height: 24px;
+}
+
+/* the draw bar replaces the pen panel at every breakpoint; the panel stays in the DOM for revert */
+co-pen-panel {
+  display: none;
+}
+
 /* ====================================================================
    Mobile (≤640px) — last in the file so every override wins on order.
    ==================================================================== */
 @media (max-width: 640px) {
-  /* hide desktop-only chrome (room info lives in the drawer on mobile) */
+  /* the draw bar becomes the bottom mini-sheet on mobile: it reuses the same .sheet-wrap clip,
+     slide and seamless-toolbar-merge as the old pen sheet, but holds the compact button row.
+     Its style/colour/width popovers float UP above the sheet — they're body-appended, so the
+     clip never touches them (see #openPop in draw-bar.ts). */
+  .draw-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0; /* sits on the wrapper's bottom edge = the dock's top */
+    margin: 0 auto;
+    width: min(340px, calc(100vw - 20px));
+    flex-direction: column; /* grab handle on top, button row below */
+    gap: 4px; /* handle(22) + this gap = the 26px collapsed tab → only the handle peeks */
+    padding: 0 8px 10px;
+    border-radius: 16px 16px 0 0;
+    box-shadow: var(--shadow);
+    pointer-events: auto;
+    transform: translateY(0);
+    transition: transform 280ms var(--ease);
+    will-change: transform;
+  }
+  .draw-bar .db-row {
+    flex-direction: row;
+    justify-content: center;
+    gap: 6px;
+  }
+  .draw-bar.collapsed {
+    transform: translateY(calc(100% - 26px)); /* leave a 26px grab-handle tab (just the handle) */
+  }
+  .draw-bar.hidden {
+    /* override the global `.hidden { display:none }` so the sheet can animate down into the dock */
+    display: flex !important;
+    transform: translateY(101%);
+    pointer-events: none;
+  }
+  /* no hover tooltips on touch */
+  .db-tip {
+    display: none;
+  }
+  /* hide desktop-only chrome (settings + help live in the drawer on mobile) */
   .devstatus,
-  .theme-btn,
+  .settings-btn,
   .zoombar,
-  .room-pill {
+  .room-pill,
+  .help-btn {
     display: none;
   }
   .brand-name,
@@ -1108,7 +1610,8 @@ input[type="range"] {
     box-shadow: 0 14px 16px -3px rgba(0, 0, 0, 0.2);
   }
   /* collapsed to a tab → show the toolbar's top edge again so the seam is visible */
-  #app.pen-open:has(co-pen-panel.collapsed) .dock {
+  #app.pen-open:has(co-pen-panel.collapsed) .dock,
+  #app.pen-open:has(co-draw-bar.collapsed) .dock {
     border-top-color: var(--border);
   }
   /* tool tooltips flip above the now-horizontal dock; drop the shortcut key on touch */

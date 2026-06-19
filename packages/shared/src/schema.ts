@@ -13,7 +13,9 @@
  */
 import * as Y from "yjs";
 
-export type StrokeStyle = "solid" | "dashed" | "highlight";
+// Brush (pen vs highlighter) and dash (solid vs dotted) are independent axes; `highlight-dashed`
+// is the dotted highlighter. The pen panel only exposes the first three; the draw bar all four.
+export type StrokeStyle = "solid" | "dashed" | "highlight" | "highlight-dashed";
 
 export interface StrokeObject {
   id: string;
@@ -128,7 +130,8 @@ export function readObject(m: Y.Map<unknown>): BoardObject | null {
     points: rawPoints as number[],
     color: String(m.get("color") ?? "#0e1116"),
     width: typeof width === "number" && Number.isFinite(width) ? width : 4,
-    style: style === "dashed" || style === "highlight" ? style : "solid",
+    style:
+      style === "dashed" || style === "highlight" || style === "highlight-dashed" ? style : "solid",
     opacity: typeof opacity === "number" && Number.isFinite(opacity) ? opacity : 1,
     authorId: String(m.get("authorId") ?? ""),
   };
