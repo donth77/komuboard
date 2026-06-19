@@ -3633,8 +3633,9 @@ if (typeof window.marked === "undefined") {
   function rewriteMockupPaths(container) {
     function fix(url) {
       if (!url) return url;
-      // strip a leading "../" or "./" then look for a "mockups/" segment
-      var m = url.match(/^(?:\.\.?\/)*((?:mockups)\/.*)$/);
+      // strip leading "../"/"./" segments then look for a "mockups" segment
+      // (folder link "../mockups" or asset "../mockups/img/desktop.png")
+      var m = url.match(/^(?:\.\.?\/)+(mockups(?:\/.*)?)$/);
       if (m) return "./" + m[1];
       return url;
     }

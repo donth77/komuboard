@@ -85,7 +85,9 @@ coboard/
 │   ├── vr.html               # VR window-mode mockup (+ vr.png)
 │   ├── onboarding.html       # first-run / room-join onboarding (+ onboarding.png)
 │   ├── tokens.html           # design-token style tile (+ tokens.png)
-│   └── aidesigner/           # AI-generated alternative mockup (HTML + PNG)
+│   ├── tokens.css            # shared design tokens consumed by every mockup
+│   ├── img/                  # PNG screenshots of each mockup
+│   └── ai/                   # AI-generated alternative mockup (aidesigner, HTML)
 ├── package.json              # pnpm workspace root
 ├── pnpm-workspace.yaml
 └── packages/
