@@ -10,14 +10,14 @@
 
 Six milestones map onto the three canonical phases. Each milestone is shippable on its own and leaves `main` deployable to Cloudflare Pages + Workers at $0.
 
-| Milestone | Phase | Goal (one line) | Definition of Done (DoD) |
-|---|---|---|---|
-| **M0 — Foundations** | Pre-Phase 1 | Stand up the monorepo, tooling, CI/CD, and a deployed "hello" Worker + Pages SPA. | `pnpm install && pnpm build && pnpm test` green from a clean clone; PR previews deploy; `main` auto-deploys a live Pages SPA that opens a WS to a live Worker/DO and echoes a message. |
-| **M1 — Realtime canvas core** | Phase 1 (MVP) | The full Phase-1 feature set: infinite canvas, pen/sticky/shape/text tools, select/move/resize/delete, undo/redo, realtime Yjs sync, labeled cursors + presence, anonymous rooms by URL, desktop mouse + touch. | Two browsers in the same room draw, edit, and see each other's strokes + labeled cursors live; a third joiner sees the existing board; works on desktop mouse and a touch device; two-client convergence + presence Playwright tests pass in CI. |
-| **M2 — Persistence & rooms hardening** | Phase 1 → 2 bridge | Boards survive reconnect/DO eviction; snapshot/compaction; reconnection UX; room lifecycle + abuse guards. | Reload/disconnect/redeploy a busy room and the board is intact after reconnect; DO hibernates when idle and rehydrates from SQLite; update-log compaction runs; reconnection is invisible to the user; basic rate-limit + room-size cap enforced. |
-| **M3 — Collaboration & polish** | Phase 2 | The Phase-2 catalog: cursor chat, stamps/reactions + high-five, comments, snapping connectors, frames/sections, templates, image upload (R2), eraser, sticky Sort, alignment guides, export PNG/SVG/PDF, follow + spotlight, timer, dot voting, minimap, optional WebRTC voice. | Each Phase-2 feature meets its doc-02 acceptance criteria; export round-trips; image upload lands in R2 and renders for all peers; follow/spotlight drives every viewport; feature e2e suite green. |
-| **M4 — Cross-reality VR** | Phase 3 | Enter VR from any WebXR headset; render the same Yjs board as a 3D surface; 3D avatars (head + hands) + laser cursors via awareness; draw in VR by controller raycast; radial/wrist palette; comfort options. | On a WebXR headset (and the emulator), a user enters VR, sees the live 2D-edited board, draws strokes that appear for 2D peers, and sees other users' avatars + laser cursors; comfort options work; WebXR smoke test green in CI. |
-| **M5 — Scale & cost hardening + AI stretch** | Cross-cutting | Prove and protect the free-tier capacity envelope (hibernation, batching, partysub sharding), add observability, and ship the AI-assist stretch. | Load test sustains the doc-05 target concurrency at $0 with hibernation + binary-batched awareness verified; partysub sharding path demonstrated for a hot room; dashboards + SLO alerts live; AI "summarize board / auto-cluster stickies" runs behind a flag. |
+| Milestone                                    | Phase              | Goal (one line)                                                                                                                                                                                                                                                                 | Definition of Done (DoD)                                                                                                                                                                                                                                        |
+| -------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **M0 — Foundations**                         | Pre-Phase 1        | Stand up the monorepo, tooling, CI/CD, and a deployed "hello" Worker + Pages SPA.                                                                                                                                                                                               | `pnpm install && pnpm build && pnpm test` green from a clean clone; PR previews deploy; `main` auto-deploys a live Pages SPA that opens a WS to a live Worker/DO and echoes a message.                                                                          |
+| **M1 — Realtime canvas core**                | Phase 1 (MVP)      | The full Phase-1 feature set: infinite canvas, pen/sticky/shape/text tools, select/move/resize/delete, undo/redo, realtime Yjs sync, labeled cursors + presence, anonymous rooms by URL, desktop mouse + touch.                                                                 | Two browsers in the same room draw, edit, and see each other's strokes + labeled cursors live; a third joiner sees the existing board; works on desktop mouse and a touch device; two-client convergence + presence Playwright tests pass in CI.                |
+| **M2 — Persistence & rooms hardening**       | Phase 1 → 2 bridge | Boards survive reconnect/DO eviction; snapshot/compaction; reconnection UX; room lifecycle + abuse guards.                                                                                                                                                                      | Reload/disconnect/redeploy a busy room and the board is intact after reconnect; DO hibernates when idle and rehydrates from SQLite; update-log compaction runs; reconnection is invisible to the user; basic rate-limit + room-size cap enforced.               |
+| **M3 — Collaboration & polish**              | Phase 2            | The Phase-2 catalog: cursor chat, stamps/reactions + high-five, comments, snapping connectors, frames/sections, templates, image upload (R2), eraser, sticky Sort, alignment guides, export PNG/SVG/PDF, follow + spotlight, timer, dot voting, minimap, optional WebRTC voice. | Each Phase-2 feature meets its doc-02 acceptance criteria; export round-trips; image upload lands in R2 and renders for all peers; follow/spotlight drives every viewport; feature e2e suite green.                                                             |
+| **M4 — Cross-reality VR**                    | Phase 3            | Enter VR from any WebXR headset; render the same Yjs board as a 3D surface; 3D avatars (head + hands) + laser cursors via awareness; draw in VR by controller raycast; radial/wrist palette; comfort options.                                                                   | On a WebXR headset (and the emulator), a user enters VR, sees the live 2D-edited board, draws strokes that appear for 2D peers, and sees other users' avatars + laser cursors; comfort options work; WebXR smoke test green in CI.                              |
+| **M5 — Scale & cost hardening + AI stretch** | Cross-cutting      | Prove and protect the free-tier capacity envelope (hibernation, batching, partysub sharding), add observability, and ship the AI-assist stretch.                                                                                                                                | Load test sustains the doc-05 target concurrency at $0 with hibernation + binary-batched awareness verified; partysub sharding path demonstrated for a hot room; dashboards + SLO alerts live; AI "summarize board / auto-cluster stickies" runs behind a flag. |
 
 ```mermaid
 gantt
@@ -47,6 +47,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ### M0 — Foundations
 
 **Setup**
+
 - [ ] Create the GitHub repo `coboard` and protect `main` (require PR + green CI).
 - [x] Initialize a **pnpm workspaces** monorepo with `pnpm-workspace.yaml` referencing `packages/*`.
 - [x] Scaffold packages: `packages/client-web`, `packages/vr`, `packages/shared`, `packages/worker`.
@@ -57,23 +58,28 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [x] Add `pnpm` scripts: `dev`, `build`, `lint`, `typecheck`, `test`, `test:e2e`, `deploy`.
 
 **Client**
+
 - [x] Bootstrap the `client-web` SPA shell (router, room-id-from-URL parsing, empty canvas placeholder).
 - [x] Add **PartySocket** and prove a round-trip: connect to the Worker, send a ping, log the echo.
 - [x] Add a minimal Zustand store + Lucide icon set placeholder toolbar.
 
 **Worker/DO**
+
 - [x] Create a "hello" Worker that routes `/parties/main/:roomId` to a **PartyServer** Durable Object.
 - [x] Implement an echo `onMessage` in the DO using the **WebSocket Hibernation API** from day one.
 - [x] Declare the DO binding + SQLite migration stub in `wrangler.toml`.
 
 **Persistence**
+
 - [x] Enable SQLite-backed DO storage and write/read a single smoke-test key to confirm durability.
 
 **Tests**
+
 - [x] Vitest: a trivial `shared` unit test wired into CI.
 - [x] Playwright: one smoke e2e that loads the SPA and asserts the WS echo round-trips.
 
 **Docs**
+
 - [x] Write the dev quickstart in `README.md` (`pnpm i`, env vars, `wrangler dev`, `pnpm dev`).
 - [ ] Document the wrangler/Pages project names + required Cloudflare account secrets.
 
@@ -82,6 +88,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ### M1 — Realtime canvas core (Phase 1 MVP)
 
 **Setup**
+
 - [x] Add **Yjs** + `y-protocols/awareness` to `shared`; add **Y-PartyServer** to `worker`.
 - [x] Add **Konva.js** to `client-web`.
 - [x] Define the canonical Yjs document schema in `shared` (per doc-04 data model) and export typed accessors.
@@ -91,6 +98,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Integrate the **Lucide** icon set at 1.75px stroke with `currentColor` inheritance — _done when:_ all tool/chrome icons render from Lucide at a 24px artboard and inherit theme/accent via `currentColor`.
 
 **Client (canvas + tools)**
+
 - [x] Build the infinite **pan/zoom** canvas (Konva stage; wheel/pinch zoom, drag/space-pan).
 - [x] Bind a Konva render layer **directly to the Yjs doc** (reconcile shapes ↔ Y.Map/Y.Array on change).
 - [x] Implement **freehand pen/marker** (color + thickness) writing stroke points into Yjs.
@@ -114,11 +122,13 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] **Focus mode** that toggles all floating chrome (`\`) — _done when:_ pressing `\` hides all chrome for a clean canvas and restores it on repeat.
 
 **Client (presence)**
+
 - [x] Publish local cursor + selection + user label/color via **awareness**.
 - [ ] Render **live labeled cursors** for remote peers + a presence avatar stack with join/leave.
 - [x] Throttle/coalesce cursor publishes to **~20–30 Hz** and binary-encode (per architecture invariant).
 
 **Client (chrome: top bar, dock, panels, zoom, minimap)**
+
 - [ ] Render the floating **top bar** (blur backdrop) with logo/home, room pill, presence facepile, Help, and Share — _done when:_ the bar pins to the top using surface/elevation tokens and holds all five clusters without overflow at 390px.
 - [ ] Render the **Coboard brand mark + wordmark** — _done when:_ a gradient logo glyph plus the "Coboard" wordmark sit top-left and clicking routes to home/dashboard.
 - [ ] Render the floating **tool dock** with `role=toolbar` and idle auto-dim — _done when:_ the dock floats (left or bottom-center per design), dims to ~70% after 3s idle, and returns to full on hover/focus.
@@ -139,12 +149,14 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Render the **minimap** with the local viewport rectangle — _done when:_ the minimap shows scaled content with a solid accent rect for the local viewport; click/drag jogs the main viewport; toggled by M.
 
 **Client (presence & identity)**
+
 - [ ] Render the **presence facepile / avatar stack** — _done when:_ present peers render as overlapping identity-colored avatars in stable join order alongside the local user.
 - [ ] **Initials fallback** + overflow **"+N" chip** with roster popover — _done when:_ a photoless avatar shows the user's initial on their color, and beyond the cap a "+N" chip opens a scrollable roster.
 - [ ] **Editable display name** for the local user — _done when:_ changing the name updates the user's cursor tag and facepile for all peers within ~1s and persists across reload (per-viewer localStorage, not the Yjs doc).
 - [ ] Provide a **friendly default display name** (e.g. "Guest Otter") editable inline — _done when:_ a new user gets an editable friendly default that propagates to cursor pill, facepile, and avatar.
 
 **Client (onboarding & empty state)**
+
 - [ ] Render the empty-board **ghost prompt** with headline, hint, and CTAs — _done when:_ a zero-content board shows a centered prompt ("Start your board" / "Start drawing…") with Invite-people and Use-a-template CTAs that disappears once the first object is added.
 - [ ] Show the **"press P to draw" keyboard hint** styled as a `.kbd` chip — _done when:_ the hint renders P as a key chip and pressing P from the empty state activates the Pen tool.
 - [ ] Render a dashed **drop-target placeholder** + curved guide arrow to the dock — _done when:_ a dashed placeholder ("Drop a template here, or just start sketching") accepts template drops and a non-interactive dashed arrow points toward the tool dock.
@@ -154,6 +166,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Implement the **keyboard-shortcut / help overlay** (`?`) — _done when:_ pressing ? opens a cheat-sheet overlay listing all shortcut groups and Esc closes it.
 
 **Client (accessibility)**
+
 - [ ] Provide **accessible labels** for every icon-only control — _done when:_ tools, help, share-close, copy, and zoom buttons expose accessible names matching their tooltips for screen readers.
 - [ ] Implement a **visible focus ring** with logical focus order (Top bar → Dock → Properties → Minimap → objects) and Focus-Not-Obscured — _done when:_ focus uses a 2px ring (+2px offset) that is never removed or covered by chrome.
 - [ ] Enforce **minimum target sizes** (≥24px desktop, ≥44–48px touch) — _done when:_ all interactive targets meet WCAG 2.5.8 and FAB/handles/tool buttons are ≥44–48px on touch.
@@ -161,14 +174,17 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Implement a global **`prefers-reduced-motion`** override + **light/dark theme** support — _done when:_ reduce-motion collapses transform transitions to instant (opacity-only fades) and a theme toggle (honoring `prefers-color-scheme`, localStorage override) recolors chrome and canvas grid with adequate contrast in both modes.
 
 **Worker/DO**
+
 - [x] Host one **Y-PartyServer**-bound Yjs doc per room (one DO per room id).
 - [x] Broadcast Yjs updates + awareness to all room sockets via hibernation-safe handlers.
 - [x] Generate a shareable **room code/URL** on first visit (anonymous, no signup).
 
 **Persistence**
+
 - [x] Persist the Yjs update log into DO SQLite on edit (full snapshot/compaction deferred to M2).
 
 **Tests**
+
 - [ ] Vitest: CRDT/document-logic tests in `shared` (apply update → expected shape state; undo/redo).
 - [x] Playwright: **two-client multiplayer convergence test** — client A draws a stroke + sticky, assert client B's DOM/canvas converges to the same object set.
 - [x] Playwright: **presence/cursor test** — assert client A sees client B's labeled cursor move and the join/leave avatar update.
@@ -180,6 +196,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Test: **keyboard-shortcut coverage + reduced-motion** — _done when:_ every documented shortcut fires its action and reduce-mode collapses transforms to instant with opacity-only fades.
 
 **Docs**
+
 - [ ] Document the Yjs schema + tool→Yjs mapping in doc-04 (link, don't duplicate).
 - [ ] Add a "create a room and invite" usage note to `README.md`.
 
@@ -188,13 +205,16 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ### M2 — Persistence & rooms hardening
 
 **Setup**
+
 - [ ] Define a snapshot cadence + update-log compaction policy in `shared` config.
 
 **Client**
+
 - [ ] Add reconnection UX: "reconnecting…" banner, optimistic local edits buffered by **PartySocket**, seamless resync on reconnect.
 - [ ] Show a "board restored" state on cold rehydrate; handle empty/unknown room ids gracefully.
 
 **Client (room pill, share, anonymous join)**
+
 - [ ] Render the **room pill** with room name/slug and a live connection dot — _done when:_ the pill shows the current room slug (mono, disambiguated glyphs) with a green pulsing dot when the socket is connected and an amber/red state on disconnect; tapping reveals room details/rename/copy.
 - [ ] Render the **room-code copy control** — _done when:_ clicking the copy icon writes the room code/URL to the clipboard and politely announces "Copied!".
 - [ ] Render the primary **Share button** and open the **Share dialog** — _done when:_ clicking Share opens a labeled, focus-trapped, elevated card ("Share this board"), and Esc/backdrop/X closes it and returns focus to the Share button.
@@ -207,6 +227,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Show **loading / connecting** and **error** room states — _done when:_ a loading/skeleton state shows while snapshot+presence load (editing gated), an invalid/expired/unauthorized room shows a clear error with a create/join path, and a brand-new room shows the inviting empty state rather than a blank screen.
 
 **Client (mobile)**
+
 - [ ] Implement **responsive layouts** for desktop (≥1024) / tablet (600–1023) / phone (<600) — _done when:_ chrome reflows across the three breakpoints per doc-03 §4 sharing one component vocabulary, respecting safe-area insets.
 - [ ] Implement the **mobile compressed top bar** (logo, short code, 3+N presence, Share, overflow) — _done when:_ the phone top bar holds all clusters without overflow at 390px and the overflow ⋯ exposes theme/export/templates/Enter VR.
 - [ ] Implement the **mobile FAB + tool bottom sheet** — _done when:_ the FAB toggles the tool sheet (showing the active tool's icon), the sheet shows ≥44–48px tool buttons in rows, and swipe-down/scrim-tap dismisses it.
@@ -215,6 +236,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Hide the **minimap by default on mobile**, exposed via overflow — _done when:_ the minimap is hidden on phone and reachable from the overflow ⋯ menu.
 
 **Worker/DO**
+
 - [ ] Verify **WebSocket Hibernation** evicts the idle DO and rehydrates document state from SQLite on next message.
 - [ ] Implement room lifecycle: create-on-first-connect, TTL/idle handling, last-writer state flush.
 - [ ] Add a basic **room-size cap** and **per-connection rate limit** (abuse guard).
@@ -225,6 +247,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Implement a **"new code" (rotate) action** for the join alias — _done when:_ rotating issues a new rate-limited room code while the link capability stays the security boundary.
 
 **Persistence**
+
 - [ ] Implement periodic **compacted snapshot** + truncate update log in DO SQLite.
 - [ ] Implement load path: on DO wake, hydrate Yjs from latest snapshot + replay residual updates.
 - [ ] Validate storage stays within the SQLite free allotment; add a size watchdog log.
@@ -232,6 +255,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Persist the **onboarding-complete / first-run flag** — _done when:_ completing or dismissing coachmarks stores a flag so they do not reappear on later visits unless replayed via Help.
 
 **Tests**
+
 - [ ] Playwright: **persistence test** — populate a room, force disconnect/reload, assert full board reload.
 - [ ] Playwright: **redeploy/eviction test** — simulate DO restart, assert no data loss.
 - [ ] Vitest: snapshot-then-replay equals live-doc state (compaction correctness).
@@ -242,6 +266,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Test: **dialog/menu ARIA + focus trap** — _done when:_ the share/room dialogs use `role=dialog` with a labeled title, trap and return focus, close on Esc, and link error text via `aria-describedby`.
 
 **Docs**
+
 - [ ] Document persistence + snapshot/compaction + hibernation in doc-04 and the cost impact in doc-05.
 
 ---
@@ -249,10 +274,12 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ### M3 — Collaboration & polish (Phase 2)
 
 **Setup**
+
 - [ ] Add **Cloudflare R2** bucket + signed-upload Worker route for image/asset uploads.
 - [ ] Add a templates module in `shared` (kanban, retro, mindmap, flowchart definitions).
 
 **Client (collaboration)**
+
 - [ ] **Cursor chat** (type at cursor; ephemeral via awareness).
 - [ ] **Emoji stamps / reactions** + **high-five**.
 - [ ] **Comments** (anchored threads, persisted in Yjs).
@@ -265,6 +292,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] **Command palette** (`Cmd/Ctrl+K`) — _done when:_ the palette opens a searchable list of actions, templates, and participants and executes the chosen item.
 
 **Client (presence richness)**
+
 - [ ] Show the **live online-count** in the room pill — _done when:_ the pill shows an accurate "N online" that increments/decrements within ~1s of join/leave.
 - [ ] Render **remote cursors** with smooth interpolation, **name tags**, tool glyph, and idle fade — _done when:_ each peer's cursor renders at their world position in their color with a name pill (non-color cue) and shape token, interpolates at 60fps over ~90ms toward the latest awareness point, shows the active tool glyph/typing caret, and fades to ~55% after 4s idle (snapping back on movement).
 - [ ] Render an **avatar hover card** with name/color/activity and Follow / Jump-to / Spotlight actions — _done when:_ hovering an avatar shows name, current activity ("drawing"/"idle 2m"/"in VR"), and the three actions.
@@ -275,6 +303,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] **Profile photo / avatar upload** with glyph/emoji fallback — _done when:_ a user can upload an image (cropped to a circle) used as their avatar in the facepile/cursor for all peers, falling back to an initial/emoji glyph, persisting across reloads.
 
 **Client (canvas polish)**
+
 - [ ] **Connectors** that snap to shape anchors and re-route on move.
 - [ ] **Frames/sections** (grouping + clipping).
 - [ ] **Templates** picker that seeds a board.
@@ -285,21 +314,25 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] **Export** PNG / SVG / PDF.
 
 **Client (onboarding & first-run)**
+
 - [ ] Implement the **first-run coachmark sequence** (dock → Share → presence) with progress pips and target highlight — _done when:_ dismissible coachmark cards with a rotated pointer appear at the dock, Share, and presence avatars only on first run, show "N of 3" + pips, highlight the active target with an accent ring, and finishing marks onboarding complete (localStorage flag) — replayable via Help and respecting reduced-motion.
 - [ ] Provide an **onboarding ghost prompt + template gallery** on new/empty rooms — _done when:_ an empty room shows the ghost prompt and offers the template gallery, and selecting a template populates the canvas with its starter content for all peers.
 - [ ] Provide an optional **demo/sample room ("Take a tour")** — _done when:_ a first-time user can open a demo room with real sample content to explore with zero stakes.
 
 **Client (connection states & theming)**
+
 - [ ] Show a **reconnecting / offline** banner with degraded mode — _done when:_ on socket drop a non-blocking "Reconnecting…" banner shows, the room-pill live dot turns amber/red, and both clear on reconnect.
 - [ ] Honor **`prefers-reduced-motion`** and **dark theme** across collaboration UI — _done when:_ reduce-motion disables cursor/reaction/coachmark/transition animations and switching to dark recolors top bar, dock, dialogs, and grid via the dark token set with adequate contrast.
 
 **Client (canvas accessibility)**
+
 - [ ] Build an **offscreen semantic accessibility tree** mirroring canvas objects — _done when:_ each object appears as a labeled element (e.g. "Sticky note: 'Ship Friday' by Ola") in a synced offscreen DOM tree readable by screen readers.
 - [ ] Implement **Tab/Shift+Tab object focus traversal** with Enter-to-edit and arrow nudge — _done when:_ Tab cycles canvas objects, Enter edits, arrows nudge, and an outline/list panel offers alternative navigation.
 - [ ] Implement a polite **ARIA live region** for presence, tool changes, undo/redo, and comments — _done when:_ join/leave, tool changes, undo/redo, and "comment added" are announced politely.
 - [ ] Ensure **identity color is never the sole cue** — _done when:_ every cursor/avatar/edge-pill/viewport-rect pairs its color with a name/label and adjacent identity colors stay distinguishable for CVD users.
 
 **Worker/DO**
+
 - [ ] Serve R2 upload signing + asset URL resolution; enforce size/type limits (per doc-04).
 - [ ] (Optional) WebRTC **voice** signaling over the DO for small rooms.
 - [ ] **Assign a stable per-user identity color + shape glyph** from the CVD-safe u1–u12 palette — _done when:_ each session gets a deterministic round-robin color/shape keyed by client id (kept across reconnects, distinct among concurrent peers), used consistently across cursor, facepile, viewport rect, and laser.
@@ -308,11 +341,13 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Broadcast **reaction/high-five bursts** as ephemeral awareness signals — _done when:_ reaction events ride awareness and never mutate the Yjs document.
 
 **Persistence**
+
 - [ ] Persist comments, votes, timer, connectors, frames as Yjs structures (covered by snapshots).
 - [ ] Store uploaded assets in R2; keep only references in the Yjs doc.
 - [ ] Store **uploaded avatar images** in R2 referenced by presence — _done when:_ avatars are served via a stable R2 URL referenced by awareness/identity, surviving reload.
 
 **Tests**
+
 - [ ] Playwright: cursor-chat + reactions visible to a second client.
 - [ ] Playwright: image upload appears for a peer (R2 round-trip).
 - [ ] Playwright: follow/spotlight drives a follower's viewport.
@@ -324,6 +359,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Run an **automated accessibility audit** (contrast, roles, focus, live regions, target size) — _done when:_ an axe/Lighthouse-style audit passes WCAG 2.2 AA for chrome and reports semantic-tree coverage for canvas objects.
 
 **Docs**
+
 - [ ] Update doc-02 acceptance criteria status; document R2 flow + voice signaling in doc-04.
 
 ---
@@ -331,11 +367,13 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ### M4 — Cross-reality VR (Phase 3)
 
 **Setup**
+
 - [ ] Build out `packages/vr` with **A-Frame + Three.js** (WebXR) consuming the shared Yjs doc.
 - [ ] Add a **headless WebXR emulator** harness for CI smoke tests.
 - [ ] Provide a **WebXR-capable build + HTTPS dev server** — _done when:_ the project builds the VR scene and serves over HTTPS/localhost so immersive sessions can be tested on a headset/emulator, with the VR bundle lazy-loaded (pre-warmed on hover).
 
 **Client (VR)**
+
 - [ ] Render the board as a **textured 3D surface**; MVP path = render the 2D Konva canvas to a `CanvasTexture` for an instant in-VR view.
 - [ ] Implement the **infinite-canvas viewport window**: map the finite board panel to a movable, zoomable `{x, y, w, h}` **viewport rect in canvas-space** — per-user view state (awareness/local), **not** document state, so each user can look at a different region (like 2D scroll).
 - [ ] **Slide + zoom** the viewport: grip-drag / thumbstick to pan the rect over the infinite canvas; **two-handed pinch** (or thumbstick) to zoom; add a **minimap**, **zoom-to-fit**, and **go-to-user**.
@@ -372,21 +410,25 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Render the **VR environment + comfort vignette overlay** — _done when:_ the backdrop shows a soft horizon glow, faint floor gradient, and subtle ambient dust, with a toggleable radial edge vignette over the scene.
 
 **Worker/DO**
+
 - [ ] Extend awareness payload schema for VR avatar **head+hands poses** + laser cursor (ephemeral, never persisted).
 - [ ] Confirm awareness pose updates respect the cursor batching/throttling budget.
 - [ ] **Publish head+hands+viewport over awareness on VR entry** and emit an "X entered VR" toast — _done when:_ on VR entry the user's 2D cursor becomes an "in VR"-badged marker for peers and an "X entered VR" toast appears.
 - [ ] Implement **cross-reality presence via canvas-space rect overlap** — _done when:_ 2D cursors render on the VR panel and VR laser hits render as "in VR"-badged cursors for 2D users when their regions overlap.
 
 **Persistence**
+
 - [ ] Confirm VR-authored strokes persist identically to 2D strokes (same Yjs path; no VR-specific store).
 
 **Tests**
+
 - [ ] WebXR **emulator smoke test**: enter a session, assert the board surface renders and a synthetic raycast stroke lands in Yjs.
 - [ ] Playwright: a stroke drawn in the VR path appears for a 2D client (cross-reality convergence).
 - [ ] Vitest: awareness pose encode/decode round-trip.
 - [ ] Test: **VR toggle states, viewport carry-over, and cross-reality overlap** — _done when:_ tests assert the Enter VR button state by capability, the viewport rect seeds from the 2D camera, recenter repositions the panel, exit restores 2D state, and overlap renders cross-reality cursors.
 
 **Docs**
+
 - [ ] Document VR rendering architecture + the shared-doc invariant + comfort UX in doc-04 and doc-03.
 
 ---
@@ -394,32 +436,39 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ### M5 — Scale & cost hardening + AI stretch
 
 **Setup**
+
 - [ ] Add a load-testing harness (scripted WS clients simulating draw + cursor traffic).
 - [ ] Wire observability: per-room connection count, inbound WS msg rate, DO request count, GB-s.
 
 **Client**
+
 - [ ] Tune awareness batching/coalescing + binary encoding to minimize **inbound** WS messages.
 - [ ] Add client-side adaptive cursor rate (back off under high room population).
 
 **Worker/DO**
+
 - [ ] Implement the **partysub** sharding path: fan one hot room across N DOs above the per-DO comfort threshold.
 - [ ] Add graceful degradation (shed cursor updates before content updates under pressure).
 - [ ] Enforce a **max-participant cap per room** with graceful overflow — _done when:_ a room caps concurrent peers, handles overflow gracefully, and presence/cursor updates stay within the latency budget at the cap.
 
 **Persistence**
+
 - [ ] Verify SQLite storage stays within free allotment under sustained load; alert near thresholds.
 
 **AI (stretch, flagged)**
+
 - [ ] **Summarize board** (extract action items from stickies/text).
 - [ ] **Auto-cluster stickies** into themes.
 - [ ] Surface an **AI assist affordance** writing results back as editable nodes — _done when:_ an optional AI control generates/arranges stickies or summarizes a frame and the results appear as normal editable nodes attributed to an AI presence.
 
 **Tests**
+
 - [ ] Load test: sustain the doc-05 target concurrency at $0; assert hibernation + budget math hold.
 - [ ] Test: partysub sharding preserves convergence across shards.
 - [ ] Test: AI summarize/cluster behind a feature flag returns deterministic-shaped output.
 
 **Docs**
+
 - [ ] Publish the measured capacity table + SLO/monitoring note in doc-05; record the "$0 today / first $5" path.
 
 ---
@@ -478,16 +527,17 @@ flowchart LR
 
 ## 5. Testing strategy
 
-| Layer | Tool | What it covers |
-|---|---|---|
-| **Unit** | **Vitest** | CRDT/document logic in `shared`: apply-update → expected state, undo/redo via `Y.UndoManager`, snapshot↔replay equality, connector snapping + sticky-Sort ordering, awareness encode/decode round-trip. |
-| **E2E — multiplayer** | **Playwright** | **Two-client convergence test:** client A draws stroke + sticky, assert client B converges to the same object set. **Presence/cursor test:** client B sees A's labeled cursor move + join/leave avatar updates. |
-| **E2E — persistence** | **Playwright** | Disconnect/reload/redeploy a populated room → board reloads intact (covers hibernation + snapshot rehydrate). |
-| **E2E — touch** | **Playwright** | Mobile-viewport pan/zoom/draw via touch emulation. |
-| **VR smoke** | **Headless WebXR emulator** (in Playwright project) | Enter a WebXR session, render the board surface, fire a synthetic controller raycast, assert the stroke lands in Yjs and reaches a 2D peer. |
-| **Load** | Scripted WS client harness (M5) | Sustain target concurrency at $0; verify the 20:1 inbound-WS budget, batching, and hibernation hold. |
+| Layer                 | Tool                                                | What it covers                                                                                                                                                                                                  |
+| --------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Unit**              | **Vitest**                                          | CRDT/document logic in `shared`: apply-update → expected state, undo/redo via `Y.UndoManager`, snapshot↔replay equality, connector snapping + sticky-Sort ordering, awareness encode/decode round-trip.         |
+| **E2E — multiplayer** | **Playwright**                                      | **Two-client convergence test:** client A draws stroke + sticky, assert client B converges to the same object set. **Presence/cursor test:** client B sees A's labeled cursor move + join/leave avatar updates. |
+| **E2E — persistence** | **Playwright**                                      | Disconnect/reload/redeploy a populated room → board reloads intact (covers hibernation + snapshot rehydrate).                                                                                                   |
+| **E2E — touch**       | **Playwright**                                      | Mobile-viewport pan/zoom/draw via touch emulation.                                                                                                                                                              |
+| **VR smoke**          | **Headless WebXR emulator** (in Playwright project) | Enter a WebXR session, render the board surface, fire a synthetic controller raycast, assert the stroke lands in Yjs and reaches a 2D peer.                                                                     |
+| **Load**              | Scripted WS client harness (M5)                     | Sustain target concurrency at $0; verify the 20:1 inbound-WS budget, batching, and hibernation hold.                                                                                                            |
 
 **Principles**
+
 - Multiplayer convergence and presence are **first-class CI gates** from M1 onward — they encode the core product promise.
 - The VR smoke test runs in CI on the emulator; real-headset verification is a manual release-checklist item per milestone.
 - Cross-reality convergence (VR stroke → 2D peer) is its own e2e once M4 lands, guarding the single-source-of-truth invariant.
@@ -496,28 +546,28 @@ flowchart LR
 
 ## 6. Risk register
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| **Free-tier limit overrun** (100k DO req/day, ~2M inbound WS msgs/day, SQLite allotment) | Medium | High | Binary-encode + throttle/coalesce cursor updates to ~20–30 Hz; rely on the 20:1 inbound-WS ratio and outbound-not-billed rule; observability dashboards + alerts (M5); per-room caps; documented "$0 today / first $5" upgrade path in doc-05. |
-| **Hot-room broadcast cost / single-DO bottleneck** | Medium | High | WebSocket Hibernation to stop GB-s while idle; awareness shed-under-pressure (drop cursors before content); **partysub** sharding to spread one logical room across N DOs above ~a few hundred connections (M5). |
-| **VR ↔ 2D state divergence** | Medium | High | One Yjs doc as the single source of truth — VR writes via the same `shared` schema/accessors, never a parallel store; cross-reality convergence e2e (M4); awareness-only for ephemeral VR poses. |
-| **CRDT memory / storage growth** (Yjs update-log unbounded) | Medium | Medium | Periodic compacted snapshots + update-log truncation in DO SQLite (M2); 128 MB/DO memory ceiling watched; storage size watchdog + alerts; tombstone-aware compaction. |
-| **Abuse / spam** (anonymous rooms, no signup) | Medium | Medium | Per-connection rate limits; room-size caps; R2 upload size/type limits; D1 room index for flagging/TTL; optional auth (GitHub OAuth / Cloudflare Access) for private boards later. |
-| **Browser WebXR compatibility** (Quest/Vive/Cardboard + desktop/mobile fallback) | Medium | Medium | A-Frame's broad device coverage + graceful desktop/mobile preview fallback; CanvasTexture MVP path for instant in-VR view before native 3D geometry; WebXR emulator in CI; documented supported-headset matrix. |
+| Risk                                                                                     | Likelihood | Impact | Mitigation                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------- | ---------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Free-tier limit overrun** (100k DO req/day, ~2M inbound WS msgs/day, SQLite allotment) | Medium     | High   | Binary-encode + throttle/coalesce cursor updates to ~20–30 Hz; rely on the 20:1 inbound-WS ratio and outbound-not-billed rule; observability dashboards + alerts (M5); per-room caps; documented "$0 today / first $5" upgrade path in doc-05. |
+| **Hot-room broadcast cost / single-DO bottleneck**                                       | Medium     | High   | WebSocket Hibernation to stop GB-s while idle; awareness shed-under-pressure (drop cursors before content); **partysub** sharding to spread one logical room across N DOs above ~a few hundred connections (M5).                               |
+| **VR ↔ 2D state divergence**                                                             | Medium     | High   | One Yjs doc as the single source of truth — VR writes via the same `shared` schema/accessors, never a parallel store; cross-reality convergence e2e (M4); awareness-only for ephemeral VR poses.                                               |
+| **CRDT memory / storage growth** (Yjs update-log unbounded)                              | Medium     | Medium | Periodic compacted snapshots + update-log truncation in DO SQLite (M2); 128 MB/DO memory ceiling watched; storage size watchdog + alerts; tombstone-aware compaction.                                                                          |
+| **Abuse / spam** (anonymous rooms, no signup)                                            | Medium     | Medium | Per-connection rate limits; room-size caps; R2 upload size/type limits; D1 room index for flagging/TTL; optional auth (GitHub OAuth / Cloudflare Access) for private boards later.                                                             |
+| **Browser WebXR compatibility** (Quest/Vive/Cardboard + desktop/mobile fallback)         | Medium     | Medium | A-Frame's broad device coverage + graceful desktop/mobile preview fallback; CanvasTexture MVP path for instant in-VR view before native 3D geometry; WebXR emulator in CI; documented supported-headset matrix.                                |
 
 ---
 
 ## 7. KPIs / success metrics
 
-| Metric | Target | How measured |
-|---|---|---|
-| **Sync latency p95** (edit → visible on a peer) | < 250 ms intra-region | Client timestamp on Yjs update → render on peer; sampled in load tests + RUM. |
-| **Cursor round-trip (RTT)** | < 150 ms p95 intra-region (matches the doc-05 SLO) | Awareness echo timing; verifies the 20–30 Hz batching feels live. |
-| **Max concurrent room size on free tier** | Meets doc-05 capacity target per DO; partysub beyond | M5 load test against the budget math (inbound WS msgs, GB-s, requests). |
-| **Time-to-first-draw** | < 3 s from cold link open to a usable, drawable board (includes the doc-05 `< 1 s` DO cold-start rehydrate as a component, not a competing target) | Synthetic Playwright timing from navigation to first stroke accepted. |
-| **Crash-free sessions** | > 99% | Client error reporting / session telemetry over rolling window. |
-| **Reconnect success rate** | > 99% with no data loss | Persistence e2e + production reconnect telemetry (M2). |
-| **Cross-reality convergence** | 100% of VR-authored strokes appear for 2D peers (and vice versa) | M4 cross-reality e2e + manual headset checklist. |
+| Metric                                          | Target                                                                                                                                             | How measured                                                                  |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Sync latency p95** (edit → visible on a peer) | < 250 ms intra-region                                                                                                                              | Client timestamp on Yjs update → render on peer; sampled in load tests + RUM. |
+| **Cursor round-trip (RTT)**                     | < 150 ms p95 intra-region (matches the doc-05 SLO)                                                                                                 | Awareness echo timing; verifies the 20–30 Hz batching feels live.             |
+| **Max concurrent room size on free tier**       | Meets doc-05 capacity target per DO; partysub beyond                                                                                               | M5 load test against the budget math (inbound WS msgs, GB-s, requests).       |
+| **Time-to-first-draw**                          | < 3 s from cold link open to a usable, drawable board (includes the doc-05 `< 1 s` DO cold-start rehydrate as a component, not a competing target) | Synthetic Playwright timing from navigation to first stroke accepted.         |
+| **Crash-free sessions**                         | > 99%                                                                                                                                              | Client error reporting / session telemetry over rolling window.               |
+| **Reconnect success rate**                      | > 99% with no data loss                                                                                                                            | Persistence e2e + production reconnect telemetry (M2).                        |
+| **Cross-reality convergence**                   | 100% of VR-authored strokes appear for 2D peers (and vice versa)                                                                                   | M4 cross-reality e2e + manual headset checklist.                              |
 
 ---
 

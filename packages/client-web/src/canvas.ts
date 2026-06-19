@@ -48,9 +48,7 @@ interface Rect {
 }
 
 function rectsIntersect(a: Rect, b: Rect): boolean {
-  return (
-    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
-  );
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
 /**
@@ -72,6 +70,8 @@ export class BoardCanvas {
   private readonly objects: Y.Map<Y.Map<unknown>>;
   private readonly cursors = new Map<number, Konva.Group>();
   private readonly cursorTargets = new Map<number, { x: number; y: number }>();
+  /** Colored outlines showing what each *remote* peer has selected (drawn in their cursor color). */
+  private readonly remoteSelections = new Konva.Group({ listening: false });
   /** Live map of object id → its rendered Konva node (rebuilt every render). */
   private readonly nodeById = new Map<string, Konva.Line>();
   private readonly selected = new Set<string>();
@@ -88,7 +88,32 @@ export class BoardCanvas {
   private marqueeStart: { x: number; y: number } | null = null;
   private marqueeBase = new Set<string>();
   private moveState: { startX: number; startY: number; dx: number; dy: number } | null = null;
+  private pinch: { dist: number; cx: number; cy: number } | null = null;
   private lastCursorSent = 0;
+  /** Last selection broadcast on awareness (sorted, joined) — skips republishing an unchanged set. */
+  private lastPublishedSelection = "";
+  /** Throttle clock for selection broadcasts during a live marquee drag (ms). */
+  private lastSelectionSent = 0;
+  /** Signature of the last-rendered remote selections — lets cursor-only awareness ticks skip the rebuild. */
+  private lastRemoteSelKey = "";
+  /** Awareness listener kept as a field so destroy() can detach it (it fires after the stage is gone otherwise). */
+  private readonly onAwarenessChange = (): void => {
+    this.syncCursors();
+    this.renderRemoteSelections();
+  };
+  /** Window listeners kept as fields so destroy() can detach them (else they leak / fire on a dead stage). */
+  private readonly onWindowBlur = (): void => {
+    this.opts.awareness.setLocalStateField("cursor", null);
+  };
+  private readonly onWindowPointerUp = (): void => {
+    if (this.moveState) this.endMove();
+    else if (this.marquee) this.endMarquee();
+  };
+  private resizeObserver: ResizeObserver | null = null;
+  /** Cache of content-relative client rects per object id; cleared whenever geometry rebuilds. */
+  private readonly rectCache = new Map<string, Rect>();
+  /** Drawn object ids in z-order from the last render — a same-order change updates nodes in place. */
+  private renderedOrder: string[] = [];
   private raf = 0;
   private animating = false;
   private zoomListener: ((pct: number) => void) | null = null;
@@ -109,6 +134,9 @@ export class BoardCanvas {
     this.stage.add(this.content);
     this.stage.add(this.overlay);
     this.stage.add(this.uiLayer);
+    // Peers' selection outlines sit in the overlay, in world space (so they pan/zoom
+    // with the board) and below the cursors (which are added to the overlay lazily).
+    this.overlay.add(this.remoteSelections);
 
     this.transformer = new Konva.Transformer({
       rotateEnabled: false,
@@ -121,8 +149,7 @@ export class BoardCanvas {
       anchorCornerRadius: 2,
       padding: 4,
       // Never let a resize collapse the box to nothing.
-      boundBoxFunc: (oldBox, newBox) =>
-        newBox.width < 6 || newBox.height < 6 ? oldBox : newBox,
+      boundBoxFunc: (oldBox, newBox) => (newBox.width < 6 || newBox.height < 6 ? oldBox : newBox),
     });
     this.transformer.on("transformend", () => this.commitTransform());
     this.transformer.on("transform", () => this.renderSelectionBoxes());
@@ -134,6 +161,7 @@ export class BoardCanvas {
 
     this.bindPointer();
     this.bindSelection();
+    this.bindTouch();
     this.bindWheelZoom();
     this.bindResize();
     this.bindAwareness();
@@ -142,7 +170,7 @@ export class BoardCanvas {
     opts.awareness.setLocalStateField("user", opts.user.name);
     opts.awareness.setLocalStateField("color", opts.user.color);
     this.setTool("select");
-    this.zoomAroundCenter(0.6); // roomier default — 1:1 feels cramped on an empty board
+    this.resetZoom(); // start at the default zoom (see resetZoom)
   }
 
   setTool(tool: ToolId): void {
@@ -183,6 +211,7 @@ export class BoardCanvas {
     this.scaleCursors();
     this.styleTransformerForZoom();
     this.renderSelectionBoxes();
+    this.renderRemoteSelections(true); // zoom changed the geometry → force a rebuild (not in the cache key)
     this.syncGrid();
     this.stage.batchDraw();
     this.notifyZoom();
@@ -200,7 +229,7 @@ export class BoardCanvas {
     this.zoomAroundCenter(Math.min(8, Math.max(0.1, this.stage.scaleX() * factor)));
   }
   resetZoom(): void {
-    this.zoomAroundCenter(1);
+    this.zoomAroundCenter(0.5); // default zoom: 50%
   }
   /** Set an absolute zoom (1 = 100%), clamped to the supported range. */
   zoomTo(scale: number): void {
@@ -241,6 +270,16 @@ export class BoardCanvas {
     return p ? { x: p.x, y: p.y } : { x: 0, y: 0 };
   }
 
+  /** Content-relative client rect of an object's node, cached until renderObjects clears it. */
+  private nodeRect(id: string, node: Konva.Line): Rect {
+    let r = this.rectCache.get(id);
+    if (!r) {
+      r = node.getClientRect({ relativeTo: this.content });
+      this.rectCache.set(id, r);
+    }
+    return r;
+  }
+
   // ---- stroke styling (shared by stored strokes + the live preview) ----
   private lineConfig(
     color: string,
@@ -262,12 +301,45 @@ export class BoardCanvas {
   }
 
   private renderObjects(): void {
-    this.content.destroyChildren();
-    this.nodeById.clear();
-    for (const id of orderArray(this.opts.doc).toArray()) {
+    this.rectCache.clear(); // geometry is about to change → drop cached client rects
+    const order = orderArray(this.opts.doc).toArray();
+    // Resolve the drawable strokes in z-order.
+    const drawn: string[] = [];
+    const objById = new Map<string, StrokeObject>();
+    for (const id of order) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
       if (obj?.type === "stroke") {
+        drawn.push(id);
+        objById.set(id, obj);
+      }
+    }
+    // Fast path: same ids in the same z-order (a move/resize/no-op) → update the existing
+    // Konva.Lines in place instead of destroying + recreating every node. Structural changes
+    // (add / remove / reorder) fall back to a full rebuild.
+    const sameOrder =
+      drawn.length === this.renderedOrder.length &&
+      drawn.every((id, i) => id === this.renderedOrder[i]);
+    if (sameOrder) {
+      for (const id of drawn) {
+        const obj = objById.get(id);
+        const line = this.nodeById.get(id);
+        if (!obj || !line) continue;
+        // A prior local drag/resize leaves a transform on the node; the doc stores baked
+        // absolute coords, so clear the transform before re-applying geometry + style.
+        line.position({ x: 0, y: 0 });
+        line.scale({ x: 1, y: 1 });
+        line.setAttrs(this.lineConfig(obj.color, obj.width, obj.style, obj.opacity));
+        line.listening(true);
+        line.points(obj.points);
+        line.hitStrokeWidth(Math.max(obj.width, 14));
+      }
+    } else {
+      this.content.destroyChildren();
+      this.nodeById.clear();
+      for (const id of drawn) {
+        const obj = objById.get(id);
+        if (!obj) continue;
         const line = new Konva.Line({
           points: obj.points,
           ...this.lineConfig(obj.color, obj.width, obj.style, obj.opacity),
@@ -280,9 +352,11 @@ export class BoardCanvas {
         this.content.add(line);
         this.nodeById.set(obj.id, line);
       }
+      this.renderedOrder = drawn;
     }
     this.content.batchDraw();
     this.reattachTransformer();
+    this.renderRemoteSelections(true); // objects moved/resized/deleted/added → force (geometry not in the cache key)
   }
 
   // ---- pen / drawing ----
@@ -333,7 +407,7 @@ export class BoardCanvas {
       finish();
       this.opts.awareness.setLocalStateField("cursor", null); // hide my cursor for peers
     });
-    window.addEventListener("blur", () => this.opts.awareness.setLocalStateField("cursor", null));
+    window.addEventListener("blur", this.onWindowBlur);
   }
 
   // ---- selection (FigJam-style: marquee + click select, move, resize) ----
@@ -341,6 +415,7 @@ export class BoardCanvas {
     this.stage.on("pointerdown", (e) => {
       if (this.tool !== "select") return;
       if (this.isOnTransformer(e.target)) return; // a handle drag → let the transformer resize
+      this.cancelMarquee(); // drop any marquee orphaned by a missed pointerup before starting fresh
       const shift = (e.evt as PointerEvent).shiftKey;
       const id = this.objIdOf(e.target);
       if (id) {
@@ -362,13 +437,9 @@ export class BoardCanvas {
       if (this.moveState) this.updateMove();
       else if (this.marquee) this.updateMarquee();
     });
-    const end = (): void => {
-      if (this.moveState) this.endMove();
-      else if (this.marquee) this.endMarquee();
-    };
-    this.stage.on("pointerup", end);
+    this.stage.on("pointerup", this.onWindowPointerUp);
     // A release that lands outside the stage still ends the gesture.
-    window.addEventListener("pointerup", end);
+    window.addEventListener("pointerup", this.onWindowPointerUp);
   }
 
   /** Walk up from a hit node to its owning object id (null for empty canvas). */
@@ -414,6 +485,15 @@ export class BoardCanvas {
   hasSelection(): boolean {
     return this.selected.size > 0;
   }
+  /** Test/debug hook: how many remote-peer selection outlines are currently drawn. */
+  remoteSelectionCount(): number {
+    return this.remoteSelections.getChildren().length;
+  }
+  /** Test/debug hook: a rendered object's content-relative bounding rect (null if not drawn). */
+  nodeContentRect(id: string): Rect | null {
+    const node = this.nodeById.get(id);
+    return node ? node.getClientRect({ relativeTo: this.content }) : null;
+  }
   /** Undo / redo your own edits (remote edits are untracked, so they're never reverted). */
   undo(): void {
     this.undoManager.undo();
@@ -429,6 +509,28 @@ export class BoardCanvas {
     this.selectionListener?.(this.selected.size);
   }
 
+  /**
+   * Broadcast my selected object ids on the awareness channel so peers can outline
+   * them. Cleared to null when empty; skips the broadcast when the set is unchanged
+   * (reattachTransformer runs on every render, including unrelated remote edits).
+   */
+  private publishSelection(): void {
+    const ids = [...this.selected];
+    const key = ids.slice().sort().join(",");
+    if (key === this.lastPublishedSelection) return;
+    // A live marquee resolves the selection on every pointermove; cap that broadcast
+    // rate (as we do for cursors). endMarquee clears this.marquee *before* its final
+    // applyMarquee, so the settled selection always goes out immediately — peers converge
+    // exactly, they just see fewer intermediate frames while the band is still moving.
+    if (this.marquee) {
+      const now = Date.now();
+      if (now - this.lastSelectionSent < 1000 / CURSOR_HZ) return;
+      this.lastSelectionSent = now;
+    }
+    this.lastPublishedSelection = key;
+    this.opts.awareness.setLocalStateField("selection", ids.length ? ids : null);
+  }
+
   /** Point the transformer at the currently-selected nodes (called after every render). */
   private reattachTransformer(): void {
     for (const id of [...this.selected]) if (!this.nodeById.has(id)) this.selected.delete(id);
@@ -439,6 +541,7 @@ export class BoardCanvas {
     this.styleTransformerForZoom();
     this.renderSelectionBoxes();
     this.notifySelection();
+    this.publishSelection();
   }
 
   /** Keep the transform box border + handles a constant screen size at any zoom. */
@@ -542,7 +645,7 @@ export class BoardCanvas {
     const hits = new Set(this.marqueeBase);
     if (box.width >= 2 || box.height >= 2) {
       for (const [id, node] of this.nodeById) {
-        if (rectsIntersect(box, node.getClientRect({ relativeTo: this.content }))) hits.add(id);
+        if (rectsIntersect(box, this.nodeRect(id, node))) hits.add(id);
       }
     }
     this.setSelection([...hits]);
@@ -577,6 +680,111 @@ export class BoardCanvas {
       }
     }
     this.uiLayer.batchDraw();
+  }
+
+  /**
+   * Outline every object each *remote* peer has selected, tinted to their cursor
+   * color (FigJam-style presence). Drawn in world space relative to `content`, so the
+   * boxes pan/zoom with the board; stroke width is kept a constant screen size.
+   */
+  private renderRemoteSelections(force = false): void {
+    const self = this.opts.awareness.clientID;
+    // Gather each peer's (color + selected ids) and a signature of the same. Cursor /
+    // name awareness ticks don't change the signature, so those (frequent) changes skip
+    // the rebuild. Geometry (move/resize/delete) and zoom aren't in the signature, so
+    // those callers pass force=true; node membership only changes via renderObjects,
+    // which is one of those forced callers — so the cached path stays correct.
+    const peers: { color: string; ids: string[] }[] = [];
+    const parts: string[] = [];
+    this.opts.awareness.getStates().forEach((state, clientId) => {
+      if (clientId === self) return;
+      const ids = state["selection"] as string[] | undefined;
+      if (!ids?.length) return;
+      const color = String(state["color"] ?? "#2563eb");
+      peers.push({ color, ids });
+      parts.push(`${clientId}:${color}:${ids.join(",")}`);
+    });
+    const key = parts.sort().join("|");
+    if (!force && key === this.lastRemoteSelKey) return;
+    this.lastRemoteSelKey = key;
+
+    this.remoteSelections.destroyChildren();
+    const inv = 1 / this.stage.scaleX();
+    const pad = 4 * inv;
+    for (const { color, ids } of peers) {
+      for (const id of ids) {
+        const node = this.nodeById.get(id);
+        if (!node) continue;
+        const r = this.nodeRect(id, node);
+        this.remoteSelections.add(
+          new Konva.Rect({
+            x: r.x - pad,
+            y: r.y - pad,
+            width: r.width + pad * 2,
+            height: r.height + pad * 2,
+            stroke: color,
+            strokeWidth: 1.5 * inv,
+            cornerRadius: 2 * inv,
+            listening: false,
+          }),
+        );
+      }
+    }
+    this.overlay.batchDraw();
+  }
+
+  // ---- touch: pinch-to-zoom + two-finger pan (mobile) ----
+  private bindTouch(): void {
+    this.stage.on("touchmove", (e) => {
+      const touches = (e.evt as TouchEvent).touches;
+      if (!touches || touches.length < 2) return;
+      e.evt.preventDefault();
+      const a = touches[0];
+      const b = touches[1];
+      if (!a || !b) return;
+      const rect = this.stage.container().getBoundingClientRect();
+      const p1 = { x: a.clientX - rect.left, y: a.clientY - rect.top };
+      const p2 = { x: b.clientX - rect.left, y: b.clientY - rect.top };
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const center = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      this.cancelGestures(); // a 2nd finger turns any draw/marquee/move into a pinch
+      if (this.stage.isDragging()) this.stage.stopDrag();
+      if (!this.pinch) {
+        this.pinch = { dist, cx: center.x, cy: center.y };
+        return;
+      }
+      const oldScale = this.stage.scaleX();
+      const newScale = Math.min(8, Math.max(0.1, oldScale * (dist / this.pinch.dist)));
+      // The canvas point under the previous pinch centre is pinned to the new centre,
+      // which folds zoom + two-finger pan into one transform.
+      const cx = (this.pinch.cx - this.stage.x()) / oldScale;
+      const cy = (this.pinch.cy - this.stage.y()) / oldScale;
+      this.stage.scale({ x: newScale, y: newScale });
+      this.stage.position({ x: center.x - cx * newScale, y: center.y - cy * newScale });
+      this.pinch = { dist, cx: center.x, cy: center.y };
+      this.afterTransform();
+    });
+    const end = (e: Konva.KonvaEventObject<TouchEvent>): void => {
+      if (((e.evt as TouchEvent).touches?.length ?? 0) < 2) this.pinch = null;
+    };
+    this.stage.on("touchend", end);
+    this.stage.on("touchcancel", end);
+  }
+
+  /** Abort any in-progress single-pointer gesture (used when a pinch begins). */
+  private cancelGestures(): void {
+    if (this.drawing) {
+      this.drawing.line.destroy();
+      this.drawing = null;
+      this.content.batchDraw();
+    }
+    if (this.marquee) this.cancelMarquee();
+    if (this.moveState) {
+      for (const id of this.selected) this.nodeById.get(id)?.position({ x: 0, y: 0 });
+      this.moveState = null;
+      this.transformer.forceUpdate();
+      this.content.batchDraw();
+    }
   }
 
   // ---- pan / zoom ----
@@ -615,13 +823,13 @@ export class BoardCanvas {
   }
 
   private bindResize(): void {
-    const ro = new ResizeObserver(() => {
+    this.resizeObserver = new ResizeObserver(() => {
       this.stage.size({
         width: this.opts.container.clientWidth,
         height: this.opts.container.clientHeight,
       });
     });
-    ro.observe(this.opts.container);
+    this.resizeObserver.observe(this.opts.container);
   }
 
   // ---- presence / cursors ----
@@ -633,8 +841,8 @@ export class BoardCanvas {
   }
 
   private bindAwareness(): void {
-    this.opts.awareness.on("change", () => this.syncCursors());
-    this.syncCursors();
+    this.opts.awareness.on("change", this.onAwarenessChange);
+    this.onAwarenessChange();
   }
 
   private syncCursors(): void {
@@ -647,7 +855,10 @@ export class BoardCanvas {
       seen.add(clientId);
       let group = this.cursors.get(clientId);
       if (!group) {
-        group = this.buildCursor(String(state["color"] ?? "#2563eb"), String(state["user"] ?? "Guest"));
+        group = this.buildCursor(
+          String(state["color"] ?? "#2563eb"),
+          String(state["user"] ?? "Guest"),
+        );
         group.position(cursor);
         group.scale({ x: 1 / this.stage.scaleX(), y: 1 / this.stage.scaleX() });
         this.cursors.set(clientId, group);
@@ -730,6 +941,10 @@ export class BoardCanvas {
 
   destroy(): void {
     cancelAnimationFrame(this.raf);
+    this.opts.awareness.off("change", this.onAwarenessChange);
+    window.removeEventListener("blur", this.onWindowBlur);
+    window.removeEventListener("pointerup", this.onWindowPointerUp);
+    this.resizeObserver?.disconnect();
     this.stage.destroy();
   }
 }

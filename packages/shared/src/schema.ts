@@ -66,13 +66,18 @@ export function deleteObject(doc: Y.Doc, id: string): void {
 
 /** Delete several objects atomically (e.g. a multi-selection). */
 export function deleteObjects(doc: Y.Doc, ids: Iterable<string>): void {
+  const idSet = new Set(ids);
+  if (!idSet.size) return;
   doc.transact(() => {
     const objs = objectsMap(doc);
     const order = orderArray(doc);
-    for (const id of ids) {
-      objs.delete(id);
-      const idx = order.toArray().indexOf(id);
-      if (idx >= 0) order.delete(idx, 1);
+    for (const id of idSet) objs.delete(id);
+    // One pass over the order array, deleting matching indices back-to-front so the
+    // remaining indices stay valid — O(n) instead of toArray().indexOf() per id (O(n²)).
+    const arr = order.toArray();
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const v = arr[i];
+      if (v !== undefined && idSet.has(v)) order.delete(i, 1);
     }
   });
 }
@@ -95,7 +100,10 @@ export function translateObjects(doc: Y.Doc, ids: Iterable<string>, dx: number, 
 }
 
 /** Replace stroke geometry for several objects atomically (e.g. a resize bake). */
-export function setObjectsPoints(doc: Y.Doc, updates: ReadonlyArray<{ id: string; points: number[] }>): void {
+export function setObjectsPoints(
+  doc: Y.Doc,
+  updates: ReadonlyArray<{ id: string; points: number[] }>,
+): void {
   doc.transact(() => {
     const objs = objectsMap(doc);
     for (const u of updates) {
@@ -133,6 +141,8 @@ export interface PresenceState {
   name: string;
   color: string;
   cursor?: CursorState;
+  /** Object ids this peer currently has selected (rendered as outlines in their color). */
+  selection?: string[];
 }
 
 /** Colorblind-aware identity palette; each cursor is also labeled with a name. */
@@ -161,12 +171,40 @@ export function randomId(prefix = "o"): string {
 }
 
 const ADJECTIVES = [
-  "lunar", "brisk", "calm", "amber", "violet", "swift", "cobalt", "verdant",
-  "sunny", "mellow", "brave", "clever", "cosmic", "gentle", "lucky", "nimble",
+  "lunar",
+  "brisk",
+  "calm",
+  "amber",
+  "violet",
+  "swift",
+  "cobalt",
+  "verdant",
+  "sunny",
+  "mellow",
+  "brave",
+  "clever",
+  "cosmic",
+  "gentle",
+  "lucky",
+  "nimble",
 ];
 const ANIMALS = [
-  "otter", "heron", "lynx", "tapir", "koala", "falcon", "panda", "fox",
-  "ibis", "newt", "yak", "wren", "orca", "gecko", "moth", "bison",
+  "otter",
+  "heron",
+  "lynx",
+  "tapir",
+  "koala",
+  "falcon",
+  "panda",
+  "fox",
+  "ibis",
+  "newt",
+  "yak",
+  "wren",
+  "orca",
+  "gecko",
+  "moth",
+  "bison",
 ];
 function pickWord(list: readonly string[]): string {
   return list[Math.floor(Math.random() * list.length)] ?? list[0]!;

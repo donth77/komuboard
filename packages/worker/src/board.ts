@@ -16,9 +16,7 @@ export class Board extends YServer {
 
   override async onLoad(): Promise<void> {
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS ydoc (id TEXT PRIMARY KEY, data BLOB)");
-    const rows = this.ctx.storage.sql
-      .exec("SELECT data FROM ydoc WHERE id = 'doc'")
-      .toArray();
+    const rows = this.ctx.storage.sql.exec("SELECT data FROM ydoc WHERE id = 'doc'").toArray();
     const stored = rows[0]?.data as ArrayBuffer | undefined;
     if (stored) Y.applyUpdate(this.document, new Uint8Array(stored));
   }
@@ -29,7 +27,7 @@ export class Board extends YServer {
       update.byteOffset,
       update.byteOffset + update.byteLength,
     ) as ArrayBuffer;
-    this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS ydoc (id TEXT PRIMARY KEY, data BLOB)");
+    // Table is created in onLoad, which always runs before any save — no need to repeat it here.
     this.ctx.storage.sql.exec("INSERT OR REPLACE INTO ydoc (id, data) VALUES ('doc', ?)", blob);
   }
 }

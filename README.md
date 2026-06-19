@@ -14,16 +14,17 @@ This repository began as a **planning package** and now also carries the **M0 co
 
 Read in numeric order; each doc cross-links the others.
 
-| # | Document | What it covers |
-|---|----------|----------------|
-| — | [README.md](./README.md) | This index: pitch, doc map, stack, repo plan, quickstart. |
-| 01 | [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md) | Vision, problem, target users + jobs-to-be-done, the 4 reference products, competitive comparison, guiding principles, glossary. |
-| 02 | [docs/02-features-and-scope.md](./docs/02-features-and-scope.md) | Full feature catalog, MoSCoW, the 3 phases with user stories + acceptance criteria, non-goals, feature-to-reference traceability. |
-| 03 | [docs/03-visual-design-ui-ux.md](./docs/03-visual-design-ui-ux.md) | Design language + tokens, component inventory, desktop/mobile/VR layouts + wireframes, keyboard shortcuts, cursor/presence UX, accessibility. |
-| 04 | [docs/04-technical-architecture.md](./docs/04-technical-architecture.md) | System + component diagrams, Yjs data model, sync + awareness protocol, Durable Object design, persistence, R2, VR rendering, sequence diagrams. |
-| 05 | [docs/05-scaling-and-cost.md](./docs/05-scaling-and-cost.md) | Free-tier limit tables, the cost-model math (20:1 rule, hibernation), concurrency/capacity estimates, partysub sharding, the "$0 today" upgrade path. |
-| 06 | [docs/06-implementation-roadmap.md](./docs/06-implementation-roadmap.md) | Milestones M0–M5, granular task checklists, repo layout, CI/CD, testing strategy, risk register, KPIs, definition-of-done. |
-| 07 | [docs/07-engineering-quality-security-accessibility.md](./docs/07-engineering-quality-security-accessibility.md) | Performance & optimization, code maintainability, security & privacy, deep accessibility (WCAG 2.2 AA + XR), and a potential-issues / challenges register. |
+| #   | Document                                                                                                         | What it covers                                                                                                                                                                                      |
+| --- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| —   | [README.md](./README.md)                                                                                         | This index: pitch, doc map, stack, repo plan, quickstart.                                                                                                                                           |
+| 01  | [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md)                           | Vision, problem, target users + jobs-to-be-done, the 4 reference products, competitive comparison, guiding principles, glossary.                                                                    |
+| 02  | [docs/02-features-and-scope.md](./docs/02-features-and-scope.md)                                                 | Full feature catalog, MoSCoW, the 3 phases with user stories + acceptance criteria, non-goals, feature-to-reference traceability.                                                                   |
+| 03  | [docs/03-visual-design-ui-ux.md](./docs/03-visual-design-ui-ux.md)                                               | Design language + tokens, component inventory, desktop/mobile/VR layouts + wireframes, keyboard shortcuts, cursor/presence UX, accessibility.                                                       |
+| 04  | [docs/04-technical-architecture.md](./docs/04-technical-architecture.md)                                         | System + component diagrams, Yjs data model, sync + awareness protocol, Durable Object design, persistence, R2, VR rendering, sequence diagrams.                                                    |
+| 05  | [docs/05-scaling-and-cost.md](./docs/05-scaling-and-cost.md)                                                     | Free-tier limit tables, the cost-model math (20:1 rule, hibernation), concurrency/capacity estimates, partysub sharding, the "$0 today" upgrade path.                                               |
+| 06  | [docs/06-implementation-roadmap.md](./docs/06-implementation-roadmap.md)                                         | Milestones M0–M5, granular task checklists, repo layout, CI/CD, testing strategy, risk register, KPIs, definition-of-done.                                                                          |
+| 07  | [docs/07-engineering-quality-security-accessibility.md](./docs/07-engineering-quality-security-accessibility.md) | Performance & optimization, code maintainability, security & privacy, deep accessibility (WCAG 2.2 AA + XR), and a potential-issues / challenges register.                                          |
+| 08  | [docs/08-localization-i18n-plan.md](./docs/08-localization-i18n-plan.md)                                         | Localization / i18n plan: why React isn't required, the vanilla `data-i18n` sweep + change-notifier, dynamic-string handling, Konva/VR text, plurals via `Intl`, string inventory, migration steps. |
 
 ## UI mockups
 
@@ -70,7 +71,7 @@ Coboard is designed to host **and** run for $0 on a single Cloudflare account at
 ```text
 coboard/
 ├── README.md                 # this index
-├── docs/                     # the planning package (01–07)
+├── docs/                     # the planning package (01–08)
 │   ├── index.html            # interactive combined view of all docs
 │   ├── 01-product-vision-and-references.md
 │   ├── 02-features-and-scope.md
@@ -79,6 +80,7 @@ coboard/
 │   ├── 05-scaling-and-cost.md
 │   ├── 06-implementation-roadmap.md
 │   ├── 07-engineering-quality-security-accessibility.md
+│   ├── 08-localization-i18n-plan.md
 │   └── adr/                  # architecture decision records (one per ratified decision)
 ├── mockups/                  # high-fidelity HTML UI mockups + PNG screenshots
 │   ├── desktop.html          # desktop canvas + toolbar mockup (+ desktop.png)

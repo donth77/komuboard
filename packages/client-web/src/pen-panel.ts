@@ -24,7 +24,7 @@ const STYLES: ReadonlyArray<readonly [StrokeStyle, string]> = [
 ];
 
 // FigJam palette names shown in the hover tooltip.
-const COLOR_NAMES: Record<string, string> = {
+export const COLOR_NAMES: Record<string, string> = {
   "#0E1116": "Black",
   "#DC2626": "Red",
   "#F59E0B": "Orange",
@@ -68,7 +68,7 @@ export class CoPenPanel extends HTMLElement {
 
   #build(): void {
     this.innerHTML =
-      '<div class="panel-head">Pen</div>' +
+      '<div class="sheet-handle" aria-hidden="true"></div>' +
       '<div class="panel-sec">' +
       '<div class="swatches" data-swatches role="group" aria-label="Color"></div></div>' +
       '<div class="panel-sec"><div class="panel-label">Stroke width · <b data-w-val>24</b> px</div>' +
@@ -83,6 +83,48 @@ export class CoPenPanel extends HTMLElement {
       '<div class="panel-sec"><div class="panel-label">Opacity · <b data-o-val>100</b>%</div>' +
       '<input type="range" data-opacity min="10" max="100" value="100" /></div>';
     this.#renderSwatches();
+
+    // Mobile bottom sheet: the grab handle expands/collapses the sheet between fully
+    // open and a peek "tab" (the pen tool stays selected throughout — switching tools is
+    // what dismisses it entirely). Tap toggles; a drag follows the finger and snaps to the
+    // nearest state. TAB must match the .collapsed translate in styles.css. (Hidden on desktop.)
+    const handle = this.querySelector<HTMLElement>(".sheet-handle");
+    if (handle) {
+      const TAB = 26;
+      let startY = 0;
+      let dy = 0;
+      let dragging = false;
+      let wasCollapsed = false;
+      handle.addEventListener("pointerdown", (e) => {
+        dragging = true;
+        startY = e.clientY;
+        dy = 0;
+        wasCollapsed = this.classList.contains("collapsed");
+        this.style.transition = "none";
+        handle.setPointerCapture(e.pointerId);
+      });
+      handle.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        dy = e.clientY - startY;
+        const base = wasCollapsed ? this.offsetHeight - TAB : 0;
+        const t = Math.min(this.offsetHeight - TAB, Math.max(0, base + dy));
+        this.style.transform = `translateY(${t}px)`;
+      });
+      const endDrag = (): void => {
+        if (!dragging) return;
+        dragging = false;
+        this.style.transition = ""; // restore the CSS slide transition
+        this.style.transform = ""; // hand control back to the .collapsed class
+        if (Math.abs(dy) < 5) {
+          this.classList.toggle("collapsed"); // tap → toggle open / tab
+        } else {
+          const base = wasCollapsed ? this.offsetHeight - TAB : 0;
+          this.classList.toggle("collapsed", base + dy > (this.offsetHeight - TAB) / 2); // snap nearest
+        }
+      };
+      handle.addEventListener("pointerup", endDrag);
+      handle.addEventListener("pointercancel", endDrag);
+    }
 
     this.querySelector("[data-swatches]")?.addEventListener("click", (e) => {
       const t = (e.target as HTMLElement).closest<HTMLElement>(".sw");
@@ -156,14 +198,17 @@ export class CoPenPanel extends HTMLElement {
         if (this.querySelector("[data-custom]")?.contains(t)) return;
         this.#closePicker();
       };
-      document.addEventListener("pointerdown", this.#onDocPointer, true);
     }
     this.#picker.value = this.#color || "#1E1E1E";
     this.#positionPicker();
     this.#picker.classList.remove("hidden");
+    // Only listen for outside-clicks while the picker is open (removed in #closePicker), so
+    // we don't run a global capture handler + querySelector on every pointerdown all session.
+    if (this.#onDocPointer) document.addEventListener("pointerdown", this.#onDocPointer, true);
   }
   #closePicker(): void {
     this.#picker?.classList.add("hidden");
+    if (this.#onDocPointer) document.removeEventListener("pointerdown", this.#onDocPointer, true);
   }
   #positionPicker(): void {
     if (!this.#picker) return;

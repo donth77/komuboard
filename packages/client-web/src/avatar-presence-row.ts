@@ -41,6 +41,27 @@ function prefersReducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/** Shallow value-equality for the presence list, so an unchanged list skips the FLIP re-render. */
+function samePeople(a: PresencePerson[], b: PresencePerson[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x === undefined ||
+      y === undefined ||
+      x.id !== y.id ||
+      x.name !== y.name ||
+      x.color !== y.color ||
+      x.photo !== y.photo ||
+      x.me !== y.me
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export class CoAvatarPresenceRow extends HTMLElement {
   #avatars = new Map<string, HTMLElement>();
   #people: PresencePerson[] = [];
@@ -70,6 +91,7 @@ export class CoAvatarPresenceRow extends HTMLElement {
     return this.#people;
   }
   set people(list: PresencePerson[]) {
+    if (samePeople(this.#people, list)) return; // cursor-only awareness ticks → no DOM/FLIP work
     this.#people = list;
     this.#render();
   }
@@ -145,8 +167,8 @@ export class CoAvatarPresenceRow extends HTMLElement {
       el.style.margin = "0";
       el.style.pointerEvents = "none";
       el.style.zIndex = "0";
-      void animate(el, { opacity: [1, 0], scale: [1, 0.6] }, { duration: 0.18 }).finished.then(
-        () => el.remove(),
+      void animate(el, { opacity: [1, 0], scale: [1, 0.6] }, { duration: 0.18 }).finished.then(() =>
+        el.remove(),
       );
     }
 

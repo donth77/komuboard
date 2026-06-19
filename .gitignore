@@ -33,11 +33,6 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Stray root screenshot (canonical mockup PNGs live in mockups/img/)
-/coboard-desktop-light.png
-
-# Dropped reference screenshots + scratch verification captures (root only)
-/Screenshot*.png
-/v-*.png
-/sel-*.png
-/fp-*.png
+# Root-level PNGs are scratch (dropped reference screenshots + verification
+# captures); canonical images live in mockups/img/ and docs/.
+/*.png

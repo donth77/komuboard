@@ -45,12 +45,12 @@ flowchart TB
 
 **Traffic split (a cost invariant — see [05](./05-scaling-and-cost.md)):**
 
-| Path | Served by | Billed against |
-|---|---|---|
-| SPA HTML/JS/CSS, A-Frame, fonts, icons | Pages CDN | Nothing (unlimited static) |
-| Realtime Yjs updates + awareness | Room DO over WSS | DO requests (20:1 inbound-WS rule) |
-| Image/PDF upload + fetch | R2 (signed PUT, public/CDN GET) | R2 ops (zero egress) |
-| Room existence/index lookups | D1 (optional) | D1 reads/writes (free tier) |
+| Path                                   | Served by                       | Billed against                     |
+| -------------------------------------- | ------------------------------- | ---------------------------------- |
+| SPA HTML/JS/CSS, A-Frame, fonts, icons | Pages CDN                       | Nothing (unlimited static)         |
+| Realtime Yjs updates + awareness       | Room DO over WSS                | DO requests (20:1 inbound-WS rule) |
+| Image/PDF upload + fetch               | R2 (signed PUT, public/CDN GET) | R2 ops (zero egress)               |
+| Room existence/index lookups           | D1 (optional)                   | D1 reads/writes (free tier)        |
 
 ---
 
@@ -60,12 +60,12 @@ flowchart TB
 
 ### 2.1 Top-level structure
 
-| Key | Yjs type | Purpose |
-|---|---|---|
-| `objects` | `Y.Map<Y.Map>` | All board objects keyed by `id` (the content store). |
-| `zorder` | `Y.Array<string>` | Render order: array of object `id`s, front-to-back. |
-| `meta` | `Y.Map` | Board metadata: `name`, `createdAt`, `schemaVersion`, `background` (board surface style — `dot-grid` default, `blank`, or a solid color), `defaultBounds` (optional `{x,y,w,h}` hint used to frame zoom-to-fit / the initial view on a new or empty room). |
-| `assets` | `Y.Map<Y.Map>` | Asset references (R2 keys) keyed by `assetId`. |
+| Key       | Yjs type          | Purpose                                                                                                                                                                                                                                                    |
+| --------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `objects` | `Y.Map<Y.Map>`    | All board objects keyed by `id` (the content store).                                                                                                                                                                                                       |
+| `zorder`  | `Y.Array<string>` | Render order: array of object `id`s, front-to-back.                                                                                                                                                                                                        |
+| `meta`    | `Y.Map`           | Board metadata: `name`, `createdAt`, `schemaVersion`, `background` (board surface style — `dot-grid` default, `blank`, or a solid color), `defaultBounds` (optional `{x,y,w,h}` hint used to frame zoom-to-fit / the initial view on a new or empty room). |
+| `assets`  | `Y.Map<Y.Map>`    | Asset references (R2 keys) keyed by `assetId`.                                                                                                                                                                                                             |
 
 Each object is a nested `Y.Map` (so that concurrent edits to different fields of the same object merge rather than clobber). Stroke point arrays use `Y.Array` so additive freehand drawing converges without conflict.
 
@@ -75,47 +75,56 @@ Every object in `objects` shares this base shape:
 
 ```ts
 interface BaseObject {
-  id: string;          // nanoid(10), client-generated
-  type: 'stroke' | 'sticky' | 'rect' | 'ellipse' | 'line' | 'arrow'
-      | 'text' | 'connector' | 'image' | 'frame';
-  x: number;           // board coords (infinite plane, origin = 0,0)
+  id: string; // nanoid(10), client-generated
+  type:
+    | "stroke"
+    | "sticky"
+    | "rect"
+    | "ellipse"
+    | "line"
+    | "arrow"
+    | "text"
+    | "connector"
+    | "image"
+    | "frame";
+  x: number; // board coords (infinite plane, origin = 0,0)
   y: number;
-  w: number;           // bounding box width  (board units)
-  h: number;           // bounding box height (board units)
-  rotation: number;    // radians, about object center
-  z: number;           // fractional z-rank (see §2.4); mirrors zorder
-  style: Style;        // see below
-  authorId: string;    // stable per-room author token (client-generated, persisted in localStorage);
-                       // survives reload so attribution / sort-by-author stays stable — NOT the
-                       // ephemeral awareness id (§3.1)
-  createdAt: number;   // epoch ms
-  updatedAt: number;   // epoch ms
+  w: number; // bounding box width  (board units)
+  h: number; // bounding box height (board units)
+  rotation: number; // radians, about object center
+  z: number; // fractional z-rank (see §2.4); mirrors zorder
+  style: Style; // see below
+  authorId: string; // stable per-room author token (client-generated, persisted in localStorage);
+  // survives reload so attribution / sort-by-author stays stable — NOT the
+  // ephemeral awareness id (§3.1)
+  createdAt: number; // epoch ms
+  updatedAt: number; // epoch ms
 }
 
 interface Style {
-  stroke?: string;       // CSS color
-  fill?: string;         // CSS color or 'none'
-  strokeWidth?: number;  // board units
-  opacity?: number;      // 0..1
-  dash?: number[];       // dash pattern
+  stroke?: string; // CSS color
+  fill?: string; // CSS color or 'none'
+  strokeWidth?: number; // board units
+  opacity?: number; // 0..1
+  dash?: number[]; // dash pattern
   fontSize?: number;
   fontFamily?: string;
-  textAlign?: 'left' | 'center' | 'right';
+  textAlign?: "left" | "center" | "right";
 }
 ```
 
 ### 2.3 Type-specific fields
 
-| `type` | Extra fields | Notes |
-|---|---|---|
-| `stroke` (pen/marker) | `points: Y.Array<number>` (flat `[x0,y0,p0, x1,y1,p1,…]` with pressure), `closed: boolean` | Points stored relative to `x,y`. Live drawing appends to the `Y.Array` so partial strokes stream. Pressure `p` ∈ 0..1. |
-| `sticky` | `text: Y.Text`, `color: string` | `Y.Text` enables concurrent multi-user text editing inside one note. `w,h` auto-grow. |
-| `rect` / `ellipse` | _(base only)_ | Driven entirely by `x,y,w,h,rotation,style`. |
-| `line` / `arrow` | `a: {x,y}`, `b: {x,y}`, `arrowHead: 'none'\|'end'\|'both'` | Endpoints in board coords; `x,y,w,h` is derived bbox. |
-| `connector` | `from: Endpoint`, `to: Endpoint`, `routing: 'straight'\|'orthogonal'\|'curved'` | `Endpoint = { objectId?: string; anchor?: 'top'\|'right'\|'bottom'\|'left'\|'center'; x?: number; y?: number }`. If `objectId` set, the connector snaps and re-routes when that object moves (resolved at render time). |
-| `text` | `text: Y.Text` | Standalone text block. |
-| `image` | `assetId: string` | References `assets[assetId]` → R2 key. |
-| `frame` | `text: Y.Text` (title), `childIds: Y.Array<string>` | Section/frame; children move with it. |
+| `type`                | Extra fields                                                                               | Notes                                                                                                                                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stroke` (pen/marker) | `points: Y.Array<number>` (flat `[x0,y0,p0, x1,y1,p1,…]` with pressure), `closed: boolean` | Points stored relative to `x,y`. Live drawing appends to the `Y.Array` so partial strokes stream. Pressure `p` ∈ 0..1.                                                                                                  |
+| `sticky`              | `text: Y.Text`, `color: string`                                                            | `Y.Text` enables concurrent multi-user text editing inside one note. `w,h` auto-grow.                                                                                                                                   |
+| `rect` / `ellipse`    | _(base only)_                                                                              | Driven entirely by `x,y,w,h,rotation,style`.                                                                                                                                                                            |
+| `line` / `arrow`      | `a: {x,y}`, `b: {x,y}`, `arrowHead: 'none'\|'end'\|'both'`                                 | Endpoints in board coords; `x,y,w,h` is derived bbox.                                                                                                                                                                   |
+| `connector`           | `from: Endpoint`, `to: Endpoint`, `routing: 'straight'\|'orthogonal'\|'curved'`            | `Endpoint = { objectId?: string; anchor?: 'top'\|'right'\|'bottom'\|'left'\|'center'; x?: number; y?: number }`. If `objectId` set, the connector snaps and re-routes when that object moves (resolved at render time). |
+| `text`                | `text: Y.Text`                                                                             | Standalone text block.                                                                                                                                                                                                  |
+| `image`               | `assetId: string`                                                                          | References `assets[assetId]` → R2 key.                                                                                                                                                                                  |
+| `frame`               | `text: Y.Text` (title), `childIds: Y.Array<string>`                                        | Section/frame; children move with it.                                                                                                                                                                                   |
 
 ### 2.4 Z-order
 
@@ -140,21 +149,21 @@ Presence uses **`y-protocols/awareness`** — a separate, **ephemeral** state ch
 ```ts
 interface AwarenessState {
   // identity (set once on join)
-  id: string;            // ephemeral connection/awareness id (changes every session/reload)
-  authorId: string;      // stable per-room author token (matches objects' authorId, §2.2)
-  name: string;          // "Wandering Otter" (random) or chosen name
-  color: string;         // assigned label/cursor color
-  tool: string;          // 'pen' | 'select' | 'sticky' | ... (current tool)
+  id: string; // ephemeral connection/awareness id (changes every session/reload)
+  authorId: string; // stable per-room author token (matches objects' authorId, §2.2)
+  name: string; // "Wandering Otter" (random) or chosen name
+  color: string; // assigned label/cursor color
+  tool: string; // 'pen' | 'select' | 'sticky' | ... (current tool)
 
   // 2D presence (high frequency)
-  cursor?: { x: number; y: number };   // board coords, NOT screen px
-  selection?: string[];                 // selected object ids
-  chat?: { text: string; ts: number };  // cursor-chat line (FigJam-style)
+  cursor?: { x: number; y: number }; // board coords, NOT screen px
+  selection?: string[]; // selected object ids
+  chat?: { text: string; ts: number }; // cursor-chat line (FigJam-style)
 
   // VR presence (only present in immersive mode)
   xr?: {
-    head:  Pose;                  // headset pose
-    hands: [Pose | null, Pose | null];  // left, right controller poses
+    head: Pose; // headset pose
+    hands: [Pose | null, Pose | null]; // left, right controller poses
     laser?: { origin: Vec3; dir: Vec3; hit?: { x: number; y: number } };
   };
 
@@ -171,14 +180,14 @@ type Pose = { p: Vec3; q: [number, number, number, number] }; // position + quat
 
 ### 3.2 Frequency, throttling & coalescing
 
-| Signal | Max update rate | Coalescing |
-|---|---|---|
-| 2D cursor | **20–30 Hz** | One pending frame; replace, don't queue. Sent on `requestAnimationFrame` tick only when moved. |
-| Selection change | On change (debounced ~100 ms) | Latest wins. |
-| Cursor chat text | On keystroke, debounced ~150 ms | Latest line replaces previous. |
-| VR head pose | **20–30 Hz** | Send only if moved > threshold (1 cm / 1°). |
-| VR hand poses | **20–30 Hz**, coalesced with head into one awareness update | Single combined `xr` write per tick. |
-| VR laser ray | Same tick as hands | Bundled in `xr`. |
+| Signal                                                  | Max update rate                                                        | Coalescing                                                                                                                                                                                                                                     |
+| ------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2D cursor                                               | **20–30 Hz**                                                           | One pending frame; replace, don't queue. Sent on `requestAnimationFrame` tick only when moved.                                                                                                                                                 |
+| Selection change                                        | On change (debounced ~100 ms)                                          | Latest wins.                                                                                                                                                                                                                                   |
+| Cursor chat text                                        | On keystroke, debounced ~150 ms                                        | Latest line replaces previous.                                                                                                                                                                                                                 |
+| VR head pose                                            | **20–30 Hz**                                                           | Send only if moved > threshold (1 cm / 1°).                                                                                                                                                                                                    |
+| VR hand poses                                           | **20–30 Hz**, coalesced with head into one awareness update            | Single combined `xr` write per tick.                                                                                                                                                                                                           |
+| VR laser ray                                            | Same tick as hands                                                     | Bundled in `xr`.                                                                                                                                                                                                                               |
 | Viewport rect (2D pan/zoom **and** VR board-panel rect) | On change, debounced ~150 ms (it changes far less often than a cursor) | Latest `{x,y,w,h}` replaces previous. VR clients publish their board-panel viewport rect alongside the `xr` head/hands/laser poses (same coalesced tick) so follow/spotlight and off-screen edge indicators work identically across 2D and VR. |
 
 All awareness updates for a peer are **coalesced into a single `setLocalState` call per animation frame** and emitted as **one binary update**, so the worst case is ~30 inbound messages/sec/user regardless of how many fields changed. This is the core lever for staying inside the **20:1 inbound-WS billing rule** (see [05](./05-scaling-and-cost.md)). Awareness deltas are binary-encoded by `y-protocols`, not JSON.
@@ -240,7 +249,7 @@ sequenceDiagram
 
 - A client's Yjs update arrives → Y-PartyServer applies it to the server doc → broadcasts the binary update to **all other** connected sockets (sender excluded).
 - Awareness updates are relayed the same way but **not applied to persisted state**.
-- **Inbound** WS messages are billed (20:1); **outbound** broadcasts are **free** — so fan-out to many peers is cheap; the cost driver is purely how many messages clients *send*. This is why §3 throttling matters.
+- **Inbound** WS messages are billed (20:1); **outbound** broadcasts are **free** — so fan-out to many peers is cheap; the cost driver is purely how many messages clients _send_. This is why §3 throttling matters.
 
 ### 4.4 Client resilience — PartySocket
 
@@ -254,11 +263,11 @@ The client uses **PartySocket** as the WebSocket transport behind the Yjs provid
 
 The room DO owns SQLite storage. We persist with a **hybrid update-log + snapshot** strategy via Y-PartyServer's `onLoad` / `onStore` hooks:
 
-| Mechanism | What | Cadence |
-|---|---|---|
-| **Update log** | Append each incoming Yjs binary update as a row (`updates(seq INTEGER PK, data BLOB, ts)`). | Every edit (cheap append). |
+| Mechanism              | What                                                                                                        | Cadence                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Update log**         | Append each incoming Yjs binary update as a row (`updates(seq INTEGER PK, data BLOB, ts)`).                 | Every edit (cheap append).                                                                                                  |
 | **Compacted snapshot** | Encode the full doc state (`Y.encodeStateAsUpdate`) into one `snapshot` blob, then truncate the update log. | Debounced: every **~30 s of activity** OR every **~200 buffered updates**, whichever first; also on last-client-disconnect. |
-| **Asset metadata** | R2 keys + content-type in `assets` rows. | On upload completion. |
+| **Asset metadata**     | R2 keys + content-type in `assets` rows.                                                                    | On upload completion.                                                                                                       |
 
 **Load-on-first-connection:** when the first client connects to a cold DO, `onLoad` reads `snapshot` then replays any post-snapshot update rows to reconstruct the live `Y.Doc`. Subsequent clients sync from the in-memory doc.
 
@@ -329,20 +338,20 @@ The VR client renders the **same Yjs document** — there is no separate sync pa
 
 **Fallbacks (non-immersive magic window).** When `immersive-vr` is unsupported, the same lazy VR bundle still powers a **non-immersive "magic window"** preview rendered into a normal `<canvas>` (mouse-orbit / device-orientation on mobile), so desktop and phone users get a 3D preview of the panel without a headset; a **QR/helper** deep-links the room onto a Quest. The session API differs (`inline` / no `requestSession("immersive-vr")`) but the renderer, Yjs binding, and viewport-rect model are identical.
 
-| Device | Path | Toggle behaviour |
-|---|---|---|
-| Quest / headset browser | full `immersive-vr` session | enabled → fade into immersive scene |
-| Desktop, no headset | non-immersive **magic window** (mouse-orbit) + **QR/helper** to a headset | shows preview / "open on headset" |
-| Mobile | **magic window** / cardboard (device-orientation) | enabled where supported; else preview |
+| Device                  | Path                                                                      | Toggle behaviour                      |
+| ----------------------- | ------------------------------------------------------------------------- | ------------------------------------- |
+| Quest / headset browser | full `immersive-vr` session                                               | enabled → fade into immersive scene   |
+| Desktop, no headset     | non-immersive **magic window** (mouse-orbit) + **QR/helper** to a headset | shows preview / "open on headset"     |
+| Mobile                  | **magic window** / cardboard (device-orientation)                         | enabled where supported; else preview |
 
 The session-entry sequence is diagrammed in §10.4; the world-space panel, viewport rect, and raycast→canvas math it lands in are in §6.5.
 
 ### 6.1 Two rendering fidelities
 
-| Path | How | When |
-|---|---|---|
-| **MVP — CanvasTexture mirror** | Render the existing 2D board (the Konva/offscreen canvas) to a Three.js `CanvasTexture`, mapped onto a board-plane quad in 3D. Instant in-VR view of the live board; drawing maps controller raycast hits back to board coords and writes the same `stroke` objects. | Phase 3 entry — fastest route to "see and draw on the board in VR." |
-| **Fidelity — native 3D geometry** | Build Three.js line/tube geometry directly from `stroke.points`, sticky planes, shape meshes, etc., subscribed to the same Yjs `objects` map. Crisp at any zoom, depth-correct, no texture resolution ceiling. | Iterative upgrade after MVP; object-type renderers added incrementally. |
+| Path                              | How                                                                                                                                                                                                                                                                  | When                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **MVP — CanvasTexture mirror**    | Render the existing 2D board (the Konva/offscreen canvas) to a Three.js `CanvasTexture`, mapped onto a board-plane quad in 3D. Instant in-VR view of the live board; drawing maps controller raycast hits back to board coords and writes the same `stroke` objects. | Phase 3 entry — fastest route to "see and draw on the board in VR."     |
+| **Fidelity — native 3D geometry** | Build Three.js line/tube geometry directly from `stroke.points`, sticky planes, shape meshes, etc., subscribed to the same Yjs `objects` map. Crisp at any zoom, depth-correct, no texture resolution ceiling.                                                       | Iterative upgrade after MVP; object-type renderers added incrementally. |
 
 Both paths subscribe to identical Yjs events; the difference is purely how an object becomes pixels.
 
@@ -355,6 +364,7 @@ Both paths subscribe to identical Yjs events; the difference is purely how an ob
 ### 6.3 Avatars + laser over awareness
 
 VR presence (`xr` in §3.1) carries head pose, two hand poses, and the laser ray. Each remote peer renders:
+
 - a **head avatar** (simple headset/face mesh) at `xr.head`,
 - **two hand/controller meshes** at `xr.hands`,
 - a **laser pointer** + cursor dot at `xr.laser.hit` on the board.
@@ -385,11 +395,11 @@ Vignette on locomotion, teleport movement, and board reachability/scaling are re
 
 **Embodiment — the finite board panel.** The viewport rect is mapped onto a **finite physical panel** (default **~2.0 m × 1.2 m**, optionally **slightly curved** so its edges stay equidistant from the viewer and easier to focus) floating in the **Social reach zone (~1.5–2 m)** in front of a seated/standing user (reach-zone rationale and text-legibility specs live in [03](./03-visual-design-ui-ux.md) and [07](./07-engineering-quality-security-accessibility.md)). **The panel size is fixed in world space; what changes is the canvas region mapped onto it** — the board is a window, not the canvas itself. Tools live on a **wrist / non-dominant-hand panel** in the Personal zone (0.5–1.2 m); shared content (the board) stays in the Social zone.
 
-| Gesture | Action | Effect on viewport rect |
-|---|---|---|
-| **Slide (pan)** | grip-grab + drag (or grab-the-world, or thumbstick) | Translates `vp.x` / `vp.y` across canvas-space — like sliding a giant sheet behind a fixed window. Minimap / zoom-to-fit / go-to-user give jumps. |
-| **Zoom** | two-handed pinch/stretch (Gravity Sketch / Tilt Brush style) or thumbstick | Scales `vp.w` / `vp.h` (how much canvas maps onto the fixed panel). The **physical panel stays the same size**; content scales. |
-| **Draw / interact** | controller raycast → panel hit → panel UV → canvas coords | Writes a stroke/shape into the **same Yjs doc** at the correct infinite-canvas coordinate (see formula below). |
+| Gesture             | Action                                                                     | Effect on viewport rect                                                                                                                           |
+| ------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Slide (pan)**     | grip-grab + drag (or grab-the-world, or thumbstick)                        | Translates `vp.x` / `vp.y` across canvas-space — like sliding a giant sheet behind a fixed window. Minimap / zoom-to-fit / go-to-user give jumps. |
+| **Zoom**            | two-handed pinch/stretch (Gravity Sketch / Tilt Brush style) or thumbstick | Scales `vp.w` / `vp.h` (how much canvas maps onto the fixed panel). The **physical panel stays the same size**; content scales.                   |
+| **Draw / interact** | controller raycast → panel hit → panel UV → canvas coords                  | Writes a stroke/shape into the **same Yjs doc** at the correct infinite-canvas coordinate (see formula below).                                    |
 
 **The raycast → canvas-coordinate transform.** A controller raycast hits the panel, yielding a panel **UV** in `0..1`; the UV is mapped through the current viewport rect to a canvas coordinate, which is written as stroke/shape points into the same Yjs doc (the §6.2 drawing path, restated precisely):
 
@@ -445,7 +455,7 @@ This is powered entirely by the ephemeral `viewport` + `cursor` + `xr` awareness
 
 - **Transport:** WSS only (TLS), `/parties/main/:roomId` routed by the Worker to the room DO. Binary frames carry Yjs sync/awareness messages. Received-message limit is **32 MiB** (raised 2025-10-31); see §8 caps.
 - **Reconnection:** PartySocket auto-reconnects (exponential backoff + jitter); on reopen, the Yjs provider re-runs sync step 1/2. Edits made while offline are buffered locally in the client's Yjs doc and flushed on reconnect.
-- **Conflict handling (CRDT convergence):** Yjs is a CRDT, so concurrent edits **merge deterministically without a server arbiter** — every replica that has seen the same set of updates converges to byte-identical state. Object-level edits use nested `Y.Map`s (per-field merge), text uses `Y.Text` (character-level merge), and freehand uses additive `Y.Array` points (no conflict on append). Deletes are tombstoned. There is no last-write-wins data loss for independent fields; only genuinely-concurrent writes to the *same scalar field* resolve by Yjs's internal deterministic ordering.
+- **Conflict handling (CRDT convergence):** Yjs is a CRDT, so concurrent edits **merge deterministically without a server arbiter** — every replica that has seen the same set of updates converges to byte-identical state. Object-level edits use nested `Y.Map`s (per-field merge), text uses `Y.Text` (character-level merge), and freehand uses additive `Y.Array` points (no conflict on append). Deletes are tombstoned. There is no last-write-wins data loss for independent fields; only genuinely-concurrent writes to the _same scalar field_ resolve by Yjs's internal deterministic ordering.
 
 ---
 
@@ -453,43 +463,43 @@ This is powered entirely by the ephemeral `viewport` + `cursor` + `xr` awareness
 
 > The threat model, security review checklist, and accessibility commitments (keyboard paths, offscreen semantic mirror, colorblind-safe presence, XR a11y) are detailed in [07 — Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md); this section covers the architecture-level mitigations they build on.
 
-| Concern | Mitigation |
-|---|---|
-| Room guessability | The **share URL carries a high-entropy room id** — CSPRNG, URL-safe, ~128-bit class (e.g. `nanoid(21)`), never sequential — so a "secret link" is a meaningful (if soft) access boundary. The short, human-typable **join code** shown in the UI (e.g. `K3F9-Q2`, disambiguated alphabet) is a separate **alias** resolved to the room id via the D1 index (§5.3) for joining from a headset/phone; being low-entropy it is **rate-limited and rotatable** ("new code" in the share sheet) and is **never** the security boundary. Consistent with [07 §4.2](./07-engineering-quality-security-accessibility.md). |
-| Private rooms | Optional **passcode**: `passcodeHash` (PBKDF2/Argon2-lite) stored in D1; the Worker gates the WS upgrade, rejecting before the DO is touched. |
-| Message flooding | Per-connection **rate limiting in the DO**: token bucket on inbound messages (e.g. cap ~60 msg/s/conn — above the 30 Hz design rate, below abuse); offenders are throttled then disconnected. Protects both stability and the request budget. |
-| Oversized payloads | Hard **input caps**: reject WS frames near the **32 MiB** limit; cap per-object size (e.g. stroke points length), sticky/text length, and uploads (**configurable; 30 MB default** — a product choice matching common whiteboard limits, not an R2/Cloudflare constraint — validated at the signed-URL Worker before R2; consistent with [02](./02-features-and-scope.md)). |
-| Storage bloat | Snapshot compaction (§5.1) + TTL cleanup of idle rooms via D1 `lastSeenAt`. |
-| Content moderation | **Hooks** at the DO `onMessage` boundary (and at upload time) for optional text/image scanning; pluggable, off by default to preserve the $0 anonymous model. |
-| PII | **No-PII anonymous model**: no accounts required, no email/IP stored in the doc; display names are random or self-chosen and live only in ephemeral awareness. Optional named auth (GitHub OAuth / Clerk free tier) is additive and out of MVP scope. |
-| Transport security | WSS/TLS end-to-end; signed, scoped R2 URLs that expire. |
+| Concern            | Mitigation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Room guessability  | The **share URL carries a high-entropy room id** — CSPRNG, URL-safe, ~128-bit class (e.g. `nanoid(21)`), never sequential — so a "secret link" is a meaningful (if soft) access boundary. The short, human-typable **join code** shown in the UI (e.g. `K3F9-Q2`, disambiguated alphabet) is a separate **alias** resolved to the room id via the D1 index (§5.3) for joining from a headset/phone; being low-entropy it is **rate-limited and rotatable** ("new code" in the share sheet) and is **never** the security boundary. Consistent with [07 §4.2](./07-engineering-quality-security-accessibility.md). |
+| Private rooms      | Optional **passcode**: `passcodeHash` (PBKDF2/Argon2-lite) stored in D1; the Worker gates the WS upgrade, rejecting before the DO is touched.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Message flooding   | Per-connection **rate limiting in the DO**: token bucket on inbound messages (e.g. cap ~60 msg/s/conn — above the 30 Hz design rate, below abuse); offenders are throttled then disconnected. Protects both stability and the request budget.                                                                                                                                                                                                                                                                                                                                                                     |
+| Oversized payloads | Hard **input caps**: reject WS frames near the **32 MiB** limit; cap per-object size (e.g. stroke points length), sticky/text length, and uploads (**configurable; 30 MB default** — a product choice matching common whiteboard limits, not an R2/Cloudflare constraint — validated at the signed-URL Worker before R2; consistent with [02](./02-features-and-scope.md)).                                                                                                                                                                                                                                       |
+| Storage bloat      | Snapshot compaction (§5.1) + TTL cleanup of idle rooms via D1 `lastSeenAt`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Content moderation | **Hooks** at the DO `onMessage` boundary (and at upload time) for optional text/image scanning; pluggable, off by default to preserve the $0 anonymous model.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| PII                | **No-PII anonymous model**: no accounts required, no email/IP stored in the doc; display names are random or self-chosen and live only in ephemeral awareness. Optional named auth (GitHub OAuth / Clerk free tier) is additive and out of MVP scope.                                                                                                                                                                                                                                                                                                                                                             |
+| Transport security | WSS/TLS end-to-end; signed, scoped R2 URLs that expire.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ---
 
 ## 9. Library Table
 
-| Name | Role | Why chosen | License |
-|---|---|---|---|
-| **Yjs** | CRDT shared document (single source of truth) | Battle-tested, tiny binary updates, deterministic convergence, rich shared types (`Map`/`Array`/`Text`); same doc drives 2D + VR. | MIT |
-| **y-protocols** (`awareness`) | Ephemeral presence (cursors, selections, VR poses, cursor-chat) | Standard Yjs awareness; binary-encoded, auto-cleanup on disconnect; never persisted. | MIT |
-| **PartyServer** (`partyserver`) | One room === one Durable Object with lifecycle hooks + broadcast | Cloudflare-maintained DO wrapper; near-zero startup, stateful, routed by room id string. | MIT (Apache-2.0 portions) |
-| **Y-PartyServer** (`y-partyserver`) | Binds one server-side Yjs doc per room to PartyServer + persistence hooks | Turns a DO into a Yjs sync server with `onLoad`/`onStore`; matches our hybrid persistence design. | MIT |
-| **PartySocket** | Resilient client WebSocket under the Yjs provider | Auto-reconnect, backoff, buffering — keeps multiplayer robust on flaky/mobile networks. | MIT |
-| **partysub** | Shard one logical room across N DOs (pub/sub) | Horizontal-scale escape hatch beyond a single DO's connection comfort zone. | MIT |
-| **Cloudflare Workers + Durable Objects** | Realtime edge compute + per-room stateful instance | Free tier incl. SQLite-backed DOs; WS Hibernation; globally addressable single-threaded state. | Proprietary (free tier) |
-| **Cloudflare Pages** | Static SPA + A-Frame asset hosting (CDN) | Free, effectively unlimited static requests that don't bill Worker quota. | Proprietary (free tier) |
-| **Cloudflare R2** | Image/PDF asset storage | ~10 GB free, generous ops, **zero egress** — assets stay free to serve. | Proprietary (free tier) |
-| **Cloudflare D1** | Optional room index / metadata | Free SQLite at the edge for recents/TTL/passcode lookups. | Proprietary (free tier) |
-| **A-Frame** | Declarative WebXR scene framework | Fast WebXR on Quest/Vive/Cardboard + desktop/mobile fallback; adapts NAF avatar patterns. | MIT |
-| **Three.js** | 3D engine under A-Frame; native stroke geometry | Industry-standard WebGL; CanvasTexture (MVP) and tube/line geometry (fidelity). | MIT |
-| **Konva.js** | 2D canvas renderer bound to Yjs | Mature Canvas2D scene graph (hit detection, transforms) for fast MVP; renders the CanvasTexture VR mirror. | MIT |
-| **PixiJS** _(migration note)_ | WebGL 2D renderer if object counts demand | Documented upgrade path from Konva when Canvas2D object counts hurt FPS; same Yjs binding. | MIT |
-| **Vite** | Bundler / dev server | Fast HMR, ESM, first-class TS + monorepo support. | MIT |
-| **TypeScript** | Language across all packages | Type-safe shared schema between client-web, vr, worker, shared. | Apache-2.0 |
-| **Lucide** | Icon set | Clean open-source icons for toolbar/panels. | ISC |
-| **Zustand** | Light client state store | Minimal local UI state (tool, viewport) outside the Yjs doc; no heavy framework needed. | MIT |
-| **Vitest** | Unit testing | Vite-native, fast; tests schema + CRDT helpers. | MIT |
-| **Playwright** | E2E + multiplayer + headless WebXR smoke tests | Drives multiple browser contexts to validate realtime sync and VR emulation. | Apache-2.0 |
+| Name                                     | Role                                                                      | Why chosen                                                                                                                        | License                   |
+| ---------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| **Yjs**                                  | CRDT shared document (single source of truth)                             | Battle-tested, tiny binary updates, deterministic convergence, rich shared types (`Map`/`Array`/`Text`); same doc drives 2D + VR. | MIT                       |
+| **y-protocols** (`awareness`)            | Ephemeral presence (cursors, selections, VR poses, cursor-chat)           | Standard Yjs awareness; binary-encoded, auto-cleanup on disconnect; never persisted.                                              | MIT                       |
+| **PartyServer** (`partyserver`)          | One room === one Durable Object with lifecycle hooks + broadcast          | Cloudflare-maintained DO wrapper; near-zero startup, stateful, routed by room id string.                                          | MIT (Apache-2.0 portions) |
+| **Y-PartyServer** (`y-partyserver`)      | Binds one server-side Yjs doc per room to PartyServer + persistence hooks | Turns a DO into a Yjs sync server with `onLoad`/`onStore`; matches our hybrid persistence design.                                 | MIT                       |
+| **PartySocket**                          | Resilient client WebSocket under the Yjs provider                         | Auto-reconnect, backoff, buffering — keeps multiplayer robust on flaky/mobile networks.                                           | MIT                       |
+| **partysub**                             | Shard one logical room across N DOs (pub/sub)                             | Horizontal-scale escape hatch beyond a single DO's connection comfort zone.                                                       | MIT                       |
+| **Cloudflare Workers + Durable Objects** | Realtime edge compute + per-room stateful instance                        | Free tier incl. SQLite-backed DOs; WS Hibernation; globally addressable single-threaded state.                                    | Proprietary (free tier)   |
+| **Cloudflare Pages**                     | Static SPA + A-Frame asset hosting (CDN)                                  | Free, effectively unlimited static requests that don't bill Worker quota.                                                         | Proprietary (free tier)   |
+| **Cloudflare R2**                        | Image/PDF asset storage                                                   | ~10 GB free, generous ops, **zero egress** — assets stay free to serve.                                                           | Proprietary (free tier)   |
+| **Cloudflare D1**                        | Optional room index / metadata                                            | Free SQLite at the edge for recents/TTL/passcode lookups.                                                                         | Proprietary (free tier)   |
+| **A-Frame**                              | Declarative WebXR scene framework                                         | Fast WebXR on Quest/Vive/Cardboard + desktop/mobile fallback; adapts NAF avatar patterns.                                         | MIT                       |
+| **Three.js**                             | 3D engine under A-Frame; native stroke geometry                           | Industry-standard WebGL; CanvasTexture (MVP) and tube/line geometry (fidelity).                                                   | MIT                       |
+| **Konva.js**                             | 2D canvas renderer bound to Yjs                                           | Mature Canvas2D scene graph (hit detection, transforms) for fast MVP; renders the CanvasTexture VR mirror.                        | MIT                       |
+| **PixiJS** _(migration note)_            | WebGL 2D renderer if object counts demand                                 | Documented upgrade path from Konva when Canvas2D object counts hurt FPS; same Yjs binding.                                        | MIT                       |
+| **Vite**                                 | Bundler / dev server                                                      | Fast HMR, ESM, first-class TS + monorepo support.                                                                                 | MIT                       |
+| **TypeScript**                           | Language across all packages                                              | Type-safe shared schema between client-web, vr, worker, shared.                                                                   | Apache-2.0                |
+| **Lucide**                               | Icon set                                                                  | Clean open-source icons for toolbar/panels.                                                                                       | ISC                       |
+| **Zustand**                              | Light client state store                                                  | Minimal local UI state (tool, viewport) outside the Yjs doc; no heavy framework needed.                                           | MIT                       |
+| **Vitest**                               | Unit testing                                                              | Vite-native, fast; tests schema + CRDT helpers.                                                                                   | MIT                       |
+| **Playwright**                           | E2E + multiplayer + headless WebXR smoke tests                            | Drives multiple browser contexts to validate realtime sync and VR emulation.                                                      | Apache-2.0                |
 
 ---
 

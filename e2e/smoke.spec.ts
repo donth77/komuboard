@@ -27,10 +27,15 @@ test("two clients converge: A draws a stroke, B receives it; presence is shared"
   await b.goto(`/?room=${room}`);
 
   // Both clients connect to the room's Durable Object.
-  await a.waitForFunction(() => (window as unknown as BoardWindow).__coboard?.provider?.wsconnected);
-  await b.waitForFunction(() => (window as unknown as BoardWindow).__coboard?.provider?.wsconnected);
+  await a.waitForFunction(
+    () => (window as unknown as BoardWindow).__coboard?.provider?.wsconnected,
+  );
+  await b.waitForFunction(
+    () => (window as unknown as BoardWindow).__coboard?.provider?.wsconnected,
+  );
 
-  // A draws a freehand stroke (pen is the default tool).
+  // A draws a freehand stroke. Select is the default tool, so switch to the pen first.
+  await a.keyboard.press("p");
   const box = await a.locator("#board").boundingBox();
   if (!box) throw new Error("canvas not found");
   const cx = box.x + box.width / 2;
@@ -44,9 +49,13 @@ test("two clients converge: A draws a stroke, B receives it; presence is shared"
 
   // B's document converges to include the stroke (the single-source-of-truth invariant).
   await expect
-    .poll(() => b.evaluate(() => (window as unknown as BoardWindow).__coboard.doc.getMap("objects").size), {
-      timeout: 10_000,
-    })
+    .poll(
+      () =>
+        b.evaluate(() => (window as unknown as BoardWindow).__coboard.doc.getMap("objects").size),
+      {
+        timeout: 10_000,
+      },
+    )
     .toBeGreaterThan(0);
 
   const type = await b.evaluate(() => {
@@ -58,9 +67,13 @@ test("two clients converge: A draws a stroke, B receives it; presence is shared"
 
   // Presence: each client sees two awareness states (itself + the peer).
   await expect
-    .poll(() => a.evaluate(() => (window as unknown as BoardWindow).__coboard.awareness.getStates().size), {
-      timeout: 10_000,
-    })
+    .poll(
+      () =>
+        a.evaluate(() => (window as unknown as BoardWindow).__coboard.awareness.getStates().size),
+      {
+        timeout: 10_000,
+      },
+    )
     .toBe(2);
 
   await ctxA.close();

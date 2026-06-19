@@ -59,9 +59,9 @@ export class CoDialog extends HTMLElement {
     dialog.addEventListener("click", (e) => {
       if (e.target === dialog) this.close(); // backdrop click
     });
-    dialog.querySelectorAll("[data-dialog-close]").forEach((b) =>
-      b.addEventListener("click", () => this.close()),
-    );
+    dialog
+      .querySelectorAll("[data-dialog-close]")
+      .forEach((b) => b.addEventListener("click", () => this.close()));
     dialog.addEventListener("close", () => this.dispatchEvent(new Event("dialogclose")));
   }
 
@@ -112,7 +112,11 @@ export function createDialog(opts: DialogOptions): CoDialog {
   return el;
 }
 
-function appendContent(host: HTMLElement, content: string | HTMLElement, slot: string | null): void {
+function appendContent(
+  host: HTMLElement,
+  content: string | HTMLElement,
+  slot: string | null,
+): void {
   const tmp = document.createElement("div");
   if (typeof content === "string") tmp.innerHTML = content;
   else tmp.appendChild(content);

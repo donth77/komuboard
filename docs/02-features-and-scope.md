@@ -19,50 +19,50 @@ Related documents: [README](../README.md) · [01 — Product Vision & References
 
 Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is not Coboard without it; "Should" = high value, shippable slightly later within its phase; "Could" = nice-to-have / stretch within its phase; "Won't (v1)" = explicit non-goal (see [Non-goals](#non-goals-v1)).
 
-| Priority | Feature | Phase |
-|---|---|---|
-| **Must** | Infinite pan/zoom canvas | 1 |
-| **Must** | Freehand pen/marker (color, thickness) | 1 |
-| **Must** | Sticky notes (color + text) | 1 |
-| **Must** | Basic shapes (rectangle, ellipse, line, arrow) | 1 |
-| **Must** | Text tool | 1 |
-| **Must** | Select / move / resize / delete | 1 |
-| **Must** | Undo / redo | 1 |
-| **Must** | Realtime multiplayer sync (Yjs) | 1 |
-| **Must** | Live labeled cursors + presence avatars + join/leave | 1 |
-| **Must** | Anonymous rooms via shareable code/URL | 1 |
-| **Must** | Edge persistence (survives reconnect) | 1 |
-| **Must** | Responsive desktop mouse + mobile/tablet touch | 1 |
-| **Must** | Enter VR from any WebXR headset | 3 |
-| **Must** | Same board rendered as a 3D surface | 3 |
-| **Must** | 3D avatars (head + hands) + laser-pointer cursors via awareness | 3 |
-| **Must** | Draw in VR via controller raycast | 3 |
-| **Should** | Cursor chat (type at cursor) | 2 |
-| **Should** | Emoji stamps / reactions + high-five | 2 |
-| **Should** | Comments | 2 |
-| **Should** | Connectors that snap to shapes | 2 |
-| **Should** | Frames / sections | 2 |
-| **Should** | Templates (kanban, retro, mindmap, flowchart) | 2 |
-| **Should** | Image upload (R2) | 2 |
-| **Should** | Eraser | 2 |
-| **Should** | Export PNG / SVG / PDF | 2 |
-| **Should** | Alignment / snapping guides | 2 |
-| **Should** | Follow + spotlight / presentation mode | 2 |
-| **Should** | In-VR radial / wrist tool palette | 3 |
-| **Should** | VR comfort options (vignette, teleport, board reachability/scaling) | 3 |
-| **Could** | Sticky Sort | 2 |
-| **Could** | Timer | 2 |
-| **Could** | Dot voting | 2 |
-| **Could** | Minimap | 2 |
-| **Could** | WebRTC voice (small rooms) | 2 |
-| **Could** | Spatial voice in VR | 3 |
-| **Could** | Shared 3D sticky / object planes | 3 |
-| **Could** | AI assist (summarize board, auto-cluster stickies) | 3 (cross-cutting) |
-| **Won't (v1)** | Native app-store apps (PWA only) | — |
-| **Won't (v1)** | Enterprise SSO / admin console | — |
-| **Won't (v1)** | Real-time video tiles | — |
-| **Won't (v1)** | Offline-first sync beyond reconnect buffering | — |
-| **Won't (v1)** | Fully-3D modeling tools | — |
+| Priority       | Feature                                                             | Phase             |
+| -------------- | ------------------------------------------------------------------- | ----------------- |
+| **Must**       | Infinite pan/zoom canvas                                            | 1                 |
+| **Must**       | Freehand pen/marker (color, thickness)                              | 1                 |
+| **Must**       | Sticky notes (color + text)                                         | 1                 |
+| **Must**       | Basic shapes (rectangle, ellipse, line, arrow)                      | 1                 |
+| **Must**       | Text tool                                                           | 1                 |
+| **Must**       | Select / move / resize / delete                                     | 1                 |
+| **Must**       | Undo / redo                                                         | 1                 |
+| **Must**       | Realtime multiplayer sync (Yjs)                                     | 1                 |
+| **Must**       | Live labeled cursors + presence avatars + join/leave                | 1                 |
+| **Must**       | Anonymous rooms via shareable code/URL                              | 1                 |
+| **Must**       | Edge persistence (survives reconnect)                               | 1                 |
+| **Must**       | Responsive desktop mouse + mobile/tablet touch                      | 1                 |
+| **Must**       | Enter VR from any WebXR headset                                     | 3                 |
+| **Must**       | Same board rendered as a 3D surface                                 | 3                 |
+| **Must**       | 3D avatars (head + hands) + laser-pointer cursors via awareness     | 3                 |
+| **Must**       | Draw in VR via controller raycast                                   | 3                 |
+| **Should**     | Cursor chat (type at cursor)                                        | 2                 |
+| **Should**     | Emoji stamps / reactions + high-five                                | 2                 |
+| **Should**     | Comments                                                            | 2                 |
+| **Should**     | Connectors that snap to shapes                                      | 2                 |
+| **Should**     | Frames / sections                                                   | 2                 |
+| **Should**     | Templates (kanban, retro, mindmap, flowchart)                       | 2                 |
+| **Should**     | Image upload (R2)                                                   | 2                 |
+| **Should**     | Eraser                                                              | 2                 |
+| **Should**     | Export PNG / SVG / PDF                                              | 2                 |
+| **Should**     | Alignment / snapping guides                                         | 2                 |
+| **Should**     | Follow + spotlight / presentation mode                              | 2                 |
+| **Should**     | In-VR radial / wrist tool palette                                   | 3                 |
+| **Should**     | VR comfort options (vignette, teleport, board reachability/scaling) | 3                 |
+| **Could**      | Sticky Sort                                                         | 2                 |
+| **Could**      | Timer                                                               | 2                 |
+| **Could**      | Dot voting                                                          | 2                 |
+| **Could**      | Minimap                                                             | 2                 |
+| **Could**      | WebRTC voice (small rooms)                                          | 2                 |
+| **Could**      | Spatial voice in VR                                                 | 3                 |
+| **Could**      | Shared 3D sticky / object planes                                    | 3                 |
+| **Could**      | AI assist (summarize board, auto-cluster stickies)                  | 3 (cross-cutting) |
+| **Won't (v1)** | Native app-store apps (PWA only)                                    | —                 |
+| **Won't (v1)** | Enterprise SSO / admin console                                      | —                 |
+| **Won't (v1)** | Real-time video tiles                                               | —                 |
+| **Won't (v1)** | Offline-first sync beyond reconnect buffering                       | —                 |
+| **Won't (v1)** | Fully-3D modeling tools                                             | —                 |
 
 ---
 
@@ -113,7 +113,7 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 - Click selects a single object; drag-rectangle (marquee) selects multiple; Shift-click toggles membership.
 - Move and resize emit Yjs geometry updates; multi-select move applies to all members atomically from the user's perspective.
 - Delete removes selected objects from the Yjs doc on all clients; the deletion is undoable (§1.7).
-- Selection state is **local/awareness-ephemeral**, not persisted: remote users may see *that* an object is selected (highlight) but reloading the room clears all selections.
+- Selection state is **local/awareness-ephemeral**, not persisted: remote users may see _that_ an object is selected (highlight) but reloading the room clears all selections.
 
 ### 1.7 Undo / redo
 
@@ -244,35 +244,35 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 - "Spotlight" (presenter) broadcasts the presenter's viewport so all followers' viewports track it.
 - Follow/spotlight state is awareness-ephemeral (not persisted); ending the session clears it.
 
-### 2.12 Sticky Sort *(Could)*
+### 2.12 Sticky Sort _(Could)_
 
 - **Story:** As a facilitator I want to auto-arrange sticky notes by color/author/reaction so that I can cluster ideas fast.
 - Sort reorganizes sticky positions by a chosen key (color, author, reaction count); "by author" uses the **stable per-room author token** ([04 §2.2](./04-technical-architecture.md)), not the ephemeral connection id, so it survives reload. The rearrangement is a normal undoable batch of Yjs updates.
 - Sort is non-destructive to sticky content (only positions change).
 - Result is consistent across all clients.
 
-### 2.13 Timer *(Could)*
+### 2.13 Timer _(Could)_
 
 - **Story:** As a facilitator I want a shared countdown timer so that I can time-box activities for everyone.
 - Starting/pausing/resetting the timer is reflected on all clients; the displayed remaining time is consistent across clients.
 - Timer reaching zero produces a visible (and optionally audible) signal for all.
 - Timer state is shared via the room (ephemeral or lightweight shared state) and does not bloat the persisted content doc.
 
-### 2.14 Dot voting *(Could)*
+### 2.14 Dot voting _(Could)_
 
 - **Story:** As a facilitator I want dot voting so that the group can prioritize items democratically.
 - A voting session grants each user a budget of dots; placing a dot on an object records a vote attributed to the user.
 - Vote tallies are visible (e.g. per object) and update in realtime.
 - Closing the vote freezes tallies; votes are persisted with the board.
 
-### 2.15 Minimap *(Could)*
+### 2.15 Minimap _(Could)_
 
 - **Story:** As a participant I want a minimap so that I can navigate a large board quickly.
 - The minimap shows a scaled overview of all content and the current viewport rectangle.
 - Clicking/dragging on the minimap moves the local viewport.
 - The minimap is local UI only (reads the Yjs doc; writes nothing).
 
-### 2.16 WebRTC voice (small rooms) *(Could)*
+### 2.16 WebRTC voice (small rooms) _(Could)_
 
 - **Story:** As a participant in a small room I want optional voice chat so that we can talk while we draw.
 - Voice uses a WebRTC mesh with the room Durable Object as signaling server (no media through the DO).
@@ -342,35 +342,35 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 - **Non-overlapping viewports:** users outside each other's region get **directional edge indicators** (e.g. "3 →") plus markers on the minimap (§3.5) pointing toward off-screen peers, so no participant is invisible.
 - **Awareness-only, budget-aware:** cursor, laser, and avatar-pose data ride the **Yjs awareness channel** (never persisted) and are throttled/coalesced (~20–30 Hz, binary) per the [Realtime cursors & presence callout](#realtime-cursors--presence-first-class) and [05](./05-scaling-and-cost.md); a room reload shows zero stale cross-reality cursors.
 
-### 3.8 In-VR radial / wrist tool palette *(Should)*
+### 3.8 In-VR radial / wrist tool palette _(Should)_
 
 - **Story:** As a headset user I want a wrist/radial tool palette so that I can switch tools and colors without leaving immersion.
 - A radial or wrist-anchored palette exposes core tools (pen, color, thickness, eraser) reachable by controller.
 - Selecting a tool/color in VR updates the local drawing state; selection feedback is visible in-headset.
 - The palette does not occlude the board during drawing (comfort/ergonomics per [03 — Design](./03-visual-design-ui-ux.md)).
 
-### 3.9 VR comfort options *(Should)*
+### 3.9 VR comfort options _(Should)_
 
 - **Story:** As a headset user I want comfort controls so that I can use Coboard in VR without discomfort.
 - Comfort options include vignette during movement, teleport locomotion, and board reachability/scaling (bring the board closer / resize it).
 - Settings persist for the session and are local (not shared, not persisted to the board doc).
 - Teleport and scaling do not alter the shared board content (only the local view/rig).
 
-### 3.10 Spatial voice in VR *(Could)*
+### 3.10 Spatial voice in VR _(Could)_
 
 - **Story:** As a headset user I want spatialized voice so that I hear collaborators from their position in the scene.
 - Voice is positionally attenuated based on avatar positions (built on the Phase-2 WebRTC path; signaling via the room DO).
 - Opt-in with mute; presence reflects who is speaking.
 - Documented scaling limits mirror §2.16 (mesh for small groups; managed escalation noted).
 
-### 3.11 Shared 3D sticky / object planes *(Could)*
+### 3.11 Shared 3D sticky / object planes _(Could)_
 
 - **Story:** As a headset user I want sticky notes/objects as placeable 3D planes so that I can arrange ideas in space, shared with everyone.
 - 3D sticky/object planes are backed by the **same Yjs nodes** as 2D objects (one source of truth); changes sync both ways.
 - Placing/moving a 3D plane in VR updates the 2D board representation and vice-versa.
 - Persistence is identical to 2D objects (survives reload/hibernation).
 
-### 3.12 AI assist — summarize board, auto-cluster stickies *(Could, cross-cutting stretch)*
+### 3.12 AI assist — summarize board, auto-cluster stickies _(Could, cross-cutting stretch)_
 
 - **Story:** As a facilitator I want AI to summarize the board and auto-cluster sticky notes by theme so that I can synthesize a session quickly.
 - "Summarize" produces a text summary of board content; "auto-cluster" groups stickies into themed clusters (rearranges positions as an undoable batch, like §2.12).
@@ -400,27 +400,27 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 
 Maps notable features to the reference product(s) that inspired them. See [01 — Product Vision & References](./01-product-vision-and-references.md) for the full writeup and links.
 
-| Feature | Phase | Primary inspiration | Notes |
-|---|---|---|---|
-| Anonymous rooms via shareable code/URL | 1 | **Whiteboard VR** | Open the site → auto room code → share to draw together, no signup. Our closest predecessor. |
-| Same board across 2D web + immersive VR | 3 | **Whiteboard VR** | Cross-reality, one shared document — extended via a single Yjs doc as source of truth. |
-| Enter VR / 3D avatars / draw in VR | 3 | **Whiteboard VR** | Platform-independent collaboration (touch / mouse / headset). |
-| Infinite pan/zoom canvas | 1 | **Miro** + **Canva** | Infinite/expanding canvas. |
-| Pen with color + thickness | 1 | **Miro** | Pen tool (color, thickness, stylus/Apple Pencil). |
-| Basic shapes + connectors that snap | 1 / 2 | **Miro** | Shapes + connection lines with snapping. |
-| Templates (kanban, retro, mindmap, flowchart) | 2 | **Miro** + **Canva** + **FigJam** | Template galleries across all three. |
-| Image upload | 2 | **Miro** | File upload (images/PDF/Office). |
-| Export PNG / SVG / PDF | 2 | **Miro** | PDF/JPG export. |
-| Frames / sections | 2 | **FigJam** | Sections. |
-| Dot voting | 2 | **Miro** | Voting. |
-| Timer | 2 | **Miro** | Timer. |
-| Follow + spotlight / presentation mode | 2 | **FigJam** + **Miro** | Spotlight mode / presentation mode. |
-| Live labeled colored cursors + presence | 1 | **Canva** + **FigJam** | Colorful labeled cursors; live multi-user presence. |
-| Cursor chat | 2 | **FigJam** | Type-at-cursor chat. |
-| Emoji stamps / reactions + high-five | 2 | **FigJam** + **Canva** | Stamps/emotes + high-fives; real-time reactions. |
-| Comments | 2 | **FigJam** + **Canva** | In-context comments. |
-| Sticky notes + Sticky Sort | 1 / 2 | **Canva** | Sticky notes with Sort (color/author/reactions/themes). |
-| AI assist (summarize, auto-cluster) | 3 | **FigJam** + **Canva** | Summarize board; auto-organize stickies into themes. |
+| Feature                                       | Phase | Primary inspiration               | Notes                                                                                        |
+| --------------------------------------------- | ----- | --------------------------------- | -------------------------------------------------------------------------------------------- |
+| Anonymous rooms via shareable code/URL        | 1     | **Whiteboard VR**                 | Open the site → auto room code → share to draw together, no signup. Our closest predecessor. |
+| Same board across 2D web + immersive VR       | 3     | **Whiteboard VR**                 | Cross-reality, one shared document — extended via a single Yjs doc as source of truth.       |
+| Enter VR / 3D avatars / draw in VR            | 3     | **Whiteboard VR**                 | Platform-independent collaboration (touch / mouse / headset).                                |
+| Infinite pan/zoom canvas                      | 1     | **Miro** + **Canva**              | Infinite/expanding canvas.                                                                   |
+| Pen with color + thickness                    | 1     | **Miro**                          | Pen tool (color, thickness, stylus/Apple Pencil).                                            |
+| Basic shapes + connectors that snap           | 1 / 2 | **Miro**                          | Shapes + connection lines with snapping.                                                     |
+| Templates (kanban, retro, mindmap, flowchart) | 2     | **Miro** + **Canva** + **FigJam** | Template galleries across all three.                                                         |
+| Image upload                                  | 2     | **Miro**                          | File upload (images/PDF/Office).                                                             |
+| Export PNG / SVG / PDF                        | 2     | **Miro**                          | PDF/JPG export.                                                                              |
+| Frames / sections                             | 2     | **FigJam**                        | Sections.                                                                                    |
+| Dot voting                                    | 2     | **Miro**                          | Voting.                                                                                      |
+| Timer                                         | 2     | **Miro**                          | Timer.                                                                                       |
+| Follow + spotlight / presentation mode        | 2     | **FigJam** + **Miro**             | Spotlight mode / presentation mode.                                                          |
+| Live labeled colored cursors + presence       | 1     | **Canva** + **FigJam**            | Colorful labeled cursors; live multi-user presence.                                          |
+| Cursor chat                                   | 2     | **FigJam**                        | Type-at-cursor chat.                                                                         |
+| Emoji stamps / reactions + high-five          | 2     | **FigJam** + **Canva**            | Stamps/emotes + high-fives; real-time reactions.                                             |
+| Comments                                      | 2     | **FigJam** + **Canva**            | In-context comments.                                                                         |
+| Sticky notes + Sticky Sort                    | 1 / 2 | **Canva**                         | Sticky notes with Sort (color/author/reactions/themes).                                      |
+| AI assist (summarize, auto-cluster)           | 3     | **FigJam** + **Canva**            | Summarize board; auto-organize stickies into themes.                                         |
 
 ---
 
@@ -428,12 +428,12 @@ Maps notable features to the reference product(s) that inspired them. See [01 �
 
 Explicitly **out of scope** for v1. These are deliberate decisions, not omissions — they keep Coboard shippable on a $0 free-tier footprint and focused on the cross-reality realtime canvas.
 
-| Non-goal | Why it's out of v1 |
-|---|---|
-| **Native app-store apps** | Coboard ships as a **PWA only**; no iOS/Android/Quest store builds. The web + WebXR path covers all target devices. |
-| **Enterprise SSO / admin console** | No SAML/SSO, org management, or admin governance. Anonymous-first rooms are the model; named accounts are an optional *later* add (GitHub OAuth / Clerk free tier), not v1. |
-| **Real-time video tiles** | No webcam video grid. Optional **audio-only** WebRTC voice is the ceiling (Phase 2/3, *Could*); video does not fit the free-tier bandwidth/compute budget. |
-| **Offline-first sync beyond reconnect buffering** | We guarantee reconnect/resync (§1.11) and short buffering, **not** full offline editing with long-horizon merge. Yjs makes this *possible later*, but it's not a v1 promise. |
-| **Fully-3D modeling tools** | VR is for collaborating on the shared **board** (drawing, stickies, avatars) — not a CAD/3D-modeling environment. |
+| Non-goal                                          | Why it's out of v1                                                                                                                                                           |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Native app-store apps**                         | Coboard ships as a **PWA only**; no iOS/Android/Quest store builds. The web + WebXR path covers all target devices.                                                          |
+| **Enterprise SSO / admin console**                | No SAML/SSO, org management, or admin governance. Anonymous-first rooms are the model; named accounts are an optional _later_ add (GitHub OAuth / Clerk free tier), not v1.  |
+| **Real-time video tiles**                         | No webcam video grid. Optional **audio-only** WebRTC voice is the ceiling (Phase 2/3, _Could_); video does not fit the free-tier bandwidth/compute budget.                   |
+| **Offline-first sync beyond reconnect buffering** | We guarantee reconnect/resync (§1.11) and short buffering, **not** full offline editing with long-horizon merge. Yjs makes this _possible later_, but it's not a v1 promise. |
+| **Fully-3D modeling tools**                       | VR is for collaborating on the shared **board** (drawing, stickies, avatars) — not a CAD/3D-modeling environment.                                                            |
 
 > These align with the canonical non-goals in the project brief and must not be re-scoped into v1 without updating this document and [06 — Roadmap](./06-implementation-roadmap.md).

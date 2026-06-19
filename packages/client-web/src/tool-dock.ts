@@ -11,7 +11,7 @@ import type { ToolId } from "./canvas";
 // icon, key, label, tool (null = not yet wired — lands in a later M1 increment)
 const TOOLS: ReadonlyArray<readonly [string, string, string, ToolId | null]> = [
   ["select", "v", "Select", "select"],
-  ["hand", "h", "Hand / pan", "hand"],
+  ["hand", "h", "Hand", "hand"],
   ["pen", "p", "Pen", "pen"],
   ["sticky", "s", "Sticky note", null],
   ["text", "t", "Text", null],

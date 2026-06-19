@@ -15,7 +15,13 @@
   --dur: 200ms;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   color-scheme: light;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
 }
 :root[data-theme="dark"] {
   --accent: #5b8def;
@@ -44,7 +50,7 @@ body {
   position: relative;
   height: 100vh;
   display: grid;
-  grid-template-rows: 56px 1fr;
+  grid-template-rows: calc(56px + env(safe-area-inset-top, 0px)) 1fr;
   background: var(--paper);
   color: var(--ink);
   overflow: hidden;
@@ -58,7 +64,7 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 0 14px;
+  padding: env(safe-area-inset-top, 0px) 14px 0;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   z-index: 20;
@@ -208,6 +214,11 @@ body {
 }
 .panel.hidden {
   display: none;
+}
+/* The mobile pen sheet lives in a clip wrapper; on desktop it's a passthrough so the
+   side panel still positions against #app. (Becomes a real clip box on mobile.) */
+.sheet-wrap {
+  display: contents;
 }
 .panel-head {
   padding: 13px 15px;
@@ -382,20 +393,36 @@ input[type="range"] {
   justify-content: center;
   font-size: 13px;
   cursor: text;
+  border-radius: 8px;
+  transition:
+    background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+/* clear "you're editing" affordance: filled chip + accent ring around the field */
+.zb.pct:focus-within {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
 }
 .zb.pct input {
-  width: 32px;
+  width: 34px;
   border: none;
   background: transparent;
   color: var(--ink);
   font: inherit;
   font-weight: 600;
-  text-align: right;
+  text-align: center;
   padding: 0;
   outline: none;
+  caret-color: var(--accent); /* visible, blinking caret while typing */
 }
 .zb.pct input:focus {
   color: var(--accent);
+}
+.zb.pct input::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--ink);
 }
 .zb-sep {
   width: 1px;
@@ -408,31 +435,8 @@ input[type="range"] {
   height: 17px;
 }
 
-@media (max-width: 640px) {
-  .zoombar {
-    bottom: 84px;
-  }
-}
-
-/* ---------- mobile ---------- */
-@media (max-width: 640px) {
-  .devstatus {
-    display: none;
-  }
-  .dock {
-    left: 50%;
-    top: auto;
-    bottom: 16px;
-    transform: translateX(-50%);
-    flex-direction: row;
-  }
-  .panel {
-    display: none;
-  }
-  .hint-chip {
-    bottom: 78px;
-  }
-}
+/* Mobile overrides live at the very end of this file, after every base rule,
+   so the @media block always wins on source order. */
 
 /* ---------- room pill ---------- */
 .room-pill {
@@ -460,7 +464,11 @@ input[type="range"] {
 
 /* ---------- keyboard hints + shortcuts modal ---------- */
 .kbd {
-  font: 600 11px ui-monospace, "SF Mono", Menlo, monospace;
+  font:
+    600 11px ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-bottom-width: 2px;
@@ -747,9 +755,12 @@ input[type="range"] {
   ) !important;
   border: 2px solid var(--surface) !important;
 }
-/* swatch name tooltip — FigJam dark pill with a downward tail */
-.pen-panel .sw::after,
-.pen-panel .sw::before {
+/* swatch name tooltip — FigJam dark pill with a downward tail (any .sw[data-tip]) */
+.sw[data-tip] {
+  position: relative;
+}
+.sw[data-tip]::after,
+.sw[data-tip]::before {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -758,7 +769,7 @@ input[type="range"] {
   transition: opacity 110ms var(--ease);
   z-index: 70;
 }
-.pen-panel .sw::after {
+.sw[data-tip]::after {
   content: attr(data-tip);
   bottom: calc(100% + 9px);
   background: #1e1e1e;
@@ -769,14 +780,14 @@ input[type="range"] {
   border-radius: 8px;
   white-space: nowrap;
 }
-.pen-panel .sw::before {
+.sw[data-tip]::before {
   content: "";
   bottom: calc(100% + 4px);
   border: 5px solid transparent;
   border-top-color: #1e1e1e;
 }
-.pen-panel .sw:hover::after,
-.pen-panel .sw:hover::before {
+.sw[data-tip]:hover::after,
+.sw[data-tip]:hover::before {
   opacity: 1;
 }
 
@@ -818,7 +829,11 @@ input[type="range"] {
 .cp-hex {
   flex: 1;
   min-width: 0;
-  font: 600 13px ui-monospace, "SF Mono", Menlo, monospace;
+  font:
+    600 13px ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
   text-transform: uppercase;
   padding: 7px 9px;
   border: 1px solid var(--border);
@@ -843,8 +858,7 @@ input[type="range"] {
   border-radius: 10px;
   cursor: crosshair;
   background:
-    linear-gradient(to top, #000, transparent),
-    linear-gradient(to right, #fff, var(--cp-hue, #f00));
+    linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--cp-hue, #f00));
 }
 .cp-thumb {
   position: absolute;
@@ -919,4 +933,253 @@ input[type="range"] {
   box-shadow:
     0 0 0 2px var(--surface),
     0 0 0 4px var(--accent);
+}
+
+/* ---------- hamburger (mobile only) ---------- */
+.nav-btn {
+  display: none;
+}
+
+/* ---------- pen bottom-sheet grab handle (mobile only) ---------- */
+.sheet-handle {
+  display: none;
+  position: relative;
+  height: 22px;
+  cursor: pointer;
+  touch-action: none; /* dragging the handle drives the sheet, never scrolls it */
+}
+.sheet-handle::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+/* ---------- transient zoom % pill ---------- */
+.zoom-pill {
+  position: absolute;
+  top: calc(56px + env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  z-index: 28;
+  display: none;
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 160ms var(--ease),
+    transform 160ms var(--ease);
+}
+.zoom-pill.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ---------- mobile slide-out drawer ---------- */
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(16, 17, 22, 0.45);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 220ms var(--ease),
+    visibility 220ms var(--ease);
+}
+.drawer-scrim.open {
+  opacity: 1;
+  visibility: visible;
+}
+.drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 61;
+  width: 270px;
+  max-width: 82vw;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transform: translateX(-100%);
+  transition: transform 240ms var(--ease);
+}
+.drawer.open {
+  transform: translateX(0);
+}
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.drawer-room {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 2px 0 8px;
+}
+.drawer-room strong {
+  color: var(--ink);
+}
+.drawer-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.drawer-item:hover {
+  background: var(--surface-2);
+}
+.drawer-item-ic {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+/* ====================================================================
+   Mobile (≤640px) — last in the file so every override wins on order.
+   ==================================================================== */
+@media (max-width: 640px) {
+  /* hide desktop-only chrome (room info lives in the drawer on mobile) */
+  .devstatus,
+  .theme-btn,
+  .zoombar,
+  .room-pill {
+    display: none;
+  }
+  .brand-name,
+  .brand .logo {
+    display: none;
+  }
+  .nav-btn {
+    display: inline-grid;
+  }
+
+  /* tool dock → centered bottom bar (clears the home indicator) */
+  .dock {
+    left: 0;
+    right: 0;
+    top: auto;
+    margin: 0 auto;
+    width: min(340px, calc(100vw - 20px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    transform: none;
+    flex-direction: row;
+    justify-content: center;
+    z-index: 45;
+  }
+  /* while the pen sheet is out, the dock's top merges seamlessly with it:
+     square top corners, no top border, no top shadow */
+  #app.pen-open .dock {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-top-color: transparent;
+    box-shadow: 0 14px 16px -3px rgba(0, 0, 0, 0.2);
+  }
+  /* collapsed to a tab → show the toolbar's top edge again so the seam is visible */
+  #app.pen-open:has(co-pen-panel.collapsed) .dock {
+    border-top-color: var(--border);
+  }
+  /* tool tooltips flip above the now-horizontal dock; drop the shortcut key on touch */
+  .tool-tip {
+    left: 50%;
+    right: auto;
+    top: auto;
+    bottom: calc(100% + 12px);
+    transform: translateX(-50%);
+  }
+  .tool-tip::before {
+    left: 50%;
+    right: auto;
+    top: auto;
+    bottom: -9px;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1e1e1e;
+  }
+  .tool-tip .kbd {
+    display: none;
+  }
+
+  /* Clip window whose bottom edge IS the dock's top: the sheet slides within it and is
+     clipped exactly at the toolbar, so it appears to expand out of / collapse into the
+     toolbar (never sliding below it). */
+  .sheet-wrap {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px) + 58px); /* = the dock's top edge */
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 38; /* below the dock (45) so the sheet tucks behind it */
+  }
+  /* pen panel → bottom sheet, same width as the dock → reads as a vertical extension */
+  .pen-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0; /* sits on the wrapper's bottom edge = the dock's top */
+    margin: 0 auto;
+    width: min(340px, calc(100vw - 20px));
+    max-height: 50vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    box-shadow: var(--shadow);
+    pointer-events: auto;
+    transform: translateY(0);
+    transition: transform 280ms var(--ease);
+    will-change: transform;
+  }
+  .pen-panel.collapsed {
+    transform: translateY(calc(100% - 26px)); /* leave a 26px grab-handle tab (just the handle) */
+  }
+  .pen-panel.hidden {
+    /* override the global `.hidden { display: none !important }` so the sheet stays in
+       the DOM and can *animate* down into the toolbar (display:none can't transition). */
+    display: block !important;
+    transform: translateY(101%); /* collapse fully into the toolbar (clipped → gone) */
+    pointer-events: none;
+  }
+  .sheet-handle {
+    display: block;
+  }
+
+  /* transient zoom readout instead of the zoom widget */
+  .zoom-pill {
+    display: block;
+  }
 }

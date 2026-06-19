@@ -9,12 +9,12 @@ The canonical decisions in the planning package (`docs/01`–`07`) are the curre
 source of record; each becomes a numbered ADR here as it is ratified. Planned
 initial set:
 
-| ADR | Decision | Source |
-|---|---|---|
-| ADR-0001 | Yjs as the single source of truth (one document per room) | [04 §2](../04-technical-architecture.md) |
-| ADR-0002 | Konva (Canvas 2D) first, with a documented PixiJS / WebGL migration trigger | [04 §9](../04-technical-architecture.md), [07 §2.1](../07-engineering-quality-security-accessibility.md) |
-| ADR-0003 | Dimension-agnostic canvas-space + per-user viewport-rect model (shared by 2D & VR) | [04 §2.5, §6.5](../04-technical-architecture.md) |
-| ADR-0004 | One room === one Durable Object (PartyServer + Y-PartyServer), WebSocket Hibernation | [04 §4](../04-technical-architecture.md), [05](../05-scaling-and-cost.md) |
+| ADR      | Decision                                                                             | Source                                                                                                   |
+| -------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| ADR-0001 | Yjs as the single source of truth (one document per room)                            | [04 §2](../04-technical-architecture.md)                                                                 |
+| ADR-0002 | Konva (Canvas 2D) first, with a documented PixiJS / WebGL migration trigger          | [04 §9](../04-technical-architecture.md), [07 §2.1](../07-engineering-quality-security-accessibility.md) |
+| ADR-0003 | Dimension-agnostic canvas-space + per-user viewport-rect model (shared by 2D & VR)   | [04 §2.5, §6.5](../04-technical-architecture.md)                                                         |
+| ADR-0004 | One room === one Durable Object (PartyServer + Y-PartyServer), WebSocket Hibernation | [04 §4](../04-technical-architecture.md), [05](../05-scaling-and-cost.md)                                |
 
 > **Format:** one file per ADR, `NNNN-short-title.md`, with sections
 > **Context · Decision · Status · Consequences**. Status ∈ {Proposed, Accepted,

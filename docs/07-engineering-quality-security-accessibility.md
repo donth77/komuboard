@@ -77,16 +77,16 @@ We can't hold a budget we don't measure. A lightweight dev HUD reports fps, fram
 
 ### 2.7 Performance budget
 
-| Metric | Target | Where enforced |
-|---|---|---|
-| 2D render (desktop, dense board) | **60 fps** (≤ 16.7 ms frame) | Playwright perf assert; dev HUD |
-| VR render (standalone headset) | **72 / 90 fps** (≤ 13.9 / 11.1 ms frame) | WebXR emulator + manual on-device |
-| Initial JS bundle (2D core, gzipped) | **≤ ~250 KB** (VR bundle excluded, lazy) | CI bundle-size budget |
-| Document sync latency (edit → remote apply), p95 | **< 250 ms** | matches [05](./05-scaling-and-cost.md)/[06](./06-implementation-roadmap.md) KPIs |
-| Cursor round-trip, p95 | **< 150 ms** | matches [05](./05-scaling-and-cost.md)/[06](./06-implementation-roadmap.md); masked by 60 fps interpolation |
-| Time-to-first-draw (room load → can draw) | **< 3 s** | Lighthouse + manual |
-| Awareness broadcast rate (cursor) | **~20 Hz** coalesced | client throttle; load test |
-| Re-bake cadence (VR texture) | debounced to frame budget | dev HUD |
+| Metric                                           | Target                                   | Where enforced                                                                                              |
+| ------------------------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 2D render (desktop, dense board)                 | **60 fps** (≤ 16.7 ms frame)             | Playwright perf assert; dev HUD                                                                             |
+| VR render (standalone headset)                   | **72 / 90 fps** (≤ 13.9 / 11.1 ms frame) | WebXR emulator + manual on-device                                                                           |
+| Initial JS bundle (2D core, gzipped)             | **≤ ~250 KB** (VR bundle excluded, lazy) | CI bundle-size budget                                                                                       |
+| Document sync latency (edit → remote apply), p95 | **< 250 ms**                             | matches [05](./05-scaling-and-cost.md)/[06](./06-implementation-roadmap.md) KPIs                            |
+| Cursor round-trip, p95                           | **< 150 ms**                             | matches [05](./05-scaling-and-cost.md)/[06](./06-implementation-roadmap.md); masked by 60 fps interpolation |
+| Time-to-first-draw (room load → can draw)        | **< 3 s**                                | Lighthouse + manual                                                                                         |
+| Awareness broadcast rate (cursor)                | **~20 Hz** coalesced                     | client throttle; load test                                                                                  |
+| Re-bake cadence (VR texture)                     | debounced to frame budget                | dev HUD                                                                                                     |
 
 > Budgets are **CI gates**, not aspirations. A PR that pushes the 2D core bundle over budget or drops dense-board frame time below 60 fps fails review ([06](./06-implementation-roadmap.md)).
 
@@ -131,7 +131,7 @@ The DOM **chrome** — top bar, tool dock, properties panels, dialogs, share/onb
 
 - **Light DOM, not Shadow DOM.** Elements share Coboard's global design system — CSS tokens **and** utility classes (`.btn-primary`, `.swatches`, `.kbd`, `.avatar`, …). Shadow DOM was rejected: custom properties pierce a shadow boundary but **class selectors do not**, so it would force per-component style duplication (and the global `prefers-reduced-motion` reset would stop applying).
 - **A11y bonus of light DOM:** one DOM tree means no cross-root ARIA fragmentation — important for the §5.1 semantic mirror and the live-region announcer — and keeps `axe-core` / Playwright selectors simple. Trade-off: no style encapsulation, so rely on disciplined prefixed class names + the single shared stylesheet.
-- **Vanilla now, [Lit](https://lit.dev) (~6 KB, MIT) optional** if boilerplate grows — within the §2.7 bundle budget, not a "heavy framework"; interops with React 19 if the React-optional path ([04 §9](./04-technical-architecture.md)) is taken. Shipped: `<co-dialog>`, `<co-avatar-presence-row>`, `<co-tool-dock>`, `<co-pen-panel>`, `<co-zoombar>` (in `packages/client-web/src/`), over a shared `icons.ts`.
+- **Vanilla now, [Lit](https://lit.dev) (~6 KB, MIT) optional** if boilerplate grows — within the §2.7 bundle budget, not a "heavy framework"; interops with React 19 if the React-optional path ([04 §9](./04-technical-architecture.md)) is taken. Shipped: `<co-topbar>`, `<co-drawer>`, `<co-dialog>`, `<co-avatar-presence-row>`, `<co-tool-dock>`, `<co-pen-panel>`, `<co-zoombar>` (in `packages/client-web/src/`), over a shared `icons.ts`.
 
 ### 3.6 Conventions, automation & decision records
 
@@ -155,15 +155,15 @@ Coboard is **anonymous-first and public-by-link** ([01](./01-product-vision-and-
 
 ### 4.1 Threat model (anonymous public rooms)
 
-| Asset | Threat | Primary control |
-|---|---|---|
-| Room content | Unauthorized join / lurking | High-entropy room id; optional passcode; capability URLs |
-| Room content | Vandalism / "board-nuke" | CRDT undo + snapshots; rate limits; (later) per-room moderation |
-| Clients | Stored/reflected XSS via sticky/text/export | Treat all text as data; DOMPurify on any HTML/SVG render or export |
-| DO / Worker | Flood / DoS / oversized messages | Per-connection token bucket; message-size caps; spawn rate-limit |
-| Assets (R2) | Malicious upload / EXIF leak / content-type spoof | Signed uploads; re-encode; content-type + size validation |
-| Users | PII exposure | PII-minimal anonymous model; retention/deletion posture |
-| Supply chain | Compromised CDN/dependency | SRI on CDN scripts; pinned versions; lockfile; `pnpm audit` |
+| Asset        | Threat                                            | Primary control                                                    |
+| ------------ | ------------------------------------------------- | ------------------------------------------------------------------ |
+| Room content | Unauthorized join / lurking                       | High-entropy room id; optional passcode; capability URLs           |
+| Room content | Vandalism / "board-nuke"                          | CRDT undo + snapshots; rate limits; (later) per-room moderation    |
+| Clients      | Stored/reflected XSS via sticky/text/export       | Treat all text as data; DOMPurify on any HTML/SVG render or export |
+| DO / Worker  | Flood / DoS / oversized messages                  | Per-connection token bucket; message-size caps; spawn rate-limit   |
+| Assets (R2)  | Malicious upload / EXIF leak / content-type spoof | Signed uploads; re-encode; content-type + size validation          |
+| Users        | PII exposure                                      | PII-minimal anonymous model; retention/deletion posture            |
+| Supply chain | Compromised CDN/dependency                        | SRI on CDN scripts; pinned versions; lockfile; `pnpm audit`        |
 
 ### 4.2 Access control & room secrecy
 
@@ -303,21 +303,21 @@ VR accessibility follows spatial-UX + XAUR guidance (finding 3 + 4):
 
 ### 6.1 Risk / challenge register
 
-| Challenge | Why it's hard | Approach / mitigation | Status |
-|---|---|---|---|
-| CRDT unbounded memory growth on long-lived boards | Yjs tombstones + update log grow with _total_ edits, not live content; an 8-hour brainstorm bloats every client + the DO | Yjs GC; **snapshot compaction** in the DO discards superseded log entries (§2.5); capped undo; resident size ∝ live content | Planned — compaction is M-critical |
-| 2D↔VR coordinate / state divergence; viewport-rect ↔ UV math bugs | Off-by-one/transform bugs put a VR stroke at the wrong canvas coord → "it's in the wrong place for 2D users"; two impls would drift | **One** viewport-math impl in `shared` (§3.1/3.3); property tests round-tripping canvas↔UV↔canvas for arbitrary rects; single doc as SoT | Mitigated by design; needs the property-test suite |
-| Viewport-culling correctness (edge popping) | Objects straddling the cull boundary can pop in/out as the camera/viewport moves | Margin/pre-warm ring around the visible rect (§2.1/2.2); hysteresis on LOD tier boundary; AABB-inclusive intersection | Approach known; tune margin empirically |
-| Free-tier overrun + hot-room broadcast fanout | Fanout is O(users²)-ish per room; a viral room can blow the $0 budget | `partysub` sharding, coalescing/batching (§2.3), shedding cursors-before-edits under pressure — see **[05](./05-scaling-and-cost.md)** for the math | Cross-ref [05](./05-scaling-and-cost.md); levers identified |
-| WebXR browser/device fragmentation + standalone-headset GPU limits | WebXR support + perf vary wildly (Quest browser vs Vision Pro vs desktop); standalone GPUs are weak | Lazy VR bundle (§2.4); two-tier LOD + texture baking (§2.2); feature-detect + graceful 2D fallback; on-device test matrix | Ongoing; needs device-lab pass |
-| Large image assets | Big uploads hurt load, memory, and cost | Re-encode + downscale + atlas (§2.1/4.6); lazy full-res on deep zoom; size cap | Planned |
-| Reconnect / offline edge cases + buffered awareness | Yjs merges cleanly, but stale buffered _awareness_ (cursors of since-gone users) can ghost; reconnection storms | Awareness timeout/clear on disconnect; resync via snapshot on reconnect; debounced reconnect backoff | Needs explicit reconnect tests |
-| Determinism without `Date.now`/`Math.random` in shared logic | Non-deterministic inputs in shared document logic break CRDT convergence + reproducibility | Ban `Date.now`/`Math.random` in `shared` doc logic (lint rule); ids from CSPRNG at the _edge_/client boundary, passed in, not generated inside merge logic | Enforce via lint + review |
-| Moderation / abuse at scale | Public anonymous rooms invite spam/NSFW/griefing; no accounts to ban | Rate limits + board-nuke recovery now (§4.4); per-room locking + report path + (later) accounts as the scalable answer | Partial; scales with accounts |
-| Cursor storm at high concurrency | Many users × frequent cursor moves = awareness flood | 20 Hz coalescing + 60 fps interpolation (§2.3); DO aggregate cap + cursor shedding; per-room user soft-cap | Mitigated; validate under load test |
-| Export fidelity (vector vs raster) | Strokes/text must export crisply; SVG export is also an XSS surface | Vector (SVG) export from canonical geometry where possible, raster (PNG) fallback; DOMPurify-sanitize SVG (§4.3) | Planned |
-| Testing multiplayer + VR in CI | Concurrency + WebXR are hard to automate deterministically | Multi-client Playwright sessions; **WebXR emulator** in CI ([06](./06-implementation-roadmap.md)); property tests for CRDT + viewport math; on-device manual for true VR | Framework in [06](./06-implementation-roadmap.md) |
-| Eventual-consistency UX (late joiner sees history) | A late joiner must receive full state fast without a janky replay | Serve **compacted snapshot** then live deltas (§2.3); optimistic local render; "syncing…" affordance until caught up | Snapshot path is the answer |
+| Challenge                                                          | Why it's hard                                                                                                                       | Approach / mitigation                                                                                                                                                    | Status                                                      |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| CRDT unbounded memory growth on long-lived boards                  | Yjs tombstones + update log grow with _total_ edits, not live content; an 8-hour brainstorm bloats every client + the DO            | Yjs GC; **snapshot compaction** in the DO discards superseded log entries (§2.5); capped undo; resident size ∝ live content                                              | Planned — compaction is M-critical                          |
+| 2D↔VR coordinate / state divergence; viewport-rect ↔ UV math bugs  | Off-by-one/transform bugs put a VR stroke at the wrong canvas coord → "it's in the wrong place for 2D users"; two impls would drift | **One** viewport-math impl in `shared` (§3.1/3.3); property tests round-tripping canvas↔UV↔canvas for arbitrary rects; single doc as SoT                                 | Mitigated by design; needs the property-test suite          |
+| Viewport-culling correctness (edge popping)                        | Objects straddling the cull boundary can pop in/out as the camera/viewport moves                                                    | Margin/pre-warm ring around the visible rect (§2.1/2.2); hysteresis on LOD tier boundary; AABB-inclusive intersection                                                    | Approach known; tune margin empirically                     |
+| Free-tier overrun + hot-room broadcast fanout                      | Fanout is O(users²)-ish per room; a viral room can blow the $0 budget                                                               | `partysub` sharding, coalescing/batching (§2.3), shedding cursors-before-edits under pressure — see **[05](./05-scaling-and-cost.md)** for the math                      | Cross-ref [05](./05-scaling-and-cost.md); levers identified |
+| WebXR browser/device fragmentation + standalone-headset GPU limits | WebXR support + perf vary wildly (Quest browser vs Vision Pro vs desktop); standalone GPUs are weak                                 | Lazy VR bundle (§2.4); two-tier LOD + texture baking (§2.2); feature-detect + graceful 2D fallback; on-device test matrix                                                | Ongoing; needs device-lab pass                              |
+| Large image assets                                                 | Big uploads hurt load, memory, and cost                                                                                             | Re-encode + downscale + atlas (§2.1/4.6); lazy full-res on deep zoom; size cap                                                                                           | Planned                                                     |
+| Reconnect / offline edge cases + buffered awareness                | Yjs merges cleanly, but stale buffered _awareness_ (cursors of since-gone users) can ghost; reconnection storms                     | Awareness timeout/clear on disconnect; resync via snapshot on reconnect; debounced reconnect backoff                                                                     | Needs explicit reconnect tests                              |
+| Determinism without `Date.now`/`Math.random` in shared logic       | Non-deterministic inputs in shared document logic break CRDT convergence + reproducibility                                          | Ban `Date.now`/`Math.random` in `shared` doc logic (lint rule); ids from CSPRNG at the _edge_/client boundary, passed in, not generated inside merge logic               | Enforce via lint + review                                   |
+| Moderation / abuse at scale                                        | Public anonymous rooms invite spam/NSFW/griefing; no accounts to ban                                                                | Rate limits + board-nuke recovery now (§4.4); per-room locking + report path + (later) accounts as the scalable answer                                                   | Partial; scales with accounts                               |
+| Cursor storm at high concurrency                                   | Many users × frequent cursor moves = awareness flood                                                                                | 20 Hz coalescing + 60 fps interpolation (§2.3); DO aggregate cap + cursor shedding; per-room user soft-cap                                                               | Mitigated; validate under load test                         |
+| Export fidelity (vector vs raster)                                 | Strokes/text must export crisply; SVG export is also an XSS surface                                                                 | Vector (SVG) export from canonical geometry where possible, raster (PNG) fallback; DOMPurify-sanitize SVG (§4.3)                                                         | Planned                                                     |
+| Testing multiplayer + VR in CI                                     | Concurrency + WebXR are hard to automate deterministically                                                                          | Multi-client Playwright sessions; **WebXR emulator** in CI ([06](./06-implementation-roadmap.md)); property tests for CRDT + viewport math; on-device manual for true VR | Framework in [06](./06-implementation-roadmap.md)           |
+| Eventual-consistency UX (late joiner sees history)                 | A late joiner must receive full state fast without a janky replay                                                                   | Serve **compacted snapshot** then live deltas (§2.3); optimistic local render; "syncing…" affordance until caught up                                                     | Snapshot path is the answer                                 |
 
 ### 6.2 Open questions for the team
 

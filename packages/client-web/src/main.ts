@@ -18,17 +18,19 @@ import { createAppStore } from "./store";
 import { createDialog } from "./dialog";
 import "./avatar-presence-row";
 import type { PresencePerson } from "./avatar-presence-row";
-import { icon } from "./icons";
 import "./tool-dock";
 import "./pen-panel";
 import type { PenChange } from "./pen-panel";
+import { COLOR_NAMES } from "./pen-panel";
 import "./zoombar";
 import type { ZoomDetail } from "./zoombar";
+import "./topbar";
+import "./drawer";
 
 declare global {
   interface Window {
     /** Test/debug hook (used by the e2e two-client convergence test). */
-    __coboard?: { doc: Y.Doc; provider: YProvider; awareness: Awareness };
+    __coboard?: { doc: Y.Doc; provider: YProvider; awareness: Awareness; canvas?: BoardCanvas };
   }
 }
 
@@ -101,7 +103,17 @@ const user: PresenceState = { name: identity.name, color: identity.color };
 window.__coboard = { doc: ydoc, provider, awareness: provider.awareness };
 
 // pen state — FigJam-style fixed palette; a trailing rainbow swatch opens the custom picker.
-const SWATCHES = ["#0e1116", "#dc2626", "#f59e0b", "#facc15", "#16a34a", "#2563eb", "#7c3aed", "#ec4899", "#ffffff"];
+const SWATCHES = [
+  "#0e1116",
+  "#dc2626",
+  "#f59e0b",
+  "#facc15",
+  "#16a34a",
+  "#2563eb",
+  "#7c3aed",
+  "#ec4899",
+  "#ffffff",
+];
 const penColor = "#0e1116";
 
 // --------------------------------------------------------------------------
@@ -111,23 +123,19 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("#app root missing");
 
 app.innerHTML = `
-  <header class="topbar">
-    <div class="brand"><span class="logo">◳</span> Coboard</div>
-    <div class="room-pill" data-testid="room"><span class="dot" data-testid="dot"></span> <strong>${room}</strong> · <span id="online">1</span> online</div>
-    <button class="iconbtn" id="theme-toggle" type="button" aria-label="Toggle light / dark theme"></button>
-    <div class="spacer"></div>
-    <div class="devstatus" title="connection status">WS <b data-testid="status">connecting…</b> · <b data-testid="synced">syncing…</b></div>
-    <co-avatar-presence-row id="presence-row" data-testid="presence-row" title="People here — click your avatar to rename"></co-avatar-presence-row>
-  </header>
+  <co-topbar id="topbar" room="${room}"></co-topbar>
 
   <main class="canvas" id="board"></main>
 
+  <div class="zoom-pill" id="zoom-pill" aria-hidden="true">100%</div>
+
   <co-tool-dock></co-tool-dock>
 
-  <co-pen-panel></co-pen-panel>
+  <div class="sheet-wrap"><co-pen-panel></co-pen-panel></div>
 
   <co-zoombar></co-zoombar>
-  <div class="hint-chip">Press <kbd class="kbd">?</kbd> for shortcuts · <kbd class="kbd">⌘</kbd>+scroll to zoom · <kbd class="kbd">space</kbd> to pan</div>
+
+  <co-drawer room="${room}"></co-drawer>
 `;
 
 // --------------------------------------------------------------------------
@@ -135,7 +143,13 @@ app.innerHTML = `
 // --------------------------------------------------------------------------
 const boardEl = document.getElementById("board");
 if (!boardEl) throw new Error("#board missing");
-const canvas = new BoardCanvas({ container: boardEl, doc: ydoc, awareness: provider.awareness, user });
+const canvas = new BoardCanvas({
+  container: boardEl,
+  doc: ydoc,
+  awareness: provider.awareness,
+  user,
+});
+if (window.__coboard) window.__coboard.canvas = canvas; // e2e hook: introspect remote presence
 canvas.setColor(penColor);
 canvas.setWidth(24);
 provider.awareness.setLocalStateField("id", identity.id);
@@ -166,7 +180,10 @@ let currentTool: ToolId = "select";
 function applyTool(tool: ToolId): void {
   currentTool = tool;
   canvas.setTool(tool);
-  penPanelEl?.classList.toggle("hidden", tool !== "pen");
+  const isPen = tool === "pen";
+  penPanelEl?.classList.toggle("hidden", !isPen);
+  penPanelEl?.classList.remove("collapsed"); // pen → fully expand; non-pen → no tab (hidden wins)
+  app?.classList.toggle("pen-open", isPen); // dock top merges with the sheet/tab while pen is active
 }
 // Programmatic selection (keyboard) also drives the dock's own highlight.
 function selectTool(tool: ToolId): void {
@@ -177,6 +194,19 @@ dock?.addEventListener("tool-change", (e) =>
   applyTool((e as CustomEvent<{ tool: ToolId }>).detail.tool),
 );
 applyTool(currentTool); // sync initial state: select is default → pen panel hidden
+
+// Mobile: tapping the canvas dismisses the pen sheet (slides it out of the way; the pen
+// tool stays selected — tap Pen again to bring it back).
+const mobileMql = window.matchMedia("(max-width: 640px)");
+boardEl.addEventListener(
+  "pointerdown",
+  () => {
+    if (mobileMql.matches && penPanelEl && !penPanelEl.classList.contains("hidden")) {
+      penPanelEl.classList.add("collapsed");
+    }
+  },
+  true,
+);
 penPanelEl?.addEventListener("pen-change", (e) => {
   const d = (e as CustomEvent<PenChange>).detail;
   if (d.color !== undefined) canvas.setColor(d.color);
@@ -269,18 +299,21 @@ window.addEventListener("keyup", (e) => {
 // --------------------------------------------------------------------------
 // Theme toggle.
 // --------------------------------------------------------------------------
-const themeBtn = document.getElementById("theme-toggle");
-if (!themeBtn) throw new Error("#theme-toggle missing");
+const topbar = document.querySelector("co-topbar");
+const drawer = document.querySelector("co-drawer");
 const syncThemeBtn = (): void => {
-  themeBtn.innerHTML = icon(theme === "dark" ? "sun" : "moon");
+  if (topbar) topbar.theme = theme; // top-bar button glyph
+  if (drawer) drawer.theme = theme; // drawer item glyph
 };
 syncThemeBtn();
-themeBtn.addEventListener("click", () => {
+function toggleTheme(): void {
   theme = theme === "dark" ? "light" : "dark";
   localStorage.setItem(THEME_KEY, theme);
   applyTheme(theme);
   syncThemeBtn();
-});
+}
+topbar?.addEventListener("theme-toggle", toggleTheme);
+drawer?.addEventListener("theme-toggle", toggleTheme);
 darkMedia.addEventListener("change", () => {
   if (storedTheme()) return;
   theme = systemTheme();
@@ -288,25 +321,26 @@ darkMedia.addEventListener("change", () => {
   syncThemeBtn();
 });
 
+// Mobile slide-out drawer (<co-drawer>): the hamburger opens it; it closes itself
+// on scrim click. Its Theme item surfaces as a "theme-toggle" event (wired above).
+topbar?.addEventListener("nav-toggle", () => {
+  if (drawer) drawer.open = true;
+});
+
 // --------------------------------------------------------------------------
 // Status / presence dev readout.
 // --------------------------------------------------------------------------
-const statusEl = byTestId("status");
-const syncedEl = byTestId("synced");
-const dotEl = byTestId("dot");
-
 store.subscribe((state) => {
-  statusEl.textContent = state.status;
-  dotEl.dataset.state = state.status;
+  topbar?.setStatus(state.status);
 });
 
 // Presence avatar row — avatars from awareness; click your own to rename.
 const presenceRowEl = document.querySelector("co-avatar-presence-row");
-const onlineEl = document.getElementById("online");
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   return (((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?").slice(0, 2);
 }
+let lastPresenceKey = "";
 function renderPresenceRow(): void {
   if (!presenceRowEl) return;
   const self = provider.awareness.clientID;
@@ -323,9 +357,10 @@ function renderPresenceRow(): void {
     if (clientId === self) entry.me = true;
     people.set(id, entry);
   });
+  const users = usersMap(ydoc);
   const list: PresencePerson[] = [...people.entries()]
     .map(([id, p]) => {
-      const profile = usersMap(ydoc).get(id);
+      const profile = users.get(id);
       return {
         id,
         name: profile?.name ?? p.name,
@@ -335,7 +370,13 @@ function renderPresenceRow(): void {
       };
     })
     .sort((a, b) => (a.me ? -1 : b.me ? 1 : 0));
-  if (onlineEl) onlineEl.textContent = String(list.length);
+  // awareness "change" fires on every cursor move (≈30Hz × peers); only touch the DOM when the
+  // membership-relevant data actually changed — cursor-only ticks produce an identical list.
+  const key = list
+    .map((p) => `${p.id}|${p.name}|${p.color}|${p.photo ?? ""}|${p.me ? 1 : 0}`)
+    .join("/");
+  if (key === lastPresenceKey) return;
+  lastPresenceKey = key;
   presenceRowEl.people = list; // the <co-avatar-presence-row> element renders + animates
 }
 provider.awareness.on("change", renderPresenceRow);
@@ -392,10 +433,10 @@ function renderDraftAvatar(): void {
 }
 function renderProfileSwatches(): void {
   if (!dSwatches) return;
-  dSwatches.innerHTML = PROFILE_SWATCHES.map(
-    (c) =>
-      `<button type="button" class="sw${c === draft.color ? " on" : ""}" data-color="${c}" style="--sw:${c}" aria-label="${c}"></button>`,
-  ).join("");
+  dSwatches.innerHTML = PROFILE_SWATCHES.map((c) => {
+    const name = COLOR_NAMES[c.toUpperCase()] ?? c;
+    return `<button type="button" class="sw${c === draft.color ? " on" : ""}" data-color="${c}" data-tip="${name}" style="--sw:${c}" aria-label="${name}"></button>`;
+  }).join("");
 }
 function openProfile(): void {
   draft = { name: identity.name, color: identity.color, photo: identity.photo };
@@ -468,14 +509,23 @@ async function fileToAvatarDataUrl(file: File): Promise<string> {
 
 // Zoom + fullscreen widget (<co-zoombar>).
 const zoombar = document.querySelector("co-zoombar");
+const zoomPill = document.getElementById("zoom-pill");
+let zoomPillTimer = 0;
 canvas.setZoomListener((pct) => {
   if (zoombar) zoombar.percent = pct;
+  // Transient zoom readout — the main indicator on mobile, where the zoombar is hidden.
+  if (zoomPill) {
+    zoomPill.textContent = `${pct}%`;
+    zoomPill.classList.add("show");
+    clearTimeout(zoomPillTimer);
+    zoomPillTimer = window.setTimeout(() => zoomPill.classList.remove("show"), 900);
+  }
 });
 zoombar?.addEventListener("zoom", (e) => {
   const d = (e as CustomEvent<ZoomDetail>).detail;
   if (d.action === "in") canvas.zoomBy(1.25);
   else if (d.action === "out") canvas.zoomBy(1 / 1.25);
-  else if (d.action === "fit") canvas.zoomToFit();
+  else if (d.action === "reset") canvas.resetZoom();
   else if (d.action === "fullscreen") {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen?.();
@@ -484,26 +534,34 @@ zoombar?.addEventListener("zoom", (e) => {
 
 // Read the real connection state directly (robust to provider event quirks),
 // refreshed on events + a 1 s poll so the readout never sticks.
+let lastConnStatus = "";
+let lastSyncText = "";
 function updateConn(): void {
   const connected = provider.wsconnected;
-  store
-    .getState()
-    .setStatus(
-      connected ? "connected" : provider.wsUnsuccessfulReconnects > 1 ? "disconnected" : "connecting",
-    );
-  syncedEl.textContent = provider.synced ? "synced" : connected ? "syncing…" : "—";
+  const status = connected
+    ? "connected"
+    : provider.wsUnsuccessfulReconnects > 1
+      ? "disconnected"
+      : "connecting";
+  const synced = provider.synced ? "synced" : connected ? "syncing…" : "—";
+  if (status === lastConnStatus && synced === lastSyncText) return; // skip no-op store/DOM writes
+  lastConnStatus = status;
+  lastSyncText = synced;
+  store.getState().setStatus(status);
+  topbar?.setSynced(synced);
 }
 provider.on("status", updateConn);
 provider.on("sync", updateConn);
+let lastConnCount = -1;
 provider.awareness.on("change", () => {
-  store.getState().setConnections(provider.awareness.getStates().size);
-  updateConn();
+  // Connection state doesn't change at cursor frequency; only react when the peer count
+  // actually changes (status/sync are covered by the provider events + the 1 s poll below).
+  const n = provider.awareness.getStates().size;
+  if (n === lastConnCount) return;
+  lastConnCount = n;
+  store.getState().setConnections(n);
 });
 window.setInterval(updateConn, 1000);
 updateConn();
 
-function byTestId(id: string): HTMLElement {
-  const el = app!.querySelector<HTMLElement>(`[data-testid="${id}"]`);
-  if (!el) throw new Error(`missing [data-testid="${id}"]`);
-  return el;
-}
+// Connection + presence readouts now live inside <co-topbar> (setStatus / setSynced).

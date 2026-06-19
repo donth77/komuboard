@@ -47,7 +47,13 @@ function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
 
 function toHex(h: number, s: number, v: number): string {
   const [r, g, b] = hsvToRgb(h, s, v);
-  return "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("").toUpperCase();
+  return (
+    "#" +
+    [r, g, b]
+      .map((n) => n.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase()
+  );
 }
 
 function parseHex(hex: string): [number, number, number] | null {
@@ -167,7 +173,9 @@ export class CoColorPicker extends HTMLElement {
   }
 
   #emit(): void {
-    this.dispatchEvent(new CustomEvent("color-change", { detail: { color: this.value }, bubbles: true }));
+    this.dispatchEvent(
+      new CustomEvent("color-change", { detail: { color: this.value }, bubbles: true }),
+    );
   }
 }
 

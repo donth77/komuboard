@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "description": "Coboard — free-to-run realtime collaborative whiteboard (web + mobile + VR). M0 foundations.",
   "scripts": {
     "dev": "concurrently -n worker,web -c blue,green \"pnpm --filter @coboard/worker dev\" \"pnpm --filter @coboard/client-web dev\"",
