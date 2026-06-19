@@ -48,33 +48,33 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 
 **Setup**
 - [ ] Create the GitHub repo `coboard` and protect `main` (require PR + green CI).
-- [ ] Initialize a **pnpm workspaces** monorepo with `pnpm-workspace.yaml` referencing `packages/*`.
-- [ ] Scaffold packages: `packages/client-web`, `packages/vr`, `packages/shared`, `packages/worker`.
-- [ ] Add root **TypeScript** project references + a shared `tsconfig.base.json` (strict mode on).
-- [ ] Configure **Vite** for `client-web` and `vr`; configure **Wrangler** for `worker`.
+- [x] Initialize a **pnpm workspaces** monorepo with `pnpm-workspace.yaml` referencing `packages/*`.
+- [x] Scaffold packages: `packages/client-web`, `packages/vr`, `packages/shared`, `packages/worker`.
+- [x] Add root **TypeScript** project references + a shared `tsconfig.base.json` (strict mode on).
+- [x] Configure **Vite** for `client-web` and `vr`; configure **Wrangler** for `worker`.
 - [ ] Add ESLint + Prettier + `lint-staged` + Husky pre-commit (lint + typecheck).
-- [ ] Add **Vitest** (unit) and **Playwright** (e2e) at the root with per-package projects.
-- [ ] Add `pnpm` scripts: `dev`, `build`, `lint`, `typecheck`, `test`, `test:e2e`, `deploy`.
+- [x] Add **Vitest** (unit) and **Playwright** (e2e) at the root with per-package projects.
+- [x] Add `pnpm` scripts: `dev`, `build`, `lint`, `typecheck`, `test`, `test:e2e`, `deploy`.
 
 **Client**
-- [ ] Bootstrap the `client-web` SPA shell (router, room-id-from-URL parsing, empty canvas placeholder).
-- [ ] Add **PartySocket** and prove a round-trip: connect to the Worker, send a ping, log the echo.
-- [ ] Add a minimal Zustand store + Lucide icon set placeholder toolbar.
+- [x] Bootstrap the `client-web` SPA shell (router, room-id-from-URL parsing, empty canvas placeholder).
+- [x] Add **PartySocket** and prove a round-trip: connect to the Worker, send a ping, log the echo.
+- [x] Add a minimal Zustand store + Lucide icon set placeholder toolbar.
 
 **Worker/DO**
-- [ ] Create a "hello" Worker that routes `/parties/main/:roomId` to a **PartyServer** Durable Object.
-- [ ] Implement an echo `onMessage` in the DO using the **WebSocket Hibernation API** from day one.
-- [ ] Declare the DO binding + SQLite migration stub in `wrangler.toml`.
+- [x] Create a "hello" Worker that routes `/parties/main/:roomId` to a **PartyServer** Durable Object.
+- [x] Implement an echo `onMessage` in the DO using the **WebSocket Hibernation API** from day one.
+- [x] Declare the DO binding + SQLite migration stub in `wrangler.toml`.
 
 **Persistence**
-- [ ] Enable SQLite-backed DO storage and write/read a single smoke-test key to confirm durability.
+- [x] Enable SQLite-backed DO storage and write/read a single smoke-test key to confirm durability.
 
 **Tests**
-- [ ] Vitest: a trivial `shared` unit test wired into CI.
-- [ ] Playwright: one smoke e2e that loads the SPA and asserts the WS echo round-trips.
+- [x] Vitest: a trivial `shared` unit test wired into CI.
+- [x] Playwright: one smoke e2e that loads the SPA and asserts the WS echo round-trips.
 
 **Docs**
-- [ ] Write the dev quickstart in `README.md` (`pnpm i`, env vars, `wrangler dev`, `pnpm dev`).
+- [x] Write the dev quickstart in `README.md` (`pnpm i`, env vars, `wrangler dev`, `pnpm dev`).
 - [ ] Document the wrangler/Pages project names + required Cloudflare account secrets.
 
 ---

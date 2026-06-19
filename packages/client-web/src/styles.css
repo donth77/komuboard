@@ -1,14 +1,33 @@
 :root {
   --accent: #3b6ff6;
+  --accent-ink: #ffffff;
   --ink: #0e1116;
   --muted: #586172;
   --surface: #ffffff;
+  --surface-2: #f1f3f6;
   --paper: #f6f7f9;
   --border: #e4e7ec;
   --grid: #e6eaf0;
   --good: #16a34a;
   --bad: #dc2626;
+  --dur: 200ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  color-scheme: light;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+:root[data-theme="dark"] {
+  --accent: #5b8def;
+  --accent-ink: #0b1020;
+  --ink: #e6e9ef;
+  --muted: #9aa4b2;
+  --surface: #171a21;
+  --surface-2: #1e222b;
+  --paper: #0e1116;
+  --border: #262b34;
+  --grid: #1a2028;
+  --good: #22c55e;
+  --bad: #f87171;
+  color-scheme: dark;
 }
 * {
   box-sizing: border-box;
@@ -25,13 +44,16 @@ body {
   grid-template-rows: 56px 1fr;
   background: var(--paper);
   color: var(--ink);
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
 .topbar {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 0 18px;
+  gap: 16px;
+  padding: 0 14px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
@@ -49,7 +71,7 @@ body {
   height: 24px;
   border-radius: 7px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   font-size: 13px;
 }
 .room {
@@ -62,11 +84,15 @@ body {
 .room strong {
   color: var(--ink);
 }
+.spacer {
+  flex: 1;
+}
 .dot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   background: var(--muted);
+  transition: background var(--dur) var(--ease);
 }
 .dot[data-state="connected"] {
   background: var(--good);
@@ -75,12 +101,30 @@ body {
 .dot[data-state="disconnected"] {
   background: var(--bad);
 }
-.status {
-  margin-left: auto;
+.devstatus {
   color: var(--muted);
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
-.status b {
+.devstatus b {
+  color: var(--ink);
+}
+.iconbtn {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+.iconbtn:hover {
+  background: var(--surface-2);
   color: var(--ink);
 }
 .dock {
@@ -92,33 +136,71 @@ body {
   border-right: 1px solid var(--border);
 }
 .tool {
+  display: grid;
+  place-items: center;
   width: 44px;
   height: 44px;
   border-radius: 11px;
   border: none;
   background: transparent;
   color: var(--muted);
-  font-weight: 700;
   cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
 .tool:hover {
-  background: var(--paper);
+  background: var(--surface-2);
   color: var(--ink);
 }
 .tool.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
+}
+.ico {
+  width: 21px;
+  height: 21px;
 }
 .canvas {
   position: relative;
   display: grid;
   place-items: center;
-  background:
-    radial-gradient(var(--grid) 1.3px, transparent 1.3px) -1px -1px / 26px 26px;
+  background: radial-gradient(var(--grid) 1.3px, transparent 1.3px) -1px -1px / 26px 26px;
 }
 .hint {
   color: var(--muted);
   text-align: center;
   line-height: 1.6;
   max-width: 460px;
+  padding: 0 20px;
+}
+
+/* Mobile: dock moves to a bottom bar, dev readout hides. The full touch UI
+   (collapsed toolbar + FAB + bottom sheet) is designed in docs/03 and built in M1. */
+@media (max-width: 640px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 52px 1fr 64px;
+  }
+  .topbar {
+    gap: 10px;
+  }
+  .devstatus {
+    display: none;
+  }
+  .dock {
+    grid-row: 3;
+    flex-direction: row;
+    justify-content: center;
+    gap: 4px;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    overflow-x: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }
