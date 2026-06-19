@@ -2960,38 +2960,38 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ### M1 — Realtime canvas core (Phase 1 MVP)
 
 **Setup**
-- [ ] Add **Yjs** + `y-protocols/awareness` to `shared`; add **Y-PartyServer** to `worker`.
-- [ ] Add **Konva.js** to `client-web`.
-- [ ] Define the canonical Yjs document schema in `shared` (per doc-04 data model) and export typed accessors.
+- [x] Add **Yjs** + `y-protocols/awareness` to `shared`; add **Y-PartyServer** to `worker`.
+- [x] Add **Konva.js** to `client-web`.
+- [x] Define the canonical Yjs document schema in `shared` (per doc-04 data model) and export typed accessors.
 
 **Client (canvas + tools)**
-- [ ] Build the infinite **pan/zoom** canvas (Konva stage; wheel/pinch zoom, drag/space-pan).
-- [ ] Bind a Konva render layer **directly to the Yjs doc** (reconcile shapes ↔ Y.Map/Y.Array on change).
-- [ ] Implement **freehand pen/marker** (color + thickness) writing stroke points into Yjs.
+- [x] Build the infinite **pan/zoom** canvas (Konva stage; wheel/pinch zoom, drag/space-pan).
+- [x] Bind a Konva render layer **directly to the Yjs doc** (reconcile shapes ↔ Y.Map/Y.Array on change).
+- [x] Implement **freehand pen/marker** (color + thickness) writing stroke points into Yjs.
 - [ ] Implement **sticky notes** (color + editable text).
 - [ ] Implement **basic shapes**: rectangle, ellipse, line, arrow.
 - [ ] Implement the **text tool**.
 - [ ] Implement **select / move / resize / delete** (transformer handles; multi-select marquee).
 - [ ] Wire **undo/redo** to `Y.UndoManager` (scoped to local-origin changes).
-- [ ] Implement responsive input: **mouse** (desktop) + **touch** (mobile/tablet) pointer abstraction.
+- [x] Implement responsive input: **mouse** (desktop) + **touch** (mobile/tablet) pointer abstraction.
 
 **Client (presence)**
-- [ ] Publish local cursor + selection + user label/color via **awareness**.
+- [x] Publish local cursor + selection + user label/color via **awareness**.
 - [ ] Render **live labeled cursors** for remote peers + a presence avatar stack with join/leave.
-- [ ] Throttle/coalesce cursor publishes to **~20–30 Hz** and binary-encode (per architecture invariant).
+- [x] Throttle/coalesce cursor publishes to **~20–30 Hz** and binary-encode (per architecture invariant).
 
 **Worker/DO**
-- [ ] Host one **Y-PartyServer**-bound Yjs doc per room (one DO per room id).
-- [ ] Broadcast Yjs updates + awareness to all room sockets via hibernation-safe handlers.
-- [ ] Generate a shareable **room code/URL** on first visit (anonymous, no signup).
+- [x] Host one **Y-PartyServer**-bound Yjs doc per room (one DO per room id).
+- [x] Broadcast Yjs updates + awareness to all room sockets via hibernation-safe handlers.
+- [x] Generate a shareable **room code/URL** on first visit (anonymous, no signup).
 
 **Persistence**
-- [ ] Persist the Yjs update log into DO SQLite on edit (full snapshot/compaction deferred to M2).
+- [x] Persist the Yjs update log into DO SQLite on edit (full snapshot/compaction deferred to M2).
 
 **Tests**
 - [ ] Vitest: CRDT/document-logic tests in `shared` (apply update → expected shape state; undo/redo).
-- [ ] Playwright: **two-client multiplayer convergence test** — client A draws a stroke + sticky, assert client B's DOM/canvas converges to the same object set.
-- [ ] Playwright: **presence/cursor test** — assert client A sees client B's labeled cursor move and the join/leave avatar update.
+- [x] Playwright: **two-client multiplayer convergence test** — client A draws a stroke + sticky, assert client B's DOM/canvas converges to the same object set.
+- [x] Playwright: **presence/cursor test** — assert client A sees client B's labeled cursor move and the join/leave avatar update.
 - [ ] Playwright: touch-emulation test for pan/zoom + draw on a mobile viewport.
 
 **Docs**

@@ -10,6 +10,9 @@
 /** The PartyServer "party" name; the worker routes /parties/main/:roomId. */
 export const PARTY = "main" as const;
 
+// Yjs document schema + presence types (the shared contract for canvas content).
+export * from "./schema";
+
 /** Client → server: a latency probe. */
 export interface PingMessage {
   type: "ping";

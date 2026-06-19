@@ -163,16 +163,39 @@ body {
 }
 .canvas {
   position: relative;
-  display: grid;
-  place-items: center;
+  overflow: hidden;
   background: radial-gradient(var(--grid) 1.3px, transparent 1.3px) -1px -1px / 26px 26px;
+  touch-action: none; /* let the canvas handle pan/zoom gestures */
 }
-.hint {
+.hint-chip {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+  max-width: calc(100% - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border);
   color: var(--muted);
-  text-align: center;
-  line-height: 1.6;
-  max-width: 460px;
-  padding: 0 20px;
+  font-size: 12.5px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hint-chip b {
+  color: var(--ink);
+}
+.tool.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.tool.disabled:hover {
+  background: transparent;
+  color: var(--muted);
 }
 
 /* Mobile: dock moves to a bottom bar, dev readout hides. The full touch UI

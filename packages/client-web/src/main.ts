@@ -1,15 +1,23 @@
 import "./styles.css";
-import { PartySocket } from "partysocket";
-import { PARTY, roomIdFromUrl, type ServerMessage } from "@coboard/shared";
+import * as Y from "yjs";
+import YProvider from "y-partyserver/provider";
+import type { Awareness } from "y-protocols/awareness";
+import { PARTY, pickUserColor, roomIdFromUrl, type PresenceState } from "@coboard/shared";
+import { BoardCanvas, type ToolId } from "./canvas";
 import { createAppStore } from "./store";
 
-// ---------------------------------------------------------------------------
-// Theme: default to the OS preference, follow it until the user picks one,
-// then persist that choice to localStorage.
-// ---------------------------------------------------------------------------
+declare global {
+  interface Window {
+    /** Test/debug hook (used by the e2e two-client convergence test). */
+    __coboard?: { doc: Y.Doc; provider: YProvider; awareness: Awareness };
+  }
+}
+
+// --------------------------------------------------------------------------
+// Theme: default to OS preference, follow it until the user picks, persist.
+// --------------------------------------------------------------------------
 const THEME_KEY = "coboard-theme";
 type Theme = "light" | "dark";
-
 const darkMedia = window.matchMedia("(prefers-color-scheme: dark)");
 const systemTheme = (): Theme => (darkMedia.matches ? "dark" : "light");
 const storedTheme = (): Theme | null => {
@@ -19,13 +27,12 @@ const storedTheme = (): Theme | null => {
 const applyTheme = (t: Theme): void => {
   document.documentElement.dataset.theme = t;
 };
-
 let theme: Theme = storedTheme() ?? systemTheme();
-applyTheme(theme); // set before first paint to avoid a flash
+applyTheme(theme);
 
-// ---------------------------------------------------------------------------
-// Lucide-style inline icons (the real toolbar + icons are built out in M1).
-// ---------------------------------------------------------------------------
+// --------------------------------------------------------------------------
+// Lucide-style inline icons.
+// --------------------------------------------------------------------------
 const ICONS: Record<string, string> = {
   select: '<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/>',
   hand: '<path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8a8 8 0 0 0 8 8a8 8 0 0 0 8-8v-3a2 2 0 0 0-4 0"/>',
@@ -40,23 +47,35 @@ const ICONS: Record<string, string> = {
 const icon = (name: string, cls = "ico"): string =>
   `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] ?? ""}</svg>`;
 
-const TOOLS: ReadonlyArray<readonly [icon: string, key: string, label: string]> = [
-  ["select", "v", "Select"],
-  ["hand", "h", "Hand"],
-  ["pen", "p", "Pen"],
-  ["sticky", "s", "Sticky note"],
-  ["text", "t", "Text"],
-  ["rect", "r", "Rectangle"],
-  ["ellipse", "o", "Ellipse"],
+// icon, key, label, tool (null = not yet wired — lands in the next M1 increment)
+const TOOLS: ReadonlyArray<readonly [string, string, string, ToolId | null]> = [
+  ["select", "v", "Select", "select"],
+  ["hand", "h", "Hand / pan", "hand"],
+  ["pen", "p", "Pen", "pen"],
+  ["sticky", "s", "Sticky note", null],
+  ["text", "t", "Text", null],
+  ["rect", "r", "Rectangle", null],
+  ["ellipse", "o", "Ellipse", null],
 ];
 
-// ---------------------------------------------------------------------------
-// Render the M0 shell.
-// ---------------------------------------------------------------------------
+// --------------------------------------------------------------------------
+// Realtime: one Yjs document per room, synced via Y-PartyServer.
+// --------------------------------------------------------------------------
 const room = roomIdFromUrl(new URL(window.location.href));
 const store = createAppStore(room);
 const host = import.meta.env.VITE_WORKER_HOST ?? "127.0.0.1:8787";
 
+const ydoc = new Y.Doc();
+const provider = new YProvider(host, room, ydoc, { party: PARTY });
+const user: PresenceState = {
+  name: `Guest ${provider.awareness.clientID % 1000}`,
+  color: pickUserColor(provider.awareness.clientID),
+};
+window.__coboard = { doc: ydoc, provider, awareness: provider.awareness };
+
+// --------------------------------------------------------------------------
+// Shell.
+// --------------------------------------------------------------------------
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("#app root missing");
 
@@ -65,26 +84,42 @@ app.innerHTML = `
     <div class="brand"><span class="logo">◳</span> Coboard</div>
     <div class="room" data-testid="room"><span class="dot" data-testid="dot"></span> room <strong>${room}</strong></div>
     <div class="spacer"></div>
-    <div class="devstatus" title="M0 dev readout — replaced by real presence UI in M1">
-      WS <b data-testid="status">connecting…</b> · RTT <b data-testid="rtt">—</b> · peers <b data-testid="peers">0</b>
+    <div class="devstatus" title="M1 dev readout — replaced by the presence facepile next">
+      WS <b data-testid="status">connecting…</b> · <b data-testid="synced">syncing…</b> · peers <b data-testid="peers">1</b>
     </div>
     <button class="iconbtn" id="theme-toggle" type="button" aria-label="Toggle light / dark theme"></button>
   </header>
-  <aside class="dock" aria-label="Tools (placeholder — M1)">
+  <aside class="dock" aria-label="Tools">
     ${TOOLS.map(
-      ([name, key, label], i) =>
-        `<button class="tool${i === 0 ? " active" : ""}" type="button" title="${label} (${key.toUpperCase()})" aria-label="${label}">${icon(name)}</button>`,
+      ([name, key, label, tool]) =>
+        `<button class="tool${tool === "pen" ? " active" : ""}${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" title="${label} (${key.toUpperCase()})${tool ? "" : " — coming soon"}" aria-label="${label}">${icon(name)}</button>`,
     ).join("")}
   </aside>
-  <main class="canvas">
-    <p class="hint">M0 foundations — the realtime canvas core lands in M1.<br />
-    Open this link in a second tab to watch <b>peers</b> rise and the WS echo round-trip.</p>
-  </main>
+  <main class="canvas" id="board"></main>
+  <div class="hint-chip">Draw with the <b>Pen</b> · scroll to zoom · <b>Hand</b> to pan · open in a 2nd tab to collaborate</div>
 `;
 
-// ---------------------------------------------------------------------------
-// Theme toggle wiring.
-// ---------------------------------------------------------------------------
+// --------------------------------------------------------------------------
+// Canvas + tools.
+// --------------------------------------------------------------------------
+const boardEl = document.getElementById("board");
+if (!boardEl) throw new Error("#board missing");
+const canvas = new BoardCanvas({ container: boardEl, doc: ydoc, awareness: provider.awareness, user });
+canvas.setColor(user.color); // draw in your presence color (a real color picker is next)
+
+const toolButtons = Array.from(app.querySelectorAll<HTMLButtonElement>(".tool[data-tool]"));
+for (const btn of toolButtons) {
+  const tool = btn.getAttribute("data-tool") as ToolId | "";
+  if (!tool) continue;
+  btn.addEventListener("click", () => {
+    canvas.setTool(tool);
+    for (const b of toolButtons) b.classList.toggle("active", b === btn);
+  });
+}
+
+// --------------------------------------------------------------------------
+// Theme toggle.
+// --------------------------------------------------------------------------
 const themeBtn = document.getElementById("theme-toggle");
 if (!themeBtn) throw new Error("#theme-toggle missing");
 const syncThemeBtn = (): void => {
@@ -97,7 +132,6 @@ themeBtn.addEventListener("click", () => {
   applyTheme(theme);
   syncThemeBtn();
 });
-// Follow the OS theme until the user has explicitly chosen one.
 darkMedia.addEventListener("change", () => {
   if (storedTheme()) return;
   theme = systemTheme();
@@ -105,47 +139,29 @@ darkMedia.addEventListener("change", () => {
   syncThemeBtn();
 });
 
-// ---------------------------------------------------------------------------
-// Realtime: connect to the room's Durable Object and round-trip a ping/echo.
-// (M0 dev readout; M1 replaces this with presence + the Yjs canvas.)
-// ---------------------------------------------------------------------------
+// --------------------------------------------------------------------------
+// Status / presence dev readout.
+// --------------------------------------------------------------------------
 const statusEl = byTestId("status");
-const rttEl = byTestId("rtt");
+const syncedEl = byTestId("synced");
 const peersEl = byTestId("peers");
 const dotEl = byTestId("dot");
 
 store.subscribe((state) => {
   statusEl.textContent = state.status;
   dotEl.dataset.state = state.status;
-  rttEl.textContent = state.rttMs === null ? "—" : `${state.rttMs} ms`;
-  peersEl.textContent = String(state.connections);
+  peersEl.textContent = String(Math.max(1, state.connections));
 });
 
-const socket = new PartySocket({ host, party: PARTY, room });
-
-socket.addEventListener("open", () => {
-  store.getState().setStatus("connected");
-  ping();
+provider.on("status", (e: { status: string }) => {
+  store.getState().setStatus(e.status === "connected" ? "connected" : e.status === "connecting" ? "connecting" : "disconnected");
 });
-socket.addEventListener("close", () => store.getState().setStatus("disconnected"));
-socket.addEventListener("error", () => store.getState().setStatus("disconnected"));
-socket.addEventListener("message", (event: MessageEvent) => {
-  let msg: ServerMessage;
-  try {
-    msg = JSON.parse(String(event.data)) as ServerMessage;
-  } catch {
-    return;
-  }
-  if (msg.type === "welcome") store.getState().setConnections(msg.connections);
-  if (msg.type === "echo") store.getState().setRtt(Date.now() - msg.t);
+provider.on("sync", (isSynced: boolean) => {
+  syncedEl.textContent = isSynced ? "synced" : "syncing…";
 });
-
-function ping(): void {
-  if (socket.readyState === socket.OPEN) {
-    socket.send(JSON.stringify({ type: "ping", t: Date.now() }));
-  }
-}
-window.setInterval(ping, 3000);
+provider.awareness.on("change", () => {
+  store.getState().setConnections(provider.awareness.getStates().size);
+});
 
 function byTestId(id: string): HTMLElement {
   const el = app!.querySelector<HTMLElement>(`[data-testid="${id}"]`);
