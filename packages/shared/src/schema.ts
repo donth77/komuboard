@@ -13,6 +13,8 @@
  */
 import * as Y from "yjs";
 
+export type StrokeStyle = "solid" | "dashed" | "highlight";
+
 export interface StrokeObject {
   id: string;
   type: "stroke";
@@ -20,6 +22,9 @@ export interface StrokeObject {
   points: number[];
   color: string;
   width: number;
+  style: StrokeStyle;
+  /** 0–1. */
+  opacity: number;
   authorId: string;
 }
 
@@ -42,6 +47,8 @@ export function addStroke(doc: Y.Doc, stroke: StrokeObject): void {
     m.set("points", stroke.points);
     m.set("color", stroke.color);
     m.set("width", stroke.width);
+    m.set("style", stroke.style);
+    m.set("opacity", stroke.opacity);
     m.set("authorId", stroke.authorId);
     objectsMap(doc).set(stroke.id, m);
     orderArray(doc).push([stroke.id]);
@@ -60,12 +67,16 @@ export function deleteObject(doc: Y.Doc, id: string): void {
 /** Read a typed object out of its Y.Map (returns null for unknown types). */
 export function readObject(m: Y.Map<unknown>): BoardObject | null {
   if (m.get("type") !== "stroke") return null;
+  const style = m.get("style");
+  const opacity = m.get("opacity");
   return {
     id: String(m.get("id")),
     type: "stroke",
     points: (m.get("points") as number[] | undefined) ?? [],
     color: String(m.get("color") ?? "#0e1116"),
     width: Number(m.get("width") ?? 4),
+    style: style === "dashed" || style === "highlight" ? style : "solid",
+    opacity: typeof opacity === "number" ? opacity : 1,
     authorId: String(m.get("authorId") ?? ""),
   };
 }
@@ -106,4 +117,29 @@ export function pickUserColor(seed: number): string {
 
 export function randomId(prefix = "o"): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const ADJECTIVES = [
+  "lunar", "brisk", "calm", "amber", "violet", "swift", "cobalt", "verdant",
+  "sunny", "mellow", "brave", "clever", "cosmic", "gentle", "lucky", "nimble",
+];
+const ANIMALS = [
+  "otter", "heron", "lynx", "tapir", "koala", "falcon", "panda", "fox",
+  "ibis", "newt", "yak", "wren", "orca", "gecko", "moth", "bison",
+];
+function pickWord(list: readonly string[]): string {
+  return list[Math.floor(Math.random() * list.length)] ?? list[0]!;
+}
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** A fresh, shareable, human-friendly room id, e.g. "lunar-otter-42". */
+export function randomRoomId(): string {
+  return `${pickWord(ADJECTIVES)}-${pickWord(ANIMALS)}-${Math.floor(Math.random() * 90) + 10}`;
+}
+
+/** A friendly anonymous display name, e.g. "Swift Otter". */
+export function randomGuestName(): string {
+  return `${capitalize(pickWord(ADJECTIVES))} ${capitalize(pickWord(ANIMALS))}`;
 }

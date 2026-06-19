@@ -7,9 +7,11 @@
   --surface-2: #f1f3f6;
   --paper: #f6f7f9;
   --border: #e4e7ec;
-  --grid: #e6eaf0;
+  --grid: #d2d8e2;
   --good: #16a34a;
   --bad: #dc2626;
+  --radius: 14px;
+  --shadow: 0 6px 20px rgba(16, 17, 22, 0.1), 0 2px 6px rgba(16, 17, 22, 0.06);
   --dur: 200ms;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   color-scheme: light;
@@ -24,9 +26,10 @@
   --surface-2: #1e222b;
   --paper: #0e1116;
   --border: #262b34;
-  --grid: #1a2028;
+  --grid: #2b333e;
   --good: #22c55e;
   --bad: #f87171;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
 }
 * {
@@ -38,24 +41,27 @@ body {
   height: 100%;
 }
 #app {
+  position: relative;
   height: 100vh;
   display: grid;
-  grid-template-columns: 64px 1fr;
   grid-template-rows: 56px 1fr;
   background: var(--paper);
   color: var(--ink);
+  overflow: hidden;
   transition:
     background var(--dur) var(--ease),
     color var(--dur) var(--ease);
 }
+
+/* ---------- top bar ---------- */
 .topbar {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 0 14px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  z-index: 20;
 }
 .brand {
   font-weight: 800;
@@ -127,19 +133,36 @@ body {
   background: var(--surface-2);
   color: var(--ink);
 }
+
+/* ---------- canvas ---------- */
+.canvas {
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(var(--grid) 1.6px, transparent 1.6px) -1px -1px / 24px 24px;
+  touch-action: none;
+}
+
+/* ---------- floating tool dock (left) ---------- */
 .dock {
+  position: absolute;
+  left: 16px;
+  top: calc(56px + (100vh - 56px) / 2);
+  transform: translateY(-50%);
+  z-index: 30;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 8px;
+  gap: 4px;
+  padding: 7px;
   background: var(--surface);
-  border-right: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
 }
 .tool {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   border-radius: 11px;
   border: none;
   background: transparent;
@@ -157,22 +180,113 @@ body {
   background: var(--accent);
   color: var(--accent-ink);
 }
+.tool.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tool.disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
 .ico {
   width: 21px;
   height: 21px;
 }
-.canvas {
-  position: relative;
+
+/* ---------- floating properties panel (right) ---------- */
+.panel {
+  position: absolute;
+  right: 16px;
+  top: 72px;
+  width: 232px;
+  z-index: 30;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
   overflow: hidden;
-  background: radial-gradient(var(--grid) 1.3px, transparent 1.3px) -1px -1px / 26px 26px;
-  touch-action: none; /* let the canvas handle pan/zoom gestures */
 }
+.panel.hidden {
+  display: none;
+}
+.panel-head {
+  padding: 13px 15px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.panel-sec {
+  padding: 13px 15px;
+}
+.panel-sec + .panel-sec {
+  border-top: 1px solid var(--border);
+}
+.panel-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 9px;
+  font-weight: 600;
+}
+.panel-label b {
+  color: var(--ink);
+}
+.swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sw {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--sw);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+  padding: 0;
+}
+.sw.on {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.seg {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: 9px;
+}
+.seg-opt {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.seg-opt.on {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---------- hint ---------- */
 .hint-chip {
   position: absolute;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
-  z-index: 5;
+  z-index: 25;
   pointer-events: none;
   max-width: calc(100% - 32px);
   background: var(--surface);
@@ -181,7 +295,7 @@ body {
   font-size: 12.5px;
   padding: 7px 13px;
   border-radius: 999px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -189,36 +303,24 @@ body {
 .hint-chip b {
   color: var(--ink);
 }
-.tool.disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.tool.disabled:hover {
-  background: transparent;
-  color: var(--muted);
-}
 
-/* Mobile: dock moves to a bottom bar, dev readout hides. The full touch UI
-   (collapsed toolbar + FAB + bottom sheet) is designed in docs/03 and built in M1. */
+/* ---------- mobile ---------- */
 @media (max-width: 640px) {
-  #app {
-    grid-template-columns: 1fr;
-    grid-template-rows: 52px 1fr 64px;
-  }
-  .topbar {
-    gap: 10px;
-  }
   .devstatus {
     display: none;
   }
   .dock {
-    grid-row: 3;
+    left: 50%;
+    top: auto;
+    bottom: 16px;
+    transform: translateX(-50%);
     flex-direction: row;
-    justify-content: center;
-    gap: 4px;
-    border-right: none;
-    border-top: 1px solid var(--border);
-    overflow-x: auto;
+  }
+  .panel {
+    display: none;
+  }
+  .hint-chip {
+    bottom: 78px;
   }
 }
 
