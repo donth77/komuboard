@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coboard — Desktop canvas</title>
+<link rel="stylesheet" href="./tokens.css">
+<style>
+  .heading{left:300px;top:150px;font-size:30px;color:var(--ink)}
+  .heading .sub{display:block;font-size:14px;font-weight:600;color:var(--ink-3);margin-top:4px;letter-spacing:0}
+</style>
+</head>
+<body>
+<div class="canvas">
+
+  <!-- vector layer: freehand stroke + connector -->
+  <svg class="draw" viewBox="0 0 1440 900" preserveAspectRatio="none">
+    <defs>
+      <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+        <path d="M0 0 L7 3 L0 6 Z" fill="var(--ink-2)"></path>
+      </marker>
+    </defs>
+    <!-- connector: rectangle -> ellipse -->
+    <path d="M960 360 C 1010 392, 980 430, 968 452" stroke="var(--ink-2)" stroke-width="2.5" fill="none" marker-end="url(#arrow)"></path>
+    <!-- hand-drawn highlight scribble around a sticky -->
+    <path d="M690 318 C 640 305, 636 392, 700 400 C 778 408, 792 322, 712 312" stroke="var(--accent-2)" stroke-width="3" fill="none" stroke-linecap="round" opacity=".9"></path>
+    <!-- a freehand ink stroke -->
+    <path d="M335 640 q 30 -34 64 -8 q 26 22 60 -2 q 30 -22 58 4" stroke="var(--u7)" stroke-width="3.5" fill="none" stroke-linecap="round"></path>
+  </svg>
+
+  <!-- frame -->
+  <div class="frame" style="left:288px;top:236px;width:560px;height:430px">
+    <span class="ft">Sprint 24 · Retro</span>
+  </div>
+
+  <!-- text heading -->
+  <div class="node heading textnode">Q3 Planning<span class="sub">Team sync · everyone can edit</span></div>
+
+  <!-- column labels -->
+  <div class="node textnode" style="left:320px;top:262px;font-size:13px;color:var(--ink-3)">START</div>
+  <div class="node textnode" style="left:510px;top:262px;font-size:13px;color:var(--ink-3)">STOP</div>
+  <div class="node textnode" style="left:700px;top:262px;font-size:13px;color:var(--ink-3)">CONTINUE</div>
+
+  <!-- sticky notes -->
+  <div class="node sticky y" style="left:312px;top:292px">Pair on the sync engine early</div>
+  <div class="node sticky g" style="left:500px;top:300px;transform:rotate(1deg)">Stop merging without preview deploys</div>
+  <div class="node sticky p" style="left:686px;top:300px">Keep the Friday demo 🎉</div>
+  <div class="node sticky b" style="left:330px;top:470px;transform:rotate(.6deg)">Spike WebXR hand-tracking</div>
+  <div class="node sticky y" style="left:520px;top:486px;transform:rotate(-2deg)">Write the load-test harness</div>
+
+  <!-- standalone shapes -->
+  <div class="shape fill" style="left:884px;top:256px;width:160px;height:104px"></div>
+  <div class="node textnode" style="left:904px;top:296px;font-size:14px;color:var(--accent)">API gateway</div>
+  <div class="shape" style="left:912px;top:430px;width:108px;height:108px;border-radius:50%"></div>
+  <div class="node textnode" style="left:928px;top:476px;font-size:12px;color:var(--ink-2)">Durable<br>Object</div>
+
+  <!-- remote cursors -->
+  <div class="cursor" style="left:556px;top:352px">
+    <svg width="24" height="24" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="var(--u1)" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>
+    <span class="tag" style="background:var(--u1)">Maya</span>
+    <span class="chat">let's group these →</span>
+  </div>
+  <div class="cursor" style="left:902px;top:300px">
+    <svg width="24" height="24" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="var(--u2)" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>
+    <span class="tag" style="background:var(--u2)">Theo</span>
+  </div>
+  <div class="cursor" style="left:752px;top:520px">
+    <svg width="24" height="24" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="var(--u3)" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>
+    <span class="tag" style="background:var(--u3)">Ravi</span>
+  </div>
+  <div class="reaction" style="left:792px;top:496px">👍</div>
+
+  <!-- ===== Top bar ===== -->
+  <div class="topbar">
+    <div class="brand"><span class="dot">◳</span>Coboard</div>
+    <div class="room-pill"><span class="live"></span> team-sync &nbsp;·&nbsp; <strong style="color:var(--ink);font-weight:700">7 online</strong></div>
+    <div class="spacer"></div>
+    <div class="facepile">
+      <div class="av" style="background:var(--u1)">M</div>
+      <div class="av" style="background:var(--u2)">T</div>
+      <div class="av" style="background:var(--u3)">R</div>
+      <div class="av" style="background:var(--u5)">A</div>
+      <div class="av more">+3</div>
+    </div>
+    <button class="btn icon" title="Comments"><svg class="ico" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+    <button class="btn icon" title="Present"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></button>
+    <button class="btn primary"><svg class="ico" viewBox="0 0 24 24" style="stroke-width:2.2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Share</button>
+  </div>
+
+  <!-- ===== Left tool dock ===== -->
+  <div class="tooldock">
+    <button class="tool" title="Select (V)"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3l7.2 17 2.3-6.9 6.9-2.3L3 3z"/></svg></button>
+    <button class="tool" title="Hand / pan (H)"><svg class="ico" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8a8 8 0 0 0 8 8h0a8 8 0 0 0 8-8v-3a2 2 0 0 0-4 0"/></svg></button>
+    <div class="dock-sep"></div>
+    <button class="tool active" title="Pen (P)"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></button>
+    <button class="tool" title="Eraser (E)"><svg class="ico" viewBox="0 0 24 24"><path d="M7 21l-4.3-4.3a1 1 0 0 1 0-1.4l9.6-9.6a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8L13 21"/><path d="M22 21H7"/></svg></button>
+    <button class="tool" title="Sticky note (S)"><svg class="ico" viewBox="0 0 24 24"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10l6-6V5a2 2 0 0 0-2-2z"/><path d="M15 21v-4a2 2 0 0 1 2-2h4"/></svg></button>
+    <button class="tool" title="Text (T)"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></button>
+    <div class="dock-sep"></div>
+    <button class="tool" title="Rectangle (R)"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></button>
+    <button class="tool" title="Ellipse (O)"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>
+    <button class="tool" title="Arrow (A)"><svg class="ico" viewBox="0 0 24 24"><path d="M5 19L19 5M9 5h10v10"/></svg></button>
+    <button class="tool" title="Connector (C)"><svg class="ico" viewBox="0 0 24 24"><circle cx="5" cy="5" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M7 7c6 1 9 4 10 10"/></svg></button>
+    <div class="dock-sep"></div>
+    <button class="tool" title="Image (I)"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg></button>
+  </div>
+
+  <!-- ===== Right properties panel ===== -->
+  <div class="panel">
+    <h4>Pen</h4>
+    <div class="sec">
+      <div class="lbl">Color</div>
+      <div class="swatches">
+        <span class="sw" style="background:#0e1116"></span>
+        <span class="sw on" style="background:var(--u7)"></span>
+        <span class="sw" style="background:var(--u1)"></span>
+        <span class="sw" style="background:var(--u3)"></span>
+        <span class="sw" style="background:var(--u4)"></span>
+        <span class="sw" style="background:var(--u5)"></span>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="lbl">Stroke width · 4px</div>
+      <div class="slider"><div class="fill" style="width:42%"></div><div class="knob" style="left:42%"></div></div>
+    </div>
+    <div class="sec">
+      <div class="lbl">Style</div>
+      <div class="seg"><span class="opt on">Solid</span><span class="opt">Dashed</span><span class="opt">Highlight</span></div>
+    </div>
+    <div class="sec" style="border-bottom:none">
+      <div class="lbl">Opacity · 100%</div>
+      <div class="slider"><div class="fill" style="width:100%"></div><div class="knob" style="left:100%"></div></div>
+    </div>
+  </div>
+
+  <!-- ===== Zoom bar ===== -->
+  <div class="zoombar">
+    <span class="zb">−</span>
+    <span style="min-width:46px;text-align:center">100%</span>
+    <span class="zb">+</span>
+    <span class="zb" title="Zoom to fit"><svg class="ico" style="width:17px;height:17px" viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/></svg></span>
+  </div>
+
+  <!-- ===== Minimap (with viewport rects) ===== -->
+  <div class="minimap">
+    <div class="mini-grid"></div>
+    <span class="mlabel">Overview</span>
+    <!-- mini content blobs -->
+    <span style="position:absolute;left:40px;top:48px;width:46px;height:30px;border:1.4px dashed var(--border-2);border-radius:4px"></span>
+    <span style="position:absolute;left:48px;top:54px;width:9px;height:9px;background:#ffe27a;border-radius:2px"></span>
+    <span style="position:absolute;left:60px;top:54px;width:9px;height:9px;background:#bbf2c4;border-radius:2px"></span>
+    <span style="position:absolute;left:72px;top:54px;width:9px;height:9px;background:#f7c8e8;border-radius:2px"></span>
+    <span style="position:absolute;left:112px;top:46px;width:16px;height:11px;background:color-mix(in srgb,var(--accent) 30%,transparent);border:1px solid var(--accent);border-radius:2px"></span>
+    <!-- my viewport -->
+    <span class="vp-rect" style="left:30px;top:40px;width:84px;height:52px"></span>
+    <!-- others' viewports -->
+    <span class="vp-rect other" style="left:96px;top:64px;width:60px;height:42px;border-color:var(--u2)"></span>
+    <span class="vp-rect other" style="left:18px;top:74px;width:52px;height:38px;border-color:var(--u3)"></span>
+  </div>
+
+  <!-- shortcuts hint -->
+  <div class="caption"><span class="chip">Press <span class="kbd" style="margin:0 2px">?</span> for shortcuts</span><span class="chip">⌘ + scroll to zoom · space to pan</span></div>
+
+</div>
+</body>
+</html>

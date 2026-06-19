@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coboard UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        hand: ['Kalam', 'cursive'],
+                    },
+                    colors: {
+                        brand: {
+                            500: '#3B6FF6',
+                            100: '#E0EFFF',
+                        },
+                        retro: {
+                            green: { bg: '#c9f2b8', border: '#b2dfa1', dot: '#22c55e', text: '#2f5b24' },
+                            pink: { bg: '#fcdbe5', border: '#f7c3d2', dot: '#f43f5e', text: '#7d384e' },
+                            blue: { bg: '#c4e1ff', border: '#add2fa', dot: '#3b82f6', text: '#2e4e7e' },
+                        }
+                    },
+                    boxShadow: {
+                        'float': '0 8px 32px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04)',
+                        'float-sm': '0 4px 16px rgba(0, 0, 0, 0.05), 0 1px 4px rgba(0, 0, 0, 0.03)',
+                        'sticky': '0 3px 6px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)',
+                        'btn': '0 2px 6px rgba(0, 0, 0, 0.05)',
+                        'brand': '0 4px 14px rgba(59, 111, 246, 0.25)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Faint Dot Grid Pattern */
+        .bg-grid-pattern {
+            background-color: #f8fafc;
+            background-image: radial-gradient(#d1d5db 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* Custom Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #3B6FF6;
+            cursor: pointer;
+            border: 3px solid #fff;
+            box-shadow: 0 0 0 1px #e2e8f0, 0 2px 4px rgba(0,0,0,0.2);
+            margin-top: -6px;
+        }
+        input[type=range]:active::-webkit-slider-thumb {
+            box-shadow: 0 0 0 3px #bfdbfe, 0 2px 4px rgba(0,0,0,0.2);
+            transform: scale(1.1);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #e2e8f0;
+            border-radius: 4px;
+        }
+        input[type=range].filled-track::-webkit-slider-runnable-track {
+            background: linear-gradient(to right, #3B6FF6 30%, #e2e8f0 30%);
+        }
+        input[type=range].filled-track-100::-webkit-slider-runnable-track {
+            background: #3B6FF6;
+        }
+
+        /* Hide scrollbars for perfect canvas feel */
+        ::-webkit-scrollbar { display: none; }
+        body { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Subtle organic rotation animations for cursors floating */
+        @keyframes float-slow {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-3px) rotate(1deg); }
+        }
+        .cursor-anim { animation: float-slow 4s ease-in-out infinite; }
+        .cursor-anim-delay { animation: float-slow 5s ease-in-out infinite 1s; }
+        .cursor-anim-delay-2 { animation: float-slow 4.5s ease-in-out infinite 2s; }
+    </style>
+</head>
+<body class="w-screen h-screen overflow-hidden bg-grid-pattern text-slate-800 font-sans selection:bg-brand-500 selection:text-white flex m-0 relative origin-top-left">
+
+    <!-- CANVAS CONTENT LAYER -->
+    <main class="absolute inset-0 w-full h-full cursor-crosshair">
+
+        <!-- === Area 1: Sprint Retro Frame === -->
+        <div class="absolute top-[220px] left-[120px] w-[660px] border border-dashed border-slate-300 rounded-xl bg-white/20 backdrop-blur-[2px] p-8 pointer-events-none select-none">
+            <h2 class="text-sm font-medium mb-6 text-slate-700">Sprint Retro – May 20, 2025</h2>
+            <div class="grid grid-cols-3 gap-6 h-[260px] pointer-events-auto">
+                <div class="flex flex-col gap-4 bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                    <div class="flex items-center gap-2 px-1"><div class="w-2 h-2 rounded-full bg-retro-green-dot"></div><span class="text-sm font-medium text-slate-700">Start</span></div>
+                    <div class="w-full h-[90px] bg-retro-green-bg border border-retro-green-border shadow-sticky rounded flex items-center justify-center p-3 text-center text-[13px] font-medium text-retro-green-text leading-snug cursor-pointer hover:-translate-y-0.5 transition-transform">Daily async<br>standups</div>
+                    <div class="w-full h-[90px] bg-retro-green-bg border border-retro-green-border shadow-sticky rounded flex items-center justify-center p-3 text-center text-[13px] font-medium text-retro-green-text leading-snug cursor-pointer hover:-translate-y-0.5 transition-transform">Document<br>as we go</div>
+                </div>
+                <div class="flex flex-col gap-4 bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                    <div class="flex items-center gap-2 px-1"><div class="w-2 h-2 rounded-full bg-retro-pink-dot"></div><span class="text-sm font-medium text-slate-700">Stop</span></div>
+                    <div class="w-full h-[90px] bg-retro-pink-bg border border-retro-pink-border shadow-sticky rounded flex items-center justify-center p-3 text-center text-[13px] font-medium text-retro-pink-text leading-snug cursor-pointer hover:-translate-y-0.5 transition-transform">Long status<br>meetings</div>
+                    <div class="w-full h-[90px] bg-retro-pink-bg border border-retro-pink-border shadow-sticky rounded flex items-center justify-center p-3 text-center text-[13px] font-medium text-retro-pink-text leading-snug cursor-pointer hover:-translate-y-0.5 transition-transform">Unclear<br>tickets</div>
+                </div>
+                <div class="flex flex-col gap-4 bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                    <div class="flex items-center gap-2 px-1"><div class="w-2 h-2 rounded-full bg-retro-blue-dot"></div><span class="text-sm font-medium text-slate-700">Continue</span></div>
+                    <div class="w-full h-[90px] bg-retro-blue-bg border border-retro-blue-border shadow-sticky rounded flex items-center justify-center p-3 text-center text-[13px] font-medium text-retro-blue-text leading-snug cursor-pointer hover:-translate-y-0.5 transition-transform">Ship small,<br>ship often</div>
+                    <div class="w-full h-[90px] bg-retro-blue-bg border border-retro-blue-border shadow-sticky rounded flex items-center justify-center p-3 text-center text-[13px] font-medium text-retro-blue-text leading-snug cursor-pointer hover:-translate-y-0.5 transition-transform">Friday demos</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- === Area 2: Diagram === -->
+        <div class="absolute top-[400px] left-[840px] flex items-center gap-6 pointer-events-auto shadow-sm">
+            <div class="flex items-center justify-center w-[138px] h-[100px] bg-[#EBE5FE] border-2 border-[#8B5CF6] rounded-xl cursor-move shadow-sm transition-transform hover:shadow-md"><span class="text-sm font-medium text-[#4C1D95] text-center leading-tight px-3">Improve<br>Onboarding</span></div>
+            <div class="relative w-[36px] h-[20px] -mt-1 pointer-events-none"><svg width="100%" height="100%" viewBox="0 0 60 20" fill="none" class="absolute top-0 left-0 w-full overflow-visible"><path d="M0 10 H 55" stroke="black" stroke-width="2" stroke-linecap="round"/><path d="M 48 4 L 56 10 L 48 16" stroke="black" stroke-width="2" stroke-linecap="round" fill="none"/></svg></div>
+            <div class="flex items-center justify-center w-[110px] h-[110px] bg-[#E0EFFF] border-2 border-brand-500 rounded-full cursor-move shadow-sm transition-transform hover:shadow-md ml-2"><span class="text-sm font-medium text-[#1E3A8A] text-center leading-tight">Increase<br>Activation</span></div>
+        </div>
+
+        <!-- === Area 3: Handwriting === -->
+        <div class="absolute top-[250px] left-[840px] pointer-events-none -rotate-3">
+            <span class="font-hand text-[22px] text-black leading-none block">Let's improve</span>
+            <span class="font-hand text-[22px] text-black leading-none block ml-1">on onboarding</span>
+            <span class="font-hand text-[22px] text-black leading-none block ml-3 mb-1">flow</span>
+            <svg width="120" height="20" viewBox="0 0 120 20" class="ml-4" fill="none" stroke="black" stroke-width="2" stroke-linecap="round"><path d="M 0 6 Q 60 0 115 10"/><path d="M 5 14 Q 50 10 95 18"/></svg>
+        </div>
+        <svg class="absolute top-[590px] left-[550px] overflow-visible pointer-events-none w-[350px] h-[100px]" fill="none" stroke="#3B6FF6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M 20 60 C 50 20 70 30 75 55 C 80 80 140 60 155 70 C 180 85 240 70 255 35 C 270 0 250 85 300 85 C 330 85 350 75 350 75"/></svg>
+
+        <!-- === Area 4: Cursors === -->
+        <div class="absolute top-[670px] left-[350px] cursor-anim z-30 pointer-events-none">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#10B981" stroke="#ffffff" stroke-width="2.5" class="-rotate-12 translate-x-[2px] -translate-y-[2px]" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.15))"><path d="M5.5 3L18.5 12L12 13L9.5 19.5L5.5 3Z" stroke-linejoin="round"/></svg>
+            <div class="absolute left-4 top-5 bg-[#10B981] text-white text-[11px] font-medium px-2 py-0.5 rounded-full shadow-sm">Liam</div>
+        </div>
+        <div class="absolute top-[710px] left-[840px] cursor-anim-delay z-30 pointer-events-none">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#F97316" stroke="#ffffff" stroke-width="2.5" class="-rotate-[45deg] scale-90 translate-x-[6px] translate-y-[2px]" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.15))"><path d="M5.5 3L18.5 12L12 13L9.5 19.5L5.5 3Z" stroke-linejoin="round"/></svg>
+            <div class="absolute left-6 top-4 bg-[#F97316] text-white text-[11px] font-medium px-2 py-0.5 rounded-full shadow-sm">Maya</div>
+        </div>
+        <div class="absolute top-[280px] left-[1090px] cursor-anim-delay-2 z-40 pointer-events-none">
+            <div class="absolute bottom-full right-full translate-x-[20px] translate-y-[-10px] w-[140px] bg-white border border-slate-100 rounded-xl shadow-lg p-3 shrink-0 pointer-events-auto"><p class="text-[11px] text-slate-700 leading-snug">Should we add an interactive tutorial here?</p><div class="absolute -bottom-[6px] right-[24px] w-3 h-3 bg-white border-b border-r border-slate-100 rotate-45 shadow-[2px_2px_2px_rgba(0,0,0,0.02)]"></div></div>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#EC4899" stroke="#ffffff" stroke-width="2.5" class="rotate-[60deg] -translate-x-[2px] -translate-y-[4px]" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.15))"><path d="M5.5 3L18.5 12L12 13L9.5 19.5L5.5 3Z" stroke-linejoin="round"/></svg>
+            <div class="absolute left-3 top-4 bg-[#EC4899] text-white text-[11px] font-medium px-3 py-0.5 rounded-full shadow-sm">Sophia</div>
+        </div>
+    </main>
+
+    <!-- APP CHROME LAYER -->
+    <div class="absolute top-5 left-5 h-[52px] bg-white rounded-full shadow-float flex items-center px-2 pr-4 z-50 transition-all hover:shadow-[0_8px_40px_rgba(0,0,0,0.08)] backdrop-blur-md bg-white/95">
+        <button class="flex items-center gap-2.5 px-3 py-1.5 rounded-full hover:bg-slate-50 transition-colors">
+            <div class="w-[26px] h-[26px] bg-brand-500 rounded-lg flex items-center justify-center transform -rotate-12"><div class="w-2.5 h-2.5 bg-white rounded-full"></div></div>
+            <span class="font-bold text-[15px] text-slate-800 tracking-tight">Coboard</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-[1px]"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="w-px h-5 bg-slate-200 mx-2"></div>
+        <button class="flex items-center gap-2 pl-2 pr-3 py-1.5 bg-slate-50 hover:bg-slate-100 transition-colors border border-slate-100 rounded-full mr-4">
+            <div class="w-[10px] h-[10px] rounded-full bg-[#10B981] ring-2 ring-white"></div>
+            <span class="text-[13px] font-medium text-slate-600 truncate max-w-[150px]">team-sync · 7 online</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-[1px]"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="flex items-center mr-1 cursor-pointer group">
+            <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=64&h=64&fit=crop&q=80" alt="Avatar" class="w-8 h-8 rounded-full border-[2.5px] border-white z-10 transition-transform group-hover:-translate-y-1" />
+            <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=64&h=64&fit=crop&q=80" alt="Avatar" class="w-8 h-8 rounded-full border-[2.5px] border-white -ml-2.5 z-20 transition-transform group-hover:-translate-y-1 delay-75" />
+            <div class="w-8 h-8 rounded-full border-[2.5px] border-white -ml-2.5 z-30 bg-[#3B6FF6] text-white text-[10px] flex items-center justify-center font-bold tracking-tight transition-transform group-hover:-translate-y-1 delay-100">AK</div>
+            <div class="w-8 h-8 rounded-full border-[2.5px] border-white -ml-2.5 z-40 bg-[#8B5CF6] text-white text-[10px] flex items-center justify-center font-bold tracking-tight transition-transform group-hover:-translate-y-1 delay-150">JM</div>
+            <div class="w-8 h-8 rounded-full border-[2.5px] border-white -ml-2.5 z-50 bg-[#10B981] text-white text-[10px] flex items-center justify-center font-bold tracking-tight transition-transform group-hover:-translate-y-1 delay-200">LH</div>
+            <div class="w-8 h-8 rounded-full border-[2.5px] border-white -ml-2.5 z-[60] bg-[#F59E0B] text-white text-[10px] flex items-center justify-center font-bold tracking-tight transition-transform group-hover:-translate-y-1 delay-300">TW</div>
+            <div class="w-8 h-8 rounded-full border-[2.5px] border-white -ml-2.5 z-[70] bg-[#EC4899] text-white text-[10px] flex items-center justify-center font-bold tracking-tight transition-transform group-hover:-translate-y-1 delay-[400ms]">SP</div>
+            <div class="w-8 h-8 rounded-full border-[2.5px] border-white -ml-2 z-[80] bg-slate-100 text-slate-500 hover:text-slate-700 hover:bg-slate-200 text-[10px] flex items-center justify-center font-bold tracking-tight transition-all group-hover:-translate-y-1 delay-[500ms]">+1</div>
+        </div>
+    </div>
+
+    <div class="absolute top-[100px] left-[650px] flex items-center gap-3 z-50">
+        <button class="w-[42px] h-[42px] flex items-center justify-center bg-white rounded-[14px] shadow-btn hover:bg-slate-50 transition-colors border border-slate-50/50 group"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:scale-110 transition-transform"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+        <button class="w-[42px] h-[42px] flex items-center justify-center bg-white rounded-[14px] shadow-btn hover:bg-slate-50 transition-colors border border-slate-50/50 group"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:scale-110 transition-transform"><rect width="18" height="14" x="3" y="4" rx="2" ry="2"/><path d="M8 21h8"/><path d="M12 18v3"/><path d="m16 9-4 4-4-4"/></svg></button>
+        <button class="flex items-center gap-2 h-[42px] px-4 bg-brand-500 hover:bg-blue-600 text-white rounded-[14px] shadow-brand transition-all hover:-translate-y-0.5 active:translate-y-0 font-medium text-[14px]"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>Share</button>
+    </div>
+
+    <div class="absolute left-5 top-1/2 -translate-y-1/2 w-[52px] bg-white rounded-[26px] shadow-float-sm flex flex-col items-center py-3 gap-2.5 z-50 border border-slate-50">
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/><path d="M6 11V6a2 2 0 0 1 2-2v0a2 2 0 0 1 2 2v0"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center bg-brand-100 text-brand-500 transition-colors relative"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v5h5"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" x2="19" y1="12" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M15 15L9 9"/></svg></button>
+        <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></button>
+    </div>
+
+    <div class="absolute top-[160px] right-8 w-[280px] bg-white rounded-3xl shadow-float p-5 z-50 border border-slate-50">
+        <div class="flex items-center justify-between mb-5">
+            <div class="flex items-center gap-1.5 cursor-pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><span class="font-medium text-[14px]">Pen</span></div>
+            <button class="text-slate-400 hover:text-slate-600 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></button>
+        </div>
+        <div class="mb-5">
+            <span class="block text-[11px] text-slate-500 font-medium mb-2.5">Color</span>
+            <div class="flex items-center justify-between">
+                <button class="w-[22px] h-[22px] rounded-full bg-[#111827] hover:scale-110 transition-transform"></button>
+                <div class="w-[28px] h-[28px] rounded-full border-[2px] border-brand-500 flex items-center justify-center shrink-0"><button class="w-[20px] h-[20px] rounded-full bg-brand-500"></button></div>
+                <button class="w-[22px] h-[22px] rounded-full bg-[#22C55E] hover:scale-110 transition-transform"></button>
+                <button class="w-[22px] h-[22px] rounded-full bg-[#A855F7] hover:scale-110 transition-transform"></button>
+                <button class="w-[22px] h-[22px] rounded-full bg-[#F97316] hover:scale-110 transition-transform"></button>
+                <button class="w-[22px] h-[22px] rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors text-slate-600"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg></button>
+            </div>
+        </div>
+        <div class="mb-5">
+            <div class="flex items-center justify-between mb-2.5"><span class="text-[11px] text-slate-500 font-medium">Stroke width</span><span class="text-[11px] text-slate-500">3 px</span></div>
+            <div class="pt-1"><input type="range" class="filled-track" min="1" max="10" value="3" aria-label="Stroke width slider"></div>
+        </div>
+        <div class="flex items-center bg-slate-50/80 p-0.5 rounded-lg border border-slate-100 mb-6">
+            <button class="flex-1 py-1.5 bg-white text-brand-500 text-[12px] font-medium rounded-md shadow-[0_1px_3px_rgba(0,0,0,0.06)] border border-slate-200/50">Solid</button>
+            <button class="flex-1 py-1.5 text-slate-500 hover:text-slate-700 text-[12px] font-medium rounded-md transition-colors">Dashed</button>
+            <button class="flex-1 py-1.5 text-slate-500 hover:text-slate-700 text-[12px] font-medium rounded-md transition-colors">Highlight</button>
+        </div>
+        <div class="mb-6">
+            <div class="flex items-center justify-between mb-2.5"><span class="text-[11px] text-slate-500 font-medium">Opacity</span><span class="text-[11px] text-slate-500">100%</span></div>
+            <div class="pt-1"><input type="range" class="filled-track-100" min="0" max="100" value="100" aria-label="Opacity slider"></div>
+        </div>
+        <div>
+            <span class="block text-[11px] text-slate-500 font-medium mb-3">Pen style preview</span>
+            <div class="w-full h-12 flex items-center justify-center p-2"><svg width="100%" height="24" viewBox="0 0 200 24" fill="none"><path d="M 0 12 C 40 -8, 60 32, 100 12 C 140 -8, 160 32, 200 12" stroke="#3B6FF6" stroke-width="2" stroke-linecap="round" /></svg></div>
+        </div>
+    </div>
+
+    <div class="absolute bottom-6 left-6 h-[44px] bg-white rounded-[14px] shadow-float-sm flex items-center z-50 px-1 border border-slate-50">
+        <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-600 transition-colors"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" x2="19" y1="12" y2="12"/></svg></button>
+        <span class="text-[13px] font-medium text-slate-700 w-12 text-center pointer-events-none select-none">100%</span>
+        <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-600 transition-colors"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg></button>
+        <div class="w-px h-5 bg-slate-200 mx-1"></div>
+        <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-600 transition-colors"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+    </div>
+
+    <div class="absolute bottom-6 right-6 flex items-end gap-3 z-50">
+        <div class="w-[200px] h-[130px] bg-white rounded-2xl shadow-float p-3 border border-slate-50/50 flex flex-col pointer-events-auto">
+            <div class="w-full h-full bg-slate-50/50 rounded-lg border border-slate-100 overflow-hidden relative" style="background-image: radial-gradient(#d1d5db 1px, transparent 1px); background-size: 8px 8px;">
+                <div class="absolute top-[15px] left-[10px] w-14 h-9 bg-brand-500/10 border border-brand-500"></div>
+                <div class="absolute top-[10px] left-[45px] w-18 h-8 border border-retro-green-dot border-dashed rounded-sm opacity-60"></div>
+                <div class="absolute top-[50px] left-[30px] w-12 h-7 border border-[#8B5CF6] border-dashed rounded-sm opacity-60"></div>
+                <div class="absolute top-[60px] left-[65px] w-10 h-7 border border-[#F43F5E] border-dashed rounded-sm opacity-60"></div>
+                <div class="absolute top-[80px] left-[15px] w-9 h-6 border border-[#F97316] border-dashed rounded-sm opacity-60"></div>
+            </div>
+        </div>
+        <div class="flex flex-col gap-2">
+            <button class="w-[38px] h-[38px] bg-white rounded-xl shadow-float-sm flex items-center justify-center hover:bg-slate-50 transition-colors text-slate-700 border border-slate-50"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/></svg></button>
+            <div class="bg-white rounded-xl shadow-float-sm flex flex-col border border-slate-50 overflow-hidden">
+                <button class="w-[38px] h-[34px] flex items-center justify-center hover:bg-slate-50 transition-colors text-slate-700 border-b border-slate-50 font-medium pb-1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" x2="19" y1="12" y2="12"/></svg></button>
+                <button class="w-[38px] h-[34px] flex items-center justify-center hover:bg-slate-50 transition-colors text-slate-700 pt-1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg></button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

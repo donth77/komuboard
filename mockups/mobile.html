@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Coboard — Mobile canvas</title>
+<link rel="stylesheet" href="./tokens.css">
+<style>
+  /* ===== Phone frame: center a 390x844 portrait viewport ===== */
+  body{display:grid;place-items:center;background:
+    radial-gradient(1200px 700px at 50% -10%,color-mix(in srgb,var(--accent) 9%,var(--paper)),var(--paper))}
+  .phone{position:relative;width:390px;height:844px;background:var(--paper);overflow:hidden;
+    border-radius:44px;box-shadow:var(--shadow-3),0 0 0 10px #11141b,0 0 0 12px #2a2f3a}
+  .phone .canvas{border-radius:44px}
+
+  /* notch / status bar */
+  .statusbar{position:absolute;top:0;left:0;right:0;height:46px;z-index:60;display:flex;align-items:flex-end;
+    justify-content:space-between;padding:0 26px 7px;font-size:13px;font-weight:700;color:var(--ink);
+    letter-spacing:.02em;pointer-events:none}
+  .statusbar .right{display:flex;align-items:center;gap:6px}
+  .notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:118px;height:26px;border-radius:99px;
+    background:#11141b;z-index:61}
+
+  /* ===== Compact top bar ===== */
+  .mtopbar{position:absolute;top:54px;left:12px;right:12px;height:52px;display:flex;align-items:center;gap:10px;
+    padding:0 8px 0 10px;background:color-mix(in srgb,var(--surface) 86%,transparent);
+    backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:var(--radius-l);box-shadow:var(--shadow-1);z-index:40}
+  .iconbtn{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;color:var(--ink-2);
+    background:transparent;border:none;cursor:pointer;flex:none;
+    transition:background var(--dur) var(--ease),color var(--dur) var(--ease)}
+  .iconbtn:hover{background:var(--surface-2);color:var(--ink)}
+  .iconbtn.accent{color:var(--accent)}
+  .roompill{display:flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:var(--radius-full);
+    background:var(--surface-2);border:1px solid var(--border);color:var(--ink);font-size:13px;font-weight:600}
+  .mspacer{flex:1}
+  /* compact facepile — 3 avatars + overflow */
+  .facepile .av{width:32px;height:32px}
+
+  /* ===== Floating chip hint ===== */
+  .hint-chip{position:absolute;top:118px;left:50%;transform:translateX(-50%);z-index:35;
+    height:30px;padding:0 13px;gap:7px;background:color-mix(in srgb,var(--surface) 90%,transparent);
+    backdrop-filter:blur(8px);box-shadow:var(--shadow-1)}
+
+  /* ===== Bottom toolbar pill ===== */
+  .mtoolbar{position:absolute;left:50%;transform:translateX(-50%);bottom:158px;z-index:45;
+    display:flex;align-items:center;gap:3px;padding:7px;
+    background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(12px);
+    border:1px solid var(--border);border-radius:var(--radius-full);box-shadow:var(--shadow-3)}
+  .mtool{width:46px;height:46px;border-radius:15px;display:grid;place-items:center;color:var(--ink-2);
+    background:transparent;border:none;cursor:pointer;
+    transition:background var(--dur) var(--ease),color var(--dur) var(--ease)}
+  .mtool:hover{background:var(--surface-2);color:var(--ink)}
+  .mtool.active{background:var(--accent);color:var(--accent-ink);box-shadow:var(--shadow-1)}
+  .mtool .ico{width:23px;height:23px}
+
+  /* ===== Quick-add FAB ===== */
+  .fab{position:absolute;right:18px;bottom:212px;z-index:46;width:60px;height:60px;border-radius:50%;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;border:none;cursor:pointer;
+    display:grid;place-items:center;box-shadow:var(--shadow-3),0 0 0 4px color-mix(in srgb,var(--accent) 16%,transparent);
+    transition:transform var(--dur) var(--ease)}
+  .fab:hover{transform:translateY(-2px)}
+  .fab .ico{width:28px;height:28px;stroke-width:2.4}
+
+  /* ===== Peeking bottom-sheet ===== */
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:50;height:248px;
+    background:var(--surface);border:1px solid var(--border);border-bottom:none;
+    border-radius:24px 24px 0 0;box-shadow:0 -14px 40px rgba(16,17,22,.16);
+    padding:8px 22px 30px;display:flex;flex-direction:column}
+  .grabber{width:42px;height:5px;border-radius:99px;background:var(--border-2);margin:6px auto 14px}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .sheet-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;letter-spacing:-.02em}
+  .sheet-title .pico{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;
+    background:var(--accent-weak);color:var(--accent)}
+  .sheet-title .pico .ico{width:19px;height:19px}
+  .sheet .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin-bottom:12px}
+  /* larger touch swatches for mobile */
+  .sheet .swatches{gap:14px;margin-bottom:22px}
+  .sheet .sw{width:38px;height:38px;border-radius:12px}
+  .sheet .sw.on{box-shadow:0 0 0 3px var(--accent)}
+  .wrow{display:flex;align-items:center;gap:14px}
+  .wrow .val{font-size:13px;font-weight:700;color:var(--ink-2);min-width:38px;text-align:right}
+  .sheet .slider{flex:1;height:8px}
+  .sheet .knob{width:24px;height:24px}
+  .dot-preview{width:26px;height:26px;border-radius:50%;flex:none}
+</style>
+</head>
+<body>
+<div class="phone">
+  <!-- status bar / notch -->
+  <div class="notch"></div>
+  <div class="statusbar">
+    <span>9:41</span>
+    <span class="right">
+      <svg width="18" height="13" viewBox="0 0 18 13" fill="var(--ink)"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="8" rx="1"/><rect x="10" y="2.5" width="3" height="10.5" rx="1"/><rect x="15" y="0" width="3" height="13" rx="1"/></svg>
+      <svg width="17" height="13" viewBox="0 0 17 13" fill="none"><path d="M8.5 11.5 1 4.2A10.6 10.6 0 0 1 16 4.2L8.5 11.5Z" stroke="var(--ink)" stroke-width="1.4" stroke-linejoin="round"/><circle cx="8.5" cy="10" r="1.2" fill="var(--ink)"/></svg>
+      <svg width="26" height="13" viewBox="0 0 26 13" fill="none"><rect x="1" y="1" width="21" height="11" rx="3" stroke="var(--ink)" stroke-width="1.2"/><rect x="3" y="3" width="15" height="7" rx="1.5" fill="var(--ink)"/><rect x="23.5" y="4" width="2" height="5" rx="1" fill="var(--ink)"/></svg>
+    </span>
+  </div>
+
+  <!-- infinite-paper canvas -->
+  <div class="canvas">
+
+    <!-- vector ink layer (sample freehand stroke) -->
+    <svg class="draw" viewBox="0 0 390 844" preserveAspectRatio="none">
+      <path d="M70 470 q 22 -26 46 -6 q 20 18 44 -2" stroke="var(--u7)" stroke-width="3.5" fill="none" stroke-linecap="round"></path>
+    </svg>
+
+    <!-- two sticky notes -->
+    <div class="node sticky y" style="left:40px;top:250px;width:128px;min-height:84px">Pair on sync engine early</div>
+    <div class="node sticky b" style="left:206px;top:300px;width:128px;min-height:84px;transform:rotate(1.4deg)">Keep Friday demo 🎉</div>
+
+    <!-- one shape -->
+    <div class="shape fill" style="left:74px;top:556px;width:140px;height:88px"></div>
+    <div class="node textnode" style="left:96px;top:592px;font-size:13px;color:var(--accent)">API gateway</div>
+
+    <!-- one remote labeled cursor -->
+    <div class="cursor" style="left:236px;top:236px">
+      <svg width="24" height="24" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="var(--u1)" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>
+      <span class="tag" style="background:var(--u1)">Maya</span>
+    </div>
+
+  </div>
+
+  <!-- ===== Compact top bar ===== -->
+  <div class="mtopbar">
+    <button class="iconbtn" title="Menu"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+    <div class="roompill"><span class="live"></span> team-sync</div>
+    <div class="mspacer"></div>
+    <div class="facepile">
+      <div class="av" style="background:var(--u1)">M</div>
+      <div class="av" style="background:var(--u2)">T</div>
+      <div class="av" style="background:var(--u3)">R</div>
+      <div class="av more">+4</div>
+    </div>
+    <button class="iconbtn accent" title="Share"><svg class="ico" viewBox="0 0 24 24" style="stroke-width:2.2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+  </div>
+
+  <!-- ===== Gesture hint chip ===== -->
+  <div class="chip hint-chip">
+    <svg class="ico" style="width:14px;height:14px;color:var(--ink-3)" viewBox="0 0 24 24"><path d="M9 11V6a2 2 0 0 1 4 0v5M13 8.5V5a2 2 0 0 1 4 0v8a7 7 0 0 1-7 7 7 7 0 0 1-6-4l-2.5-4a1.5 1.5 0 0 1 2.6-1.5L6 13"/></svg>
+    Two fingers to pan · pinch to zoom
+  </div>
+
+  <!-- ===== Quick-add FAB ===== -->
+  <button class="fab" title="Quick add"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+
+  <!-- ===== Floating bottom toolbar ===== -->
+  <div class="mtoolbar">
+    <button class="mtool" title="Select"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3l7.2 17 2.3-6.9 6.9-2.3L3 3z"/></svg></button>
+    <button class="mtool active" title="Pen"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></button>
+    <button class="mtool" title="Sticky note"><svg class="ico" viewBox="0 0 24 24"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10l6-6V5a2 2 0 0 0-2-2z"/><path d="M15 21v-4a2 2 0 0 1 2-2h4"/></svg></button>
+    <button class="mtool" title="Shape"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></button>
+    <button class="mtool" title="Text"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></button>
+    <button class="mtool" title="More"><svg class="ico" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+  </div>
+
+  <!-- ===== Peeking bottom-sheet: contextual Pen properties ===== -->
+  <div class="sheet card">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+      <div class="sheet-title">
+        <span class="pico"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></span>
+        Pen
+      </div>
+      <span class="dot-preview" style="background:var(--u7);box-shadow:0 0 0 1px var(--border)"></span>
+    </div>
+
+    <div class="lbl">Color</div>
+    <div class="swatches">
+      <span class="sw" style="background:#0e1116"></span>
+      <span class="sw on" style="background:var(--u7)"></span>
+      <span class="sw" style="background:var(--u1)"></span>
+      <span class="sw" style="background:var(--u3)"></span>
+      <span class="sw" style="background:var(--u4)"></span>
+      <span class="sw" style="background:var(--u5)"></span>
+    </div>
+
+    <div class="lbl">Stroke width</div>
+    <div class="wrow">
+      <div class="slider"><div class="fill" style="width:42%"></div><div class="knob" style="left:42%"></div></div>
+      <span class="val">4 px</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

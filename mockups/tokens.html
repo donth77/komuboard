@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coboard — Design tokens</title>
+<link rel="stylesheet" href="./tokens.css">
+<style>
+  /* this page scrolls vertically */
+  html,body{height:auto}
+  body{overflow:auto;background:var(--paper)}
+  .page{width:1440px;margin:0 auto;padding:48px 56px 80px}
+
+  /* page header */
+  .ds-head{display:flex;align-items:center;gap:18px;margin-bottom:36px}
+  .ds-head .dot{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:grid;place-items:center;color:#fff;font-size:26px;box-shadow:var(--shadow-2)}
+  .ds-head .titles h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-.025em}
+  .ds-head .titles p{margin:5px 0 0;font-size:15px;color:var(--ink-2);font-weight:500}
+  .ds-head .badge{margin-left:auto;display:flex;gap:8px}
+
+  /* section card */
+  .section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-l);box-shadow:var(--shadow-1);
+    padding:28px 30px;margin-bottom:24px}
+  .section > .sh{display:flex;align-items:baseline;gap:12px;margin-bottom:22px}
+  .section > .sh .num{font-size:12px;font-weight:800;color:var(--accent);letter-spacing:.08em;
+    background:var(--accent-weak);border-radius:var(--radius-full);padding:3px 9px}
+  .section > .sh h2{margin:0;font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+  .section > .sh .meta{margin-left:auto;font-size:12.5px;color:var(--ink-3);font-weight:500}
+
+  /* color section */
+  .pal-cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  .pal-col{border:1px solid var(--border);border-radius:var(--radius-m);padding:18px;background:var(--surface)}
+  .pal-col .ph{display:flex;align-items:center;gap:9px;margin-bottom:16px;font-size:12px;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  .pal-col .ph .moon{width:18px;height:18px;border-radius:50%;border:2px solid var(--border-2)}
+  .pal-col[data-theme="dark"]{background:var(--paper);border-color:var(--border)}
+  .sw-grid{display:flex;flex-direction:column;gap:10px}
+  .sw-row{display:flex;align-items:center;gap:14px}
+  .sw-chip{width:54px;height:54px;border-radius:12px;flex:none;box-shadow:inset 0 0 0 1px rgba(128,128,128,.18)}
+  .sw-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .sw-info .role{font-size:13.5px;font-weight:700;color:var(--ink)}
+  .sw-info .hex{font:600 12px ui-monospace,"SF Mono",monospace;color:var(--ink-3);letter-spacing:.01em}
+
+  /* cursor palette */
+  .ucol-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
+  .ucol{display:flex;flex-direction:column;align-items:center;gap:9px}
+  .ucol .swatch{width:100%;height:60px;border-radius:12px;box-shadow:var(--shadow-1);position:relative;
+    display:grid;place-items:center}
+  .ucol .swatch svg{filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+  .ucol .lab{font-size:12px;font-weight:700;color:var(--ink-2)}
+  .ucol .lab small{display:block;font:600 10.5px ui-monospace,monospace;color:var(--ink-3);margin-top:2px;font-weight:500}
+  .ucol-note{margin-top:18px;font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:8px}
+  .ucol-note svg{width:17px;height:17px;stroke:var(--accent);stroke-width:2;fill:none;flex:none}
+
+  /* type scale */
+  .type-row{display:flex;align-items:baseline;gap:24px;padding:14px 0;border-bottom:1px solid var(--border)}
+  .type-row:last-child{border-bottom:none}
+  .type-row .tk{flex:none;width:200px;font-size:12px;font-weight:600;color:var(--ink-3);letter-spacing:.02em}
+  .type-row .tk b{display:block;color:var(--ink-2);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+  .type-row .ts{color:var(--ink);line-height:1.1}
+
+  /* spacing */
+  .space-row{display:flex;align-items:flex-end;gap:30px}
+  .space-cell{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .space-bar{background:var(--accent);border-radius:4px;width:100%;min-width:14px}
+  .space-cell .sl{font:600 12px ui-monospace,monospace;color:var(--ink-2)}
+  .space-cell .sl small{display:block;color:var(--ink-3);font-size:10.5px;margin-top:1px}
+
+  /* radius */
+  .radius-row{display:flex;gap:30px;flex-wrap:wrap}
+  .radius-cell{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .radius-box{width:96px;height:96px;background:var(--accent-weak);border:2px solid var(--accent)}
+  .radius-cell .rl{font:600 12px ui-monospace,monospace;color:var(--ink-2);text-align:center}
+  .radius-cell .rl small{display:block;color:var(--ink-3);font-size:10.5px;margin-top:1px}
+
+  /* elevation */
+  .elev-row{display:flex;gap:30px;flex-wrap:wrap}
+  .elev-card{width:200px;height:120px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);
+    padding:16px;display:flex;flex-direction:column;justify-content:flex-end}
+  .elev-card .el{font-size:13px;font-weight:700;color:var(--ink)}
+  .elev-card .ev{font:600 11.5px ui-monospace,monospace;color:var(--ink-3);margin-top:3px}
+  .e1{box-shadow:var(--shadow-1)} .e2{box-shadow:var(--shadow-2)} .e3{box-shadow:var(--shadow-3)}
+
+  /* motion */
+  .motion-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .motion-chip{display:inline-flex;align-items:center;gap:9px;height:40px;padding:0 16px;border-radius:var(--radius-full);
+    background:var(--surface-2);border:1px solid var(--border);font-size:13px;font-weight:600;color:var(--ink)}
+  .motion-chip .glide{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+  .motion-chip code{font:600 11.5px ui-monospace,monospace;color:var(--ink-3)}
+  .motion-note{margin-top:16px;font-size:13px;color:var(--ink-2)}
+
+  /* components */
+  .comp-row{display:flex;align-items:center;gap:28px;flex-wrap:wrap}
+  .comp-cell{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
+  .comp-cell .cl{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  .comp-stage{display:flex;align-items:center;justify-content:center;min-height:120px;min-width:160px;padding:24px;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-m);position:relative}
+  .demo-cursor{position:relative}
+  .demo-cursor svg{display:block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+  .demo-cursor .tag{position:absolute;top:18px;left:14px;white-space:nowrap;color:#fff;font-size:12px;font-weight:600;
+    padding:3px 9px;border-radius:var(--radius-full);box-shadow:var(--shadow-1)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ===== (1) Header ===== -->
+  <header class="ds-head">
+    <span class="dot">◳</span>
+    <div class="titles">
+      <h1>Coboard — Design tokens</h1>
+      <p>Calm infinite-paper system · DTCG-aligned tokens</p>
+    </div>
+    <div class="badge">
+      <span class="chip">v1.0</span>
+      <span class="chip">Inter · Lucide</span>
+    </div>
+  </header>
+
+  <!-- ===== (2) Color ===== -->
+  <section class="section">
+    <div class="sh"><span class="num">01</span><h2>Color · UI palette</h2><span class="meta">Both themes via [data-theme]</span></div>
+    <div class="pal-cols">
+
+      <!-- LIGHT -->
+      <div class="pal-col" data-theme="light">
+        <div class="ph"><span class="moon" style="background:#fff"></span> Light</div>
+        <div class="sw-grid">
+          <div class="sw-row"><span class="sw-chip" style="background:var(--paper)"></span><span class="sw-info"><span class="role">Paper</span><span class="hex">--paper · #f6f7f9</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--surface)"></span><span class="sw-info"><span class="role">Surface</span><span class="hex">--surface · #ffffff</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--surface-2)"></span><span class="sw-info"><span class="role">Surface-2</span><span class="hex">--surface-2 · #f1f3f6</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--ink)"></span><span class="sw-info"><span class="role">Ink</span><span class="hex">--ink · #0e1116</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--ink-2)"></span><span class="sw-info"><span class="role">Ink-2</span><span class="hex">--ink-2 · #586172</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--border)"></span><span class="sw-info"><span class="role">Border</span><span class="hex">--border · #e4e7ec</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--accent)"></span><span class="sw-info"><span class="role">Accent</span><span class="hex">--accent · #3b6ff6</span></span></div>
+        </div>
+      </div>
+
+      <!-- DARK -->
+      <div class="pal-col" data-theme="dark">
+        <div class="ph" style="color:var(--ink-3)"><span class="moon" style="background:#171a21"></span> Dark</div>
+        <div class="sw-grid">
+          <div class="sw-row"><span class="sw-chip" style="background:var(--paper)"></span><span class="sw-info"><span class="role" style="color:var(--ink)">Paper</span><span class="hex" style="color:var(--ink-3)">--paper · #0e1116</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--surface)"></span><span class="sw-info"><span class="role" style="color:var(--ink)">Surface</span><span class="hex" style="color:var(--ink-3)">--surface · #171a21</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--surface-2)"></span><span class="sw-info"><span class="role" style="color:var(--ink)">Surface-2</span><span class="hex" style="color:var(--ink-3)">--surface-2 · #1e222b</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--ink)"></span><span class="sw-info"><span class="role" style="color:var(--ink)">Ink</span><span class="hex" style="color:var(--ink-3)">--ink · #e6e9ef</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--ink-2)"></span><span class="sw-info"><span class="role" style="color:var(--ink)">Ink-2</span><span class="hex" style="color:var(--ink-3)">--ink-2 · #9aa4b2</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--border)"></span><span class="sw-info"><span class="role" style="color:var(--ink)">Border</span><span class="hex" style="color:var(--ink-3)">--border · #262b34</span></span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:var(--accent)"></span><span class="sw-info"><span class="role" style="color:var(--ink)">Accent</span><span class="hex" style="color:var(--ink-3)">--accent · #5b8def</span></span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===== (3) Identity / Cursor palette ===== -->
+  <section class="section">
+    <div class="sh"><span class="num">02</span><h2>Identity · Cursor palette</h2><span class="meta">12 presence colors</span></div>
+    <div class="ucol-grid">
+      <div class="ucol"><div class="swatch" style="background:var(--u1)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U1<small>#2563eb</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u2)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U2<small>#db2777</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u3)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U3<small>#16a34a</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u4)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U4<small>#f59e0b</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u5)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U5<small>#7c3aed</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u6)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U6<small>#0891b2</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u7)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U7<small>#dc2626</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u8)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U8<small>#0d9488</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u9)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U9<small>#c026d3</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u10)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U10<small>#ea580c</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u11)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U11<small>#65a30d</small></span></div>
+      <div class="ucol"><div class="swatch" style="background:var(--u12)"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="1.2" stroke-linejoin="round"/></svg></div><span class="lab">U12<small>#4f46e5</small></span></div>
+    </div>
+    <div class="ucol-note">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>
+      CVD-aware; every cursor is ALSO labeled with a name (never color alone).
+    </div>
+  </section>
+
+  <!-- ===== (4) Type scale ===== -->
+  <section class="section">
+    <div class="sh"><span class="num">03</span><h2>Type scale</h2><span class="meta">Inter · variable weights</span></div>
+    <div class="type-row"><span class="tk"><b>Display</b>30 / 800 · -0.025em</span><span class="ts" style="font-size:30px;font-weight:800;letter-spacing:-.025em">Calm infinite paper</span></div>
+    <div class="type-row"><span class="tk"><b>H1</b>24 / 700 · -0.02em</span><span class="ts" style="font-size:24px;font-weight:700;letter-spacing:-.02em">Plan the sprint together</span></div>
+    <div class="type-row"><span class="tk"><b>H2</b>18 / 600</span><span class="ts" style="font-size:18px;font-weight:600">Sticky notes &amp; sections</span></div>
+    <div class="type-row"><span class="tk"><b>Body</b>15 / 400</span><span class="ts" style="font-size:15px;font-weight:400">Everyone can edit in real time across web, mobile, and VR.</span></div>
+    <div class="type-row"><span class="tk"><b>Caption</b>12 / 500</span><span class="ts" style="font-size:12px;font-weight:500;color:var(--ink-2)">Last edited 2 minutes ago · 7 collaborators online</span></div>
+  </section>
+
+  <!-- ===== (5) Spacing ===== -->
+  <section class="section">
+    <div class="sh"><span class="num">04</span><h2>Spacing scale</h2><span class="meta">4-based rhythm</span></div>
+    <div class="space-row">
+      <div class="space-cell"><span class="space-bar" style="height:4px"></span><span class="sl">4<small>--s1</small></span></div>
+      <div class="space-cell"><span class="space-bar" style="height:8px"></span><span class="sl">8<small>--s2</small></span></div>
+      <div class="space-cell"><span class="space-bar" style="height:12px"></span><span class="sl">12<small>--s3</small></span></div>
+      <div class="space-cell"><span class="space-bar" style="height:16px"></span><span class="sl">16<small>--s4</small></span></div>
+      <div class="space-cell"><span class="space-bar" style="height:24px"></span><span class="sl">24<small>--s5</small></span></div>
+      <div class="space-cell"><span class="space-bar" style="height:32px"></span><span class="sl">32<small>--s6</small></span></div>
+    </div>
+  </section>
+
+  <!-- ===== (6) Radius ===== -->
+  <section class="section">
+    <div class="sh"><span class="num">05</span><h2>Radius</h2><span class="meta">Soft, rounded corners</span></div>
+    <div class="radius-row">
+      <div class="radius-cell"><span class="radius-box" style="border-radius:8px"></span><span class="rl">8<small>--radius-s</small></span></div>
+      <div class="radius-cell"><span class="radius-box" style="border-radius:12px"></span><span class="rl">12<small>--radius-m</small></span></div>
+      <div class="radius-cell"><span class="radius-box" style="border-radius:18px"></span><span class="rl">18<small>--radius-l</small></span></div>
+      <div class="radius-cell"><span class="radius-box" style="border-radius:999px"></span><span class="rl">full<small>--radius-full</small></span></div>
+    </div>
+  </section>
+
+  <!-- ===== (7) Elevation ===== -->
+  <section class="section">
+    <div class="sh"><span class="num">06</span><h2>Elevation</h2><span class="meta">Soft, layered shadows</span></div>
+    <div class="elev-row">
+      <div class="elev-card e1"><span class="el">Shadow 1</span><span class="ev">--shadow-1 · resting</span></div>
+      <div class="elev-card e2"><span class="el">Shadow 2</span><span class="ev">--shadow-2 · floating</span></div>
+      <div class="elev-card e3"><span class="el">Shadow 3</span><span class="ev">--shadow-3 · lifted</span></div>
+    </div>
+  </section>
+
+  <!-- ===== (8) Motion ===== -->
+  <section class="section">
+    <div class="sh"><span class="num">07</span><h2>Motion</h2><span class="meta">cubic-bezier(.2,.7,.2,1)</span></div>
+    <div class="motion-row">
+      <span class="motion-chip"><span class="glide"></span>200ms ease-out <code>--dur</code></span>
+      <span class="motion-chip"><span class="glide"></span>240ms <code>panels</code></span>
+    </div>
+    <p class="motion-note">Structural, not decorative · disabled under <code style="font:600 12px ui-monospace,monospace;color:var(--ink-3)">prefers-reduced-motion</code>.</p>
+  </section>
+
+  <!-- ===== (9) Components ===== -->
+  <section class="section">
+    <div class="sh"><span class="num">08</span><h2>Components</h2><span class="meta">Primitives in context</span></div>
+    <div class="comp-row">
+
+      <div class="comp-cell">
+        <span class="cl">Primary button</span>
+        <div class="comp-stage">
+          <button class="btn primary"><svg class="ico" viewBox="0 0 24 24" style="stroke-width:2.2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Share</button>
+        </div>
+      </div>
+
+      <div class="comp-cell">
+        <span class="cl">Secondary button</span>
+        <div class="comp-stage">
+          <button class="btn"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Present</button>
+        </div>
+      </div>
+
+      <div class="comp-cell">
+        <span class="cl">Chip</span>
+        <div class="comp-stage">
+          <span class="chip">Press <span class="kbd" style="margin:0 2px">?</span> for shortcuts</span>
+        </div>
+      </div>
+
+      <div class="comp-cell">
+        <span class="cl">Sticky note</span>
+        <div class="comp-stage">
+          <div class="sticky y" style="position:relative;width:138px;min-height:84px">Pair on the sync engine early</div>
+        </div>
+      </div>
+
+      <div class="comp-cell">
+        <span class="cl">Labeled cursor</span>
+        <div class="comp-stage">
+          <div class="demo-cursor">
+            <svg width="26" height="26" viewBox="0 0 24 24"><path d="M5 3l5 16 2.6-6.6L19 10 5 3z" fill="var(--u1)" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>
+            <span class="tag" style="background:var(--u1)">Maya</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
