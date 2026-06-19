@@ -32,6 +32,7 @@ Thumbs.db
 *.log
 .idea/
 .vscode/
+.claude/
 
 # Root-level PNGs are scratch (dropped reference screenshots + verification
 # captures); canonical images live in mockups/img/ and docs/.
