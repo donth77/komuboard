@@ -28,6 +28,7 @@ export class CoDrawer extends HTMLElement {
       '<div class="drawer-head"><span class="logo">◳</span> <strong>Coboard</strong></div>' +
       `<div class="drawer-room">Room · <strong>${room}</strong></div>` +
       settingsControlsHTML() +
+      `<button class="drawer-item" data-act="profile" type="button"><span>Edit profile</span><span class="drawer-item-ic">${icon("user")}</span></button>` +
       `<button class="drawer-item" data-act="help" type="button"><span>Keyboard shortcuts</span><span class="drawer-item-ic">${icon("help")}</span></button>` +
       "</aside>";
     this.#scrim = this.querySelector(".drawer-scrim");
@@ -37,7 +38,8 @@ export class CoDrawer extends HTMLElement {
       const act = (e.target as HTMLElement | null)
         ?.closest<HTMLElement>("[data-act]")
         ?.getAttribute("data-act");
-      if (act === "close") this.open = false;
+      // "profile" just closes the drawer; main.ts's delegated handler opens the editor.
+      if (act === "close" || act === "profile") this.open = false;
       else if (act === "help") {
         this.open = false;
         this.dispatchEvent(new CustomEvent("help", { bubbles: true }));

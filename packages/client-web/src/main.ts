@@ -20,14 +20,14 @@ import { settingsControlsHTML, syncSettingsControls } from "./settings-controls"
 import "./avatar-presence-row";
 import type { PresencePerson } from "./avatar-presence-row";
 import "./tool-dock";
-import { COLOR_NAMES, type PenChange } from "./draw-bar";
+import type { PenChange } from "./draw-bar";
 import "./zoombar";
 import type { ZoomDetail } from "./zoombar";
 import "./topbar";
 import "./drawer";
 import "./tooltip"; // body-level singleton tooltip for every [data-tip] element (always top-most)
 import { icon } from "./icons";
-import { initials, safePhotoUrl } from "./util";
+import { createProfileDialog } from "./ui/profile";
 
 declare global {
   interface Window {
@@ -390,7 +390,11 @@ function toggleAppMenu(): void {
   menu.setAttribute("role", "menu");
   menu.innerHTML =
     '<div class="app-menu-head"><span class="logo">◳</span> <strong>Coboard</strong></div>' +
-    `<div class="app-menu-body">${settingsControlsHTML()}</div>`;
+    '<div class="app-menu-body">' +
+    `<button class="app-menu-item" type="button" data-act="profile"><span>Edit profile</span><span class="app-menu-item-ic">${icon("user")}</span></button>` +
+    '<div class="app-menu-sep"></div>' +
+    settingsControlsHTML() +
+    "</div>";
   document.body.appendChild(menu);
   appMenu = menu;
   const r = navBtn.getBoundingClientRect();
@@ -416,6 +420,16 @@ mobileMql.addEventListener("change", closeAppMenu); // breakpoint flip → drop 
 // Help → keyboard-shortcuts dialog: a floating "?" button on desktop, a drawer item on mobile.
 document.getElementById("help-btn")?.addEventListener("click", () => shortcutsDialog.open());
 drawer?.addEventListener("help", () => shortcutsDialog.open());
+
+// "Edit profile" (the dropdown + drawer item) → open the profile editor by re-dispatching the
+// avatar row's `rename` intent, so it works even when that row is hidden (e.g. when solo).
+document.addEventListener("click", (e) => {
+  if (!(e.target as HTMLElement | null)?.closest('[data-act="profile"]')) return;
+  document
+    .querySelector("co-avatar-presence-row")
+    ?.dispatchEvent(new CustomEvent("rename", { bubbles: true }));
+  closeAppMenu();
+});
 
 // --------------------------------------------------------------------------
 // Status / presence dev readout.
@@ -468,132 +482,33 @@ function renderPresenceRow(): void {
 }
 provider.awareness.on("change", renderPresenceRow);
 renderPresenceRow();
-presenceRowEl?.addEventListener("rename", () => openProfile());
+// ---- "Your profile" dialog (name + colour + avatar photo) — UI lives in ./ui/profile ----
+const profile = createProfileDialog({
+  swatches: SWATCHES,
+  initial: () => ({ name: identity.name, color: identity.color, photo: identity.photo }),
+  // Empty name → keep the existing one (we own the identity, so the fallback lives here).
+  onSave: (p) => {
+    identity.name = (p.name.trim() || identity.name).slice(0, 40);
+    identity.color = p.color;
+    identity.photo = p.photo;
+    user.name = identity.name;
+    user.color = identity.color;
+    localStorage.setItem("coboard-name", identity.name);
+    localStorage.setItem("coboard-color", identity.color);
+    if (identity.photo) localStorage.setItem("coboard-photo", identity.photo);
+    else localStorage.removeItem("coboard-photo");
+    provider.awareness.setLocalStateField("user", identity.name);
+    provider.awareness.setLocalStateField("color", identity.color);
+    publishProfile();
+    renderPresenceRow();
+  },
+});
+// Clicking your own avatar (the row's `rename` intent) opens the profile editor.
+presenceRowEl?.addEventListener("rename", () => profile.open());
 // The provider only drops our presence on the legacy "unload" event, which modern
 // browsers routinely skip on tab close (bfcache). Announce departure on pagehide so
 // remaining peers remove our avatar immediately instead of waiting for a timeout.
 window.addEventListener("pagehide", () => provider.awareness.setLocalState(null));
-
-// ---- profile dialog (native <dialog>, fully custom-styled + animated) ----
-const profileDialog = createDialog({
-  title: "Your profile",
-  width: 360,
-  body:
-    '<div class="avatar-edit"><div class="avatar-preview" id="profile-avatar"></div>' +
-    '<div class="avatar-edit-actions">' +
-    '<button type="button" class="btn-soft" id="profile-photo-btn">Upload photo</button>' +
-    '<button type="button" class="btn-link" id="profile-photo-clear">Remove</button>' +
-    '<input type="file" id="profile-photo-input" accept="image/*" hidden /></div></div>' +
-    '<label class="field"><span>Display name</span><input type="text" id="profile-name" maxlength="40" placeholder="Your name" /></label>' +
-    '<div class="field" id="profile-color-field"><span>Color</span><div class="swatches" id="profile-swatches"></div></div>',
-  footer:
-    '<button type="button" class="btn-ghost" data-dialog-close>Cancel</button>' +
-    '<button type="button" class="btn-primary" id="profile-save">Save</button>',
-});
-const dName = document.getElementById("profile-name") as HTMLInputElement | null;
-const dAvatar = document.getElementById("profile-avatar");
-const dSwatches = document.getElementById("profile-swatches");
-const dPhotoInput = document.getElementById("profile-photo-input") as HTMLInputElement | null;
-const dPhotoClear = document.getElementById("profile-photo-clear");
-// Avatar colours mirror the pen palette, minus white (a white avatar would be invisible).
-const PROFILE_SWATCHES = SWATCHES.filter((c) => c.toLowerCase() !== "#ffffff");
-let draft: { name: string; color: string; photo?: string } = {
-  name: identity.name,
-  color: identity.color,
-  photo: identity.photo,
-};
-
-function renderDraftAvatar(): void {
-  if (!dAvatar) return;
-  dAvatar.style.setProperty("--av", draft.color);
-  const photo = safePhotoUrl(draft.photo);
-  if (photo) {
-    dAvatar.style.backgroundImage = `url("${photo}")`;
-    dAvatar.classList.add("has-photo");
-    dAvatar.textContent = "";
-  } else {
-    dAvatar.style.backgroundImage = "";
-    dAvatar.classList.remove("has-photo");
-    dAvatar.textContent = initials(draft.name || "Guest");
-  }
-  // "Remove" only applies to an uploaded photo — the default initials avatar can't be removed.
-  if (dPhotoClear) dPhotoClear.style.display = draft.photo ? "" : "none";
-}
-function renderProfileSwatches(): void {
-  if (!dSwatches) return;
-  dSwatches.innerHTML = PROFILE_SWATCHES.map((c) => {
-    const name = COLOR_NAMES[c.toUpperCase()] ?? c;
-    return `<button type="button" class="sw${c === draft.color ? " on" : ""}" data-color="${c}" data-tip="${name}" style="--sw:${c}" aria-label="${name}"></button>`;
-  }).join("");
-}
-function openProfile(): void {
-  draft = { name: identity.name, color: identity.color, photo: identity.photo };
-  if (dName) dName.value = draft.name;
-  renderProfileSwatches();
-  renderDraftAvatar();
-  profileDialog.open();
-  dName?.focus();
-  dName?.select();
-}
-
-dName?.addEventListener("input", () => {
-  draft.name = dName.value;
-  renderDraftAvatar();
-});
-dSwatches?.addEventListener("click", (e) => {
-  const t = (e.target as HTMLElement).closest<HTMLElement>(".sw");
-  if (!t) return;
-  draft.color = t.getAttribute("data-color") ?? draft.color;
-  renderProfileSwatches();
-  renderDraftAvatar();
-});
-document.getElementById("profile-photo-btn")?.addEventListener("click", () => dPhotoInput?.click());
-document.getElementById("profile-photo-clear")?.addEventListener("click", () => {
-  draft.photo = undefined;
-  renderDraftAvatar();
-});
-dPhotoInput?.addEventListener("change", () => {
-  const file = dPhotoInput.files?.[0];
-  if (!file) return;
-  void fileToAvatarDataUrl(file).then((url) => {
-    draft.photo = url;
-    renderDraftAvatar();
-  });
-  dPhotoInput.value = "";
-});
-// close is handled by <co-dialog>: header ✕, the Cancel [data-dialog-close], and backdrop click
-document.getElementById("profile-save")?.addEventListener("click", () => {
-  identity.name = (draft.name.trim() || identity.name).slice(0, 40);
-  identity.color = draft.color;
-  identity.photo = draft.photo;
-  user.name = identity.name;
-  user.color = identity.color;
-  localStorage.setItem("coboard-name", identity.name);
-  localStorage.setItem("coboard-color", identity.color);
-  if (identity.photo) localStorage.setItem("coboard-photo", identity.photo);
-  else localStorage.removeItem("coboard-photo");
-  provider.awareness.setLocalStateField("user", identity.name);
-  provider.awareness.setLocalStateField("color", identity.color);
-  publishProfile();
-  renderPresenceRow();
-  profileDialog.close();
-});
-
-/** Resize a chosen image to a small square JPEG data URL (avatar thumbnail). */
-async function fileToAvatarDataUrl(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  const size = 96;
-  const c = document.createElement("canvas");
-  c.width = size;
-  c.height = size;
-  const ctx = c.getContext("2d");
-  if (!ctx) return "";
-  const scale = Math.max(size / bitmap.width, size / bitmap.height);
-  const w = bitmap.width * scale;
-  const h = bitmap.height * scale;
-  ctx.drawImage(bitmap, (size - w) / 2, (size - h) / 2, w, h);
-  return c.toDataURL("image/jpeg", 0.82);
-}
 
 // Zoom + fullscreen widget (<co-zoombar>).
 const zoombar = document.querySelector("co-zoombar");

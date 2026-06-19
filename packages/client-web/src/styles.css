@@ -173,6 +173,36 @@ body {
   gap: 14px;
   padding: 14px 15px;
 }
+/* a clickable menu action (e.g. "Edit profile") — full-width row + edge-to-edge hover */
+.app-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: auto;
+  margin: 0 -15px; /* cancel the body's side padding → hover spans the full menu width */
+  padding: 9px 15px; /* content stays aligned with the head + settings rows (15px) */
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.app-menu-item:hover {
+  background: var(--surface-2);
+}
+.app-menu-item-ic {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+}
+.app-menu-sep {
+  height: 1px;
+  margin: 0 -15px; /* edge-to-edge divider between the action(s) and the settings */
+  background: var(--border);
+}
 
 /* ---------- floating "?" help button (desktop) → keyboard shortcuts ---------- */
 .help-btn {
