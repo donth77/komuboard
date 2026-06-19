@@ -6,6 +6,7 @@ import {
   PARTY,
   pickUserColor,
   randomGuestName,
+  randomId,
   randomRoomId,
   roomIdFromUrl,
   type PresenceState,
@@ -49,6 +50,8 @@ const ICONS: Record<string, string> = {
   text: '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
   rect: '<rect x="3" y="3" width="18" height="18" rx="2"/>',
   ellipse: '<circle cx="12" cy="12" r="9"/>',
+  fit: '<path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>',
+  expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
 };
@@ -84,10 +87,29 @@ const host = import.meta.env.VITE_WORKER_HOST ?? "127.0.0.1:8787";
 
 const ydoc = new Y.Doc();
 const provider = new YProvider(host, room, ydoc, { party: PARTY });
-const user: PresenceState = {
-  name: randomGuestName(),
-  color: pickUserColor(provider.awareness.clientID),
-};
+// Stable per-browser identity: multiple tabs read as the same person; open a
+// private/incognito window (separate storage) to appear as a new user.
+function loadIdentity(): { id: string; name: string; color: string } {
+  let id = localStorage.getItem("coboard-uid");
+  if (!id) {
+    id = randomId("u");
+    localStorage.setItem("coboard-uid", id);
+  }
+  let name = localStorage.getItem("coboard-name");
+  if (!name) {
+    name = randomGuestName();
+    localStorage.setItem("coboard-name", name);
+  }
+  let color = localStorage.getItem("coboard-color");
+  if (!color) {
+    const seed = [...id].reduce((a, c) => a + c.charCodeAt(0), 0);
+    color = pickUserColor(seed);
+    localStorage.setItem("coboard-color", color);
+  }
+  return { id, name, color };
+}
+const identity = loadIdentity();
+const user: PresenceState = { name: identity.name, color: identity.color };
 window.__coboard = { doc: ydoc, provider, awareness: provider.awareness };
 
 // pen state (defaults: draw in your presence color)
@@ -105,12 +127,11 @@ if (!app) throw new Error("#app root missing");
 app.innerHTML = `
   <header class="topbar">
     <div class="brand"><span class="logo">◳</span> Coboard</div>
-    <div class="room" data-testid="room"><span class="dot" data-testid="dot"></span> room <strong>${room}</strong></div>
-    <div class="spacer"></div>
-    <div class="devstatus" title="M1 dev readout — replaced by the presence facepile next">
-      WS <b data-testid="status">connecting…</b> · <b data-testid="synced">syncing…</b> · peers <b data-testid="peers">1</b>
-    </div>
+    <div class="room-pill" data-testid="room"><span class="dot" data-testid="dot"></span> <strong>${room}</strong> · <span id="online">1</span> online</div>
     <button class="iconbtn" id="theme-toggle" type="button" aria-label="Toggle light / dark theme"></button>
+    <div class="spacer"></div>
+    <div class="devstatus" title="connection status">WS <b data-testid="status">connecting…</b> · <b data-testid="synced">syncing…</b></div>
+    <div class="facepile" id="facepile" data-testid="facepile" title="People here — click your avatar to rename"></div>
   </header>
 
   <main class="canvas" id="board"></main>
@@ -134,8 +155,8 @@ app.innerHTML = `
       </div>
     </div>
     <div class="panel-sec">
-      <div class="panel-label">Stroke width · <b id="pen-w-val">4</b> px</div>
-      <input type="range" id="pen-width" min="1" max="24" value="4" />
+      <div class="panel-label">Stroke width · <b id="pen-w-val">24</b> px</div>
+      <input type="range" id="pen-width" min="1" max="96" value="24" />
     </div>
     <div class="panel-sec">
       <div class="panel-label">Style</div>
@@ -151,7 +172,29 @@ app.innerHTML = `
     </div>
   </section>
 
-  <div class="hint-chip">Draw with the <b>Pen</b> · scroll to zoom · <b>Hand</b> to pan · open in a 2nd tab to collaborate</div>
+  <div class="zoombar">
+    <button class="zb" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+    <button class="zb pct" id="zoom-pct" type="button" title="Reset to 100%">100%</button>
+    <button class="zb" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+    <span class="zb-sep"></span>
+    <button class="zb" id="zoom-fit" type="button" aria-label="Zoom to fit">${icon("fit", "ico-sm")}</button>
+    <button class="zb" id="fullscreen" type="button" aria-label="Toggle fullscreen">${icon("expand", "ico-sm")}</button>
+  </div>
+  <div class="hint-chip">Press <kbd class="kbd">?</kbd> for shortcuts · <kbd class="kbd">⌘</kbd>+scroll to zoom · <kbd class="kbd">space</kbd> to pan</div>
+
+  <div class="modal-backdrop hidden" id="shortcuts">
+    <div class="modal" role="dialog" aria-label="Keyboard shortcuts" aria-modal="true">
+      <div class="modal-head"><span>Keyboard shortcuts</span><button class="modal-x" id="shortcuts-x" type="button" aria-label="Close">✕</button></div>
+      <div class="modal-body">
+        <div class="kbd-row"><span>Select</span><kbd class="kbd">V</kbd></div>
+        <div class="kbd-row"><span>Hand / pan</span><kbd class="kbd">H</kbd></div>
+        <div class="kbd-row"><span>Pen</span><kbd class="kbd">P</kbd></div>
+        <div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>
+        <div class="kbd-row"><span>Zoom in / out</span><span><kbd class="kbd">⌘</kbd> + scroll</span></div>
+        <div class="kbd-row"><span>Toggle this menu</span><kbd class="kbd">?</kbd></div>
+      </div>
+    </div>
+  </div>
 `;
 
 // --------------------------------------------------------------------------
@@ -161,13 +204,17 @@ const boardEl = document.getElementById("board");
 if (!boardEl) throw new Error("#board missing");
 const canvas = new BoardCanvas({ container: boardEl, doc: ydoc, awareness: provider.awareness, user });
 canvas.setColor(penColor);
+canvas.setWidth(24);
+provider.awareness.setLocalStateField("id", identity.id);
 
 // --------------------------------------------------------------------------
 // Tools + pen properties panel.
 // --------------------------------------------------------------------------
 const penPanel = document.getElementById("pen-panel");
 const toolButtons = Array.from(app.querySelectorAll<HTMLButtonElement>(".tool[data-tool]"));
+let currentTool: ToolId = "pen";
 function activateTool(tool: ToolId): void {
+  currentTool = tool;
   canvas.setTool(tool);
   for (const b of toolButtons) b.classList.toggle("active", b.getAttribute("data-tool") === tool);
   penPanel?.classList.toggle("hidden", tool !== "pen");
@@ -176,16 +223,55 @@ for (const btn of toolButtons) {
   const tool = btn.getAttribute("data-tool") as ToolId | "";
   if (tool) btn.addEventListener("click", () => activateTool(tool));
 }
-// Keyboard shortcuts (the dock tooltips advertise them): V/H/P switch tools.
+
+// Shortcuts overlay.
+const shortcutsEl = document.getElementById("shortcuts");
+function toggleShortcuts(show?: boolean): void {
+  if (!shortcutsEl) return;
+  const next = show ?? shortcutsEl.classList.contains("hidden");
+  shortcutsEl.classList.toggle("hidden", !next);
+}
+document.getElementById("shortcuts-x")?.addEventListener("click", () => toggleShortcuts(false));
+shortcutsEl?.addEventListener("click", (e) => {
+  if (e.target === shortcutsEl) toggleShortcuts(false);
+});
+
+function isTyping(el: EventTarget | null): boolean {
+  const n = el as HTMLElement | null;
+  return !!n && (n.tagName === "INPUT" || n.tagName === "TEXTAREA" || n.isContentEditable);
+}
+
+// Keyboard: V/H/P tools, hold Space to pan, ? for the shortcuts menu, Esc to close.
 const KEY_TOOL: Record<string, ToolId> = { v: "select", h: "hand", p: "pen" };
+let spacePanning = false;
 window.addEventListener("keydown", (e) => {
+  if (isTyping(e.target)) return;
+  if (e.key === "?") {
+    toggleShortcuts();
+    e.preventDefault();
+    return;
+  }
+  if (e.key === "Escape") {
+    toggleShortcuts(false);
+    return;
+  }
+  if (e.key === " " && !e.repeat) {
+    spacePanning = true;
+    canvas.setTool("hand");
+    e.preventDefault();
+    return;
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const el = e.target as HTMLElement | null;
-  if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
   const tool = KEY_TOOL[e.key.toLowerCase()];
   if (tool) {
     activateTool(tool);
     e.preventDefault();
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (e.key === " " && spacePanning) {
+    spacePanning = false;
+    canvas.setTool(currentTool);
   }
 });
 
@@ -249,28 +335,118 @@ darkMedia.addEventListener("change", () => {
 // --------------------------------------------------------------------------
 const statusEl = byTestId("status");
 const syncedEl = byTestId("synced");
-const peersEl = byTestId("peers");
 const dotEl = byTestId("dot");
 
 store.subscribe((state) => {
   statusEl.textContent = state.status;
   dotEl.dataset.state = state.status;
-  peersEl.textContent = String(Math.max(1, state.connections));
 });
 
-provider.on("status", (e: { status: string }) => {
-  store
-    .getState()
-    .setStatus(
-      e.status === "connected" ? "connected" : e.status === "connecting" ? "connecting" : "disconnected",
-    );
+// Presence facepile — avatars from awareness; click your own to rename.
+const facepileEl = document.getElementById("facepile");
+const onlineEl = document.getElementById("online");
+const MAX_FACES = 5;
+const avatarEls = new Map<string, HTMLElement>();
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return (((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?").slice(0, 2);
+}
+function renderFacepile(): void {
+  if (!facepileEl) return;
+  const self = provider.awareness.clientID;
+  // Dedup connections by stable identity id (multiple tabs => one person).
+  const people = new Map<string, { name: string; color: string; me: boolean }>();
+  provider.awareness.getStates().forEach((st, clientId) => {
+    const s = st as Record<string, unknown>;
+    const id = String(s["id"] ?? `c${clientId}`);
+    const entry = people.get(id) ?? {
+      name: String(s["user"] ?? "Guest"),
+      color: String(s["color"] ?? "#2563eb"),
+      me: false,
+    };
+    if (clientId === self) entry.me = true;
+    people.set(id, entry);
+  });
+  const list = [...people.entries()].sort((a, b) => (a[1].me ? -1 : b[1].me ? 1 : 0));
+  if (onlineEl) onlineEl.textContent = String(list.length);
+  const shown = list.slice(0, MAX_FACES);
+  const shownIds = new Set(shown.map(([id]) => id));
+  for (const [id, p] of shown) {
+    let el = avatarEls.get(id);
+    if (!el) {
+      el = document.createElement("span");
+      el.className = "avatar enter";
+      avatarEls.set(id, el);
+      const created = el;
+      requestAnimationFrame(() => created.classList.remove("enter"));
+    }
+    el.style.setProperty("--av", p.color);
+    el.classList.toggle("self", p.me);
+    el.title = p.me ? `${p.name} (you)` : p.name;
+    el.textContent = initials(p.name);
+    facepileEl.appendChild(el); // (re)order to match the sorted list
+  }
+  for (const [id, el] of avatarEls) {
+    if (!shownIds.has(id)) {
+      avatarEls.delete(id);
+      el.classList.add("leave");
+      window.setTimeout(() => el.remove(), 220);
+    }
+  }
+  const extra = list.length - shown.length;
+  let more = facepileEl.querySelector<HTMLElement>(".avatar.more");
+  if (extra > 0) {
+    if (!more) {
+      more = document.createElement("span");
+      more.className = "avatar more";
+    }
+    more.textContent = `+${extra}`;
+    facepileEl.appendChild(more);
+  } else if (more) {
+    more.remove();
+  }
+}
+provider.awareness.on("change", renderFacepile);
+renderFacepile();
+facepileEl?.addEventListener("click", (e) => {
+  if (!(e.target as HTMLElement).closest(".avatar.self")) return;
+  const next = window.prompt("Your display name", identity.name);
+  if (!next || !next.trim()) return;
+  identity.name = next.trim().slice(0, 40);
+  user.name = identity.name;
+  localStorage.setItem("coboard-name", identity.name);
+  provider.awareness.setLocalStateField("user", identity.name);
+  renderFacepile();
 });
-provider.on("sync", (isSynced: boolean) => {
-  syncedEl.textContent = isSynced ? "synced" : "syncing…";
+
+// Zoom + fullscreen widget.
+const zoomPctEl = document.getElementById("zoom-pct");
+canvas.setZoomListener((pct) => {
+  if (zoomPctEl) zoomPctEl.textContent = `${pct}%`;
 });
+document.getElementById("zoom-in")?.addEventListener("click", () => canvas.zoomBy(1.25));
+document.getElementById("zoom-out")?.addEventListener("click", () => canvas.zoomBy(1 / 1.25));
+zoomPctEl?.addEventListener("click", () => canvas.resetZoom());
+document.getElementById("zoom-fit")?.addEventListener("click", () => canvas.zoomToFit());
+document.getElementById("fullscreen")?.addEventListener("click", () => {
+  if (document.fullscreenElement) void document.exitFullscreen();
+  else void document.documentElement.requestFullscreen?.();
+});
+
+// Read the real connection state directly (robust to provider event quirks),
+// refreshed on events + a 1 s poll so the readout never sticks.
+function updateConn(): void {
+  store.getState().setStatus(provider.wsconnected ? "connected" : "connecting");
+  syncedEl.textContent = provider.synced ? "synced" : "syncing…";
+}
+provider.on("status", updateConn);
+provider.on("sync", updateConn);
 provider.awareness.on("change", () => {
   store.getState().setConnections(provider.awareness.getStates().size);
+  updateConn();
 });
+window.setInterval(updateConn, 1000);
+updateConn();
 
 function byTestId(id: string): HTMLElement {
   const el = app!.querySelector<HTMLElement>(`[data-testid="${id}"]`);
