@@ -3879,6 +3879,12 @@ if (typeof window.marked === "undefined") {
   var CL_KEY = "coboard-checklist";
   var clState = {};
   try { clState = JSON.parse(localStorage.getItem(CL_KEY) || "{}"); } catch (e) { clState = {}; }
+  // A task is done if the reader toggled it (localStorage wins); otherwise it
+  // falls back to the state authored in the markdown ([x]). This lets the docs
+  // mark completed work without every reader starting from a blank slate.
+  function clDone(t) {
+    return Object.prototype.hasOwnProperty.call(clState, t.key) ? clState[t.key] === true : t.checked;
+  }
 
   var taskRe = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
   function inlineMd(text) {
@@ -3921,7 +3927,7 @@ if (typeof window.marked === "undefined") {
   // group tasks by doc, then by sub-heading
   function buildChecklist() {
     var total = allTasks.length;
-    var done = allTasks.filter(function (t) { return clState[t.key] === true; }).length;
+    var done = allTasks.filter(function (t) { return clDone(t); }).length;
     var pct = total ? Math.round((done / total) * 100) : 0;
 
     var head =
@@ -3938,7 +3944,7 @@ if (typeof window.marked === "undefined") {
     DOCS.forEach(function (doc) {
       var docTasks = allTasks.filter(function (t) { return t.docId === doc.id; });
       if (!docTasks.length) return;
-      var dDone = docTasks.filter(function (t) { return clState[t.key]; }).length;
+      var dDone = docTasks.filter(function (t) { return clDone(t); }).length;
       body += '<div class="cl-group" data-doc="' + doc.id + '">';
       body += '<div class="cl-group-head"><span>' + (doc.num !== "—" ? doc.num + " · " : "") + doc.title + '</span>'
         + '<span class="badge">' + dDone + ' / ' + docTasks.length + '</span></div>';
@@ -3948,7 +3954,7 @@ if (typeof window.marked === "undefined") {
           body += '<div class="cl-sub">' + inlineMd(t.sub) + '</div>';
           lastSub = t.sub;
         }
-        var isDone = clState[t.key] === true;
+        var isDone = clDone(t);
         body += '<label class="cl-item' + (isDone ? " done" : "") + '" data-key="' + t.key + '">'
           + '<input type="checkbox"' + (isDone ? " checked" : "") + ' />'
           + '<span class="label">' + inlineMd(t.label) + '</span></label>';
@@ -3977,7 +3983,7 @@ if (typeof window.marked === "undefined") {
   }
   function updateProgress() {
     var total = allTasks.length;
-    var done = allTasks.filter(function (t) { return clState[t.key] === true; }).length;
+    var done = allTasks.filter(function (t) { return clDone(t); }).length;
     var pct = total ? Math.round((done / total) * 100) : 0;
     var f = document.getElementById("cl-fill"); if (f) f.style.width = pct + "%";
     var p = document.getElementById("cl-pct"); if (p) p.firstChild.nodeValue = pct + "% ";
@@ -3986,7 +3992,7 @@ if (typeof window.marked === "undefined") {
     DOCS.forEach(function (doc) {
       var docTasks = allTasks.filter(function (t) { return t.docId === doc.id; });
       if (!docTasks.length) return;
-      var dDone = docTasks.filter(function (t) { return clState[t.key]; }).length;
+      var dDone = docTasks.filter(function (t) { return clDone(t); }).length;
       var grp = document.querySelector('.cl-group[data-doc="' + doc.id + '"] .badge');
       if (grp) grp.textContent = dDone + " / " + docTasks.length;
     });
