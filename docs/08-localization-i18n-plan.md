@@ -40,13 +40,13 @@ This is consistent with the project's stated stack posture — **"React optional
 
 A survey of the client confirms the architecture that shapes the recommendation:
 
-- **Vanilla Web Components (custom elements), light DOM, no framework.** `<co-tool-dock>`, `<co-pen-panel>`, `<co-zoombar>`, `<co-avatar-presence-row>`, `<co-color-picker>`, `<co-dialog>`. The 2D board is **Konva.js**; VR is **A-Frame**. Light DOM (no Shadow DOM) per [ADR-0005](./adr/0005-ui-chrome-web-components.md) — components share the global stylesheet and a single ARIA tree.
+- **Vanilla Web Components (custom elements), light DOM, no framework.** `<co-tool-dock>`, `<co-draw-bar>`, `<co-zoombar>`, `<co-avatar-presence-row>`, `<co-color-picker>`, `<co-dialog>`. The 2D board is **Konva.js**; VR is **A-Frame**. Light DOM (no Shadow DOM) per [ADR-0005](./adr/0005-ui-chrome-web-components.md) — components share the global stylesheet and a single ARIA tree.
 - **Text reaches the screen three ways:**
-  1. **Template literals + `innerHTML`** built once in `connectedCallback` (e.g. `tool-dock.ts` `TOOLS.map(...).join("")`; `pen-panel.ts` swatches/sliders; `main.ts` shell).
-  2. **`textContent`** for dynamic values (`main.ts` status / sync / zoom `${pct}%`; `pen-panel.ts` width/opacity; `avatar-presence-row.ts` initials).
+  1. **Template literals + `innerHTML`** built once in `connectedCallback` (e.g. `tool-dock.ts` `TOOLS.map(...).join("")`; `draw-bar.ts` brush bar + popovers; `main.ts` shell).
+  2. **`textContent`** for dynamic values (`main.ts` status / sync / zoom `${pct}%`; `draw-bar.ts` stroke width; `avatar-presence-row.ts` initials).
   3. **Attributes** — `aria-label`, `title`, `data-tip`, `placeholder` (e.g. `aria-label="Menu"`, tool labels, `title="connection status"`).
-- **~80–100 distinct user-facing string literals**, clustered in `main.ts`, `tool-dock.ts`, and `pen-panel.ts` (see §8 for the inventory).
-- **No i18n mechanism exists.** No `locale` / `i18n` / `translat` / `lang` references. The only reusable string map is `COLOR_NAMES` in `pen-panel.ts` — a precedent for the keyed-table pattern.
+- **~80–100 distinct user-facing string literals**, clustered in `main.ts`, `tool-dock.ts`, and `draw-bar.ts` (see §8 for the inventory).
+- **No i18n mechanism exists.** No `locale` / `i18n` / `translat` / `lang` references. The only reusable string map is `COLOR_NAMES` in `draw-bar.ts` — a precedent for the keyed-table pattern.
 - **Re-render model: imperative, build-once.** Components build their DOM a single time (`if (this.#wired) return` guard) and then do **surgical** updates (`#sync()` toggles classes; `#renderSwatches()` rebuilds only the swatch container; `#paint()` mutates `style`/`textContent`). **There is no full `render()` method**, and the `#wired` guard exists specifically to avoid re-running the build (which would re-wire event listeners).
 
 That last point is decisive for picking the strategy (§4).
@@ -143,7 +143,7 @@ In the component templates, the change is mechanical — replace the literal wit
 The existing data tables become key tables rather than English tables:
 
 - `TOOLS` (`tool-dock.ts`) — store keys (`"tool.select"`, `"tool.pen"`, …) and resolve with `t()` at render.
-- `COLOR_NAMES` (`pen-panel.ts`) — already a lookup; values become keys (`"color.black"`, …).
+- `COLOR_NAMES` (`draw-bar.ts`) — already a lookup; values become keys (`"color.black"`, …).
 
 ### 4.3 Dynamic / interpolated strings
 
@@ -165,7 +165,7 @@ el.title = t("presence.you", { name: p.name }); // "{name} (you)" / "{name} (tú
 moreEl.textContent = t("presence.more", { count: extra });
 ```
 
-The known dynamic spots: connection/sync status (`main.ts`), zoom percent (`main.ts`), avatar `"{name} (you)"` + `"+{extra}"` counter (`avatar-presence-row.ts`), and pen width/opacity readouts (`pen-panel.ts`). All but a few are pure numbers (locale-independent) — only the ones with words need `onLocaleChange`.
+The known dynamic spots: connection/sync status (`main.ts`), zoom percent (`main.ts`), avatar `"{name} (you)"` + `"+{extra}"` counter (`avatar-presence-row.ts`), and the pen stroke-width readout (`draw-bar.ts`). All but a few are pure numbers (locale-independent) — only the ones with words need `onLocaleChange`.
 
 ### 4.4 Canvas (Konva) & VR (A-Frame) text
 
@@ -217,17 +217,17 @@ Either replaces §4.1 only; §4.2–4.4 (the sweep + dynamic re-apply + canvas/V
 
 ## 8. String inventory (where the ~80–100 literals live)
 
-| File                     | Kind                                                          | Examples                                                                                   |
-| ------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `main.ts`                | Dialog titles, status, labels, hints                          | "Keyboard shortcuts", "Your profile", "connecting…", "synced", "Menu", "connection status" |
-| `tool-dock.ts`           | Tool names + shortcut hints (`TOOLS`)                         | Select (V), Hand (H), Pen (P), Sticky note (S), Text (T), Rectangle (R), Ellipse (O)       |
-| `pen-panel.ts`           | Style names, color names (`COLOR_NAMES`), ARIA, slider labels | Solid / Dashed / Highlight; Black…Pink, White, Custom; "Pen properties", "Color", "Style"  |
-| `zoombar.ts`             | Button labels, input hints                                    | Zoom in / out / to fit, Toggle fullscreen, Zoom percent, "Type a zoom % and press Enter"   |
-| `color-picker.ts`        | Input labels                                                  | "Pick from screen", "Hex colour", "Eyedropper"                                             |
-| `avatar-presence-row.ts` | Dynamic titles + counters                                     | "{name} (you)", "+{extra}"                                                                 |
-| `dialog.ts`              | Button label                                                  | "Close" (✕)                                                                                |
+| File                     | Kind                                                       | Examples                                                                                            |
+| ------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `main.ts`                | Dialog titles, status, labels, hints                       | "Keyboard shortcuts", "Your profile", "connecting…", "synced", "Menu", "connection status"          |
+| `tool-dock.ts`           | Tool names + shortcut hints (`TOOLS`)                      | Select (V), Hand (H), Pen (P), Sticky note (S), Text (T), Rectangle (R), Ellipse (O)                |
+| `draw-bar.ts`            | Brush / style / colour names (`COLOR_NAMES`), ARIA, labels | Pen, Highlighter; Solid / Dotted; Black…Pink, White, Custom; "Line style", "Colour", "Stroke width" |
+| `zoombar.ts`             | Button labels, input hints                                 | Zoom in / out / to fit, Toggle fullscreen, Zoom percent, "Type a zoom % and press Enter"            |
+| `color-picker.ts`        | Input labels                                               | "Pick from screen", "Hex colour", "Eyedropper"                                                      |
+| `avatar-presence-row.ts` | Dynamic titles + counters                                  | "{name} (you)", "+{extra}"                                                                          |
+| `dialog.ts`              | Button label                                               | "Close" (✕)                                                                                         |
 
-**Clusters:** the keyboard-shortcut grid and profile dialog (`main.ts`), the pen palette (`pen-panel.ts`), and the `TOOLS` array (`tool-dock.ts`). Extracting these into a keyed `en` catalog is the bulk of the work — and it is **mechanical**, not architectural.
+**Clusters:** the keyboard-shortcut grid and profile dialog (`main.ts`), the pen palette (`draw-bar.ts`), and the `TOOLS` array (`tool-dock.ts`). Extracting these into a keyed `en` catalog is the bulk of the work — and it is **mechanical**, not architectural.
 
 ---
 

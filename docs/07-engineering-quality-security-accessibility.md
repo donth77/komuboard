@@ -131,7 +131,7 @@ The DOM **chrome** — top bar, tool dock, properties panels, dialogs, share/onb
 
 - **Light DOM, not Shadow DOM.** Elements share Coboard's global design system — CSS tokens **and** utility classes (`.btn-primary`, `.swatches`, `.kbd`, `.avatar`, …). Shadow DOM was rejected: custom properties pierce a shadow boundary but **class selectors do not**, so it would force per-component style duplication (and the global `prefers-reduced-motion` reset would stop applying).
 - **A11y bonus of light DOM:** one DOM tree means no cross-root ARIA fragmentation — important for the §5.1 semantic mirror and the live-region announcer — and keeps `axe-core` / Playwright selectors simple. Trade-off: no style encapsulation, so rely on disciplined prefixed class names + the single shared stylesheet.
-- **Vanilla now, [Lit](https://lit.dev) (~6 KB, MIT) optional** if boilerplate grows — within the §2.7 bundle budget, not a "heavy framework"; interops with React 19 if the React-optional path ([04 §9](./04-technical-architecture.md)) is taken. Shipped: `<co-topbar>`, `<co-drawer>`, `<co-dialog>`, `<co-avatar-presence-row>`, `<co-tool-dock>`, `<co-pen-panel>`, `<co-zoombar>` (in `packages/client-web/src/`), over a shared `icons.ts`.
+- **Vanilla now, [Lit](https://lit.dev) (~6 KB, MIT) optional** if boilerplate grows — within the §2.7 bundle budget, not a "heavy framework"; interops with React 19 if the React-optional path ([04 §9](./04-technical-architecture.md)) is taken. Shipped: `<co-topbar>`, `<co-drawer>`, `<co-dialog>`, `<co-avatar-presence-row>`, `<co-tool-dock>`, `<co-draw-bar>`, `<co-color-picker>`, `<co-zoombar>` (in `packages/client-web/src/`), over a shared `icons.ts`.
 
 ### 3.6 Conventions, automation & decision records
 

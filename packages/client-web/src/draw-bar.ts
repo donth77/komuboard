@@ -1,16 +1,33 @@
-// <co-draw-bar> — compact floating brush bar (desktop). A slimmer alternative to
-// <co-pen-panel>: pen/highlighter brushes + expandable popovers for line style,
-// colour and stroke width, reclaiming canvas space. It emits the SAME `pen-change`
-// events as <co-pen-panel>, so app wiring is unchanged. The old panel is kept for
-// mobile + as a fallback. Light DOM; reuses the global `.swatches`/`.seg`/range
-// styles + <co-color-picker>. See docs/adr/0005.
+// <co-draw-bar> — the brush bar: a compact vertical floating column on desktop and a slide-up
+// bottom sheet (with a pull-tab) on mobile. Pen/highlighter brushes + expandable popovers for
+// line style, colour and stroke width. Emits `pen-change` events (bubbling → handled on #app in
+// main.ts → canvas). Light DOM; reuses the global `.swatches`/`.seg`/range styles +
+// <co-color-picker>. See docs/adr/0005.
 
 import { icon, iconFilled } from "./icons";
 import type { StrokeStyle } from "@coboard/shared";
-import type { PenChange } from "./pen-panel";
-import { COLOR_NAMES } from "./pen-panel";
 import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
+
+/** The `pen-change` event detail — only the changed field(s) are present. */
+export interface PenChange {
+  color?: string;
+  width?: number;
+  style?: StrokeStyle;
+}
+
+/** FigJam palette names, shown in the swatch hover tooltips. */
+export const COLOR_NAMES: Record<string, string> = {
+  "#0E1116": "Black",
+  "#DC2626": "Red",
+  "#F59E0B": "Orange",
+  "#FACC15": "Yellow",
+  "#16A34A": "Green",
+  "#2563EB": "Blue",
+  "#7C3AED": "Purple",
+  "#EC4899": "Pink",
+  "#FFFFFF": "White",
+};
 
 type Brush = "pen" | "highlighter";
 type Dash = "solid" | "dotted";

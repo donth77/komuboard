@@ -421,49 +421,10 @@ body {
   height: 21px;
 }
 
-/* ---------- floating properties panel (right) ---------- */
-.panel {
-  position: absolute;
-  right: 16px;
-  top: 72px;
-  width: 232px;
-  z-index: 30;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-.panel.hidden {
-  display: none;
-}
-/* The mobile pen sheet lives in a clip wrapper; on desktop it's a passthrough so the
-   side panel still positions against #app. (Becomes a real clip box on mobile.) */
+/* The mobile draw sheet lives in a clip wrapper; on desktop it's a passthrough (display:contents)
+   so the floating draw bar positions against #app. (It becomes a real clip box on mobile.) */
 .sheet-wrap {
   display: contents;
-}
-.panel-head {
-  padding: 13px 15px;
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-  border-bottom: 1px solid var(--border);
-}
-.panel-sec {
-  padding: 13px 15px;
-}
-.panel-sec + .panel-sec {
-  border-top: 1px solid var(--border);
-}
-.panel-label {
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 9px;
-  font-weight: 600;
-}
-.panel-label b {
-  color: var(--ink);
 }
 .swatches {
   display: flex;
@@ -1001,28 +962,7 @@ input[type="range"] {
   }
 }
 
-/* ---------- pen swatches: FigJam circles + custom rainbow + name tooltips ---------- */
-.pen-panel {
-  overflow: visible; /* let swatch tooltips escape the panel */
-}
-.pen-panel .swatches {
-  display: grid;
-  grid-template-columns: repeat(5, 26px);
-  justify-content: center;
-  column-gap: 12px;
-  row-gap: 12px;
-}
-.pen-panel .sw {
-  position: relative;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-}
-.pen-panel .sw.on {
-  box-shadow:
-    0 0 0 2px var(--surface),
-    0 0 0 4px var(--accent);
-}
+/* ---------- custom rainbow swatch (FigJam-style) — opens the colour picker ---------- */
 .sw-custom {
   background: conic-gradient(
     from 90deg,
@@ -1237,7 +1177,7 @@ input[type="range"] {
   display: inline-grid; /* the hamburger shows on every breakpoint (desktop → dropdown, mobile → drawer) */
 }
 
-/* ---------- pen bottom-sheet grab handle (mobile only) ---------- */
+/* ---------- draw bottom-sheet grab handle (mobile only) ---------- */
 .sheet-handle {
   display: none;
   position: relative;
@@ -1366,10 +1306,9 @@ input[type="range"] {
   color: var(--muted);
 }
 
-/* ---------- compact draw bar (desktop) — slim alternative to the pen panel ----------
-   A floating vertical column next to the tool dock: pen/highlighter brushes plus
-   style/colour/width buttons that open small popovers. Reclaims canvas space vs the
-   right-hand panel. The old <co-pen-panel> stays in the DOM (mobile sheet + revert). */
+/* ---------- the draw bar — desktop: a floating vertical column next to the tool dock ----------
+   Pen/highlighter brushes plus style/colour/width buttons that open small popovers; it becomes
+   a bottom mini-sheet on mobile (see the mobile block at the end of the file). */
 .draw-bar {
   position: absolute;
   left: 84px; /* just right of the 16px dock (≈56px wide) with a gap */
@@ -1523,19 +1462,14 @@ input[type="range"] {
   height: 24px;
 }
 
-/* the draw bar replaces the pen panel at every breakpoint; the panel stays in the DOM for revert */
-co-pen-panel {
-  display: none;
-}
-
 /* ====================================================================
    Mobile (≤640px) — last in the file so every override wins on order.
    ==================================================================== */
 @media (max-width: 640px) {
-  /* the draw bar becomes the bottom mini-sheet on mobile: it reuses the same .sheet-wrap clip,
-     slide and seamless-toolbar-merge as the old pen sheet, but holds the compact button row.
-     Its style/colour/width popovers float UP above the sheet — they're body-appended, so the
-     clip never touches them (see #openPop in draw-bar.ts). */
+  /* the draw bar becomes the bottom mini-sheet on mobile: a .sheet-wrap clip + slide that makes it
+     expand/collapse seamlessly from the toolbar, holding the compact button row. Its style/colour/
+     width popovers float UP above the sheet — they're body-appended, so the clip never touches
+     them (see #openPop in draw-bar.ts). */
   .draw-bar {
     position: absolute;
     left: 0;
@@ -1601,7 +1535,7 @@ co-pen-panel {
     justify-content: center;
     z-index: 45;
   }
-  /* while the pen sheet is out, the dock's top merges seamlessly with it:
+  /* while the draw sheet is out, the dock's top merges seamlessly with it:
      square top corners, no top border, no top shadow */
   #app.pen-open .dock {
     border-top-left-radius: 0;
@@ -1610,7 +1544,6 @@ co-pen-panel {
     box-shadow: 0 14px 16px -3px rgba(0, 0, 0, 0.2);
   }
   /* collapsed to a tab → show the toolbar's top edge again so the seam is visible */
-  #app.pen-open:has(co-pen-panel.collapsed) .dock,
   #app.pen-open:has(co-draw-bar.collapsed) .dock {
     border-top-color: var(--border);
   }
@@ -1648,34 +1581,6 @@ co-pen-panel {
     overflow: hidden;
     pointer-events: none;
     z-index: 38; /* below the dock (45) so the sheet tucks behind it */
-  }
-  /* pen panel → bottom sheet, same width as the dock → reads as a vertical extension */
-  .pen-panel {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: auto;
-    bottom: 0; /* sits on the wrapper's bottom edge = the dock's top */
-    margin: 0 auto;
-    width: min(340px, calc(100vw - 20px));
-    max-height: 50vh;
-    overflow-y: auto;
-    border-radius: 16px 16px 0 0;
-    box-shadow: var(--shadow);
-    pointer-events: auto;
-    transform: translateY(0);
-    transition: transform 280ms var(--ease);
-    will-change: transform;
-  }
-  .pen-panel.collapsed {
-    transform: translateY(calc(100% - 26px)); /* leave a 26px grab-handle tab (just the handle) */
-  }
-  .pen-panel.hidden {
-    /* override the global `.hidden { display: none !important }` so the sheet stays in
-       the DOM and can *animate* down into the toolbar (display:none can't transition). */
-    display: block !important;
-    transform: translateY(101%); /* collapse fully into the toolbar (clipped → gone) */
-    pointer-events: none;
   }
   .sheet-handle {
     display: block;

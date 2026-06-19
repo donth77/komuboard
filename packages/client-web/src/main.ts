@@ -20,10 +20,7 @@ import { settingsControlsHTML, syncSettingsControls } from "./settings-controls"
 import "./avatar-presence-row";
 import type { PresencePerson } from "./avatar-presence-row";
 import "./tool-dock";
-import "./pen-panel";
-import "./draw-bar";
-import type { PenChange } from "./pen-panel";
-import { COLOR_NAMES } from "./pen-panel";
+import { COLOR_NAMES, type PenChange } from "./draw-bar";
 import "./zoombar";
 import type { ZoomDetail } from "./zoombar";
 import "./topbar";
@@ -153,7 +150,7 @@ app.innerHTML = `
 
   <co-tool-dock></co-tool-dock>
 
-  <div class="sheet-wrap"><co-pen-panel></co-pen-panel><co-draw-bar></co-draw-bar></div>
+  <div class="sheet-wrap"><co-draw-bar></co-draw-bar></div>
 
   <co-zoombar></co-zoombar>
 
@@ -191,15 +188,10 @@ publishProfile();
 usersMap(ydoc).observe(() => renderPresenceRow());
 
 // --------------------------------------------------------------------------
-// Tool dock + pen properties panel (<co-tool-dock>, <co-pen-panel>).
+// Tool dock + draw bar (<co-tool-dock>, <co-draw-bar>).
 // --------------------------------------------------------------------------
 const dock = document.querySelector("co-tool-dock");
-const penPanelEl = document.querySelector("co-pen-panel");
 const drawBarEl = document.querySelector("co-draw-bar");
-if (penPanelEl) {
-  penPanelEl.swatches = SWATCHES;
-  penPanelEl.color = penColor;
-}
 if (drawBarEl) {
   drawBarEl.swatches = SWATCHES;
   drawBarEl.color = penColor;
@@ -211,9 +203,7 @@ function applyTool(tool: ToolId): void {
   currentTool = tool;
   canvas.setTool(tool);
   const isPen = tool === "pen";
-  penPanelEl?.classList.toggle("hidden", !isPen);
-  penPanelEl?.classList.remove("collapsed"); // pen → fully expand; non-pen → no tab (hidden wins)
-  drawBarEl?.classList.toggle("hidden", !isPen); // desktop draw bar shows alongside the Draw tool
+  drawBarEl?.classList.toggle("hidden", !isPen); // the draw bar shows while the Draw tool is active
   drawBarEl?.classList.remove("collapsed"); // pen → fully expand the mobile sheet; non-pen → hidden wins
   app?.classList.toggle("pen-open", isPen); // dock top merges with the sheet/tab while pen is active
 }
@@ -229,7 +219,6 @@ function toggleDrawMenu(): void {
   // Desktop: toggle the floating bar's visibility entirely (no tab affordance there).
   const open = !!app?.classList.contains("pen-open");
   drawBarEl?.classList.toggle("hidden", open);
-  penPanelEl?.classList.toggle("hidden", open);
   app?.classList.toggle("pen-open", !open);
 }
 // Programmatic selection (keyboard) also drives the dock's own highlight.
@@ -243,20 +232,9 @@ dock?.addEventListener("tool-change", (e) => {
   if (tool === "pen" && currentTool === "pen") toggleDrawMenu();
   else applyTool(tool);
 });
-applyTool(currentTool); // sync initial state: select is default → pen panel hidden
+applyTool(currentTool); // sync initial state: select is default → draw bar hidden
 
-// Mobile: tapping the canvas dismisses the pen sheet (slides it out of the way; the pen
-// tool stays selected — tap Pen again to bring it back).
-boardEl.addEventListener(
-  "pointerdown",
-  () => {
-    if (mobileMql.matches && penPanelEl && !penPanelEl.classList.contains("hidden")) {
-      penPanelEl.classList.add("collapsed");
-    }
-  },
-  true,
-);
-// Both <co-pen-panel> and <co-draw-bar> emit `pen-change` (bubbling) → handle once on #app.
+// <co-draw-bar> emits `pen-change` (bubbling) → handle once on #app.
 app?.addEventListener("pen-change", (e) => {
   const d = (e as CustomEvent<PenChange>).detail;
   if (d.color !== undefined) canvas.setColor(d.color);
@@ -342,7 +320,7 @@ window.addEventListener("keyup", (e) => {
   }
 });
 
-// Pen color / width / style / opacity edits are handled inside <co-pen-panel>,
+// Pen colour / width / style edits are handled inside <co-draw-bar>,
 // surfaced via the "pen-change" listener above.
 
 // --------------------------------------------------------------------------
