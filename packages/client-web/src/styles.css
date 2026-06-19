@@ -1,0 +1,124 @@
+:root {
+  --accent: #3b6ff6;
+  --ink: #0e1116;
+  --muted: #586172;
+  --surface: #ffffff;
+  --paper: #f6f7f9;
+  --border: #e4e7ec;
+  --grid: #e6eaf0;
+  --good: #16a34a;
+  --bad: #dc2626;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+#app {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  grid-template-rows: 56px 1fr;
+  background: var(--paper);
+  color: var(--ink);
+}
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 18px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.logo {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+}
+.room {
+  color: var(--muted);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.room strong {
+  color: var(--ink);
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.dot[data-state="connected"] {
+  background: var(--good);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 22%, transparent);
+}
+.dot[data-state="disconnected"] {
+  background: var(--bad);
+}
+.status {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+.status b {
+  color: var(--ink);
+}
+.dock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 8px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.tool {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+.tool:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+.tool.active {
+  background: var(--accent);
+  color: #fff;
+}
+.canvas {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(var(--grid) 1.3px, transparent 1.3px) -1px -1px / 26px 26px;
+}
+.hint {
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.6;
+  max-width: 460px;
+}

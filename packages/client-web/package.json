@@ -1,0 +1,22 @@
+{
+  "name": "@coboard/client-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Coboard 2D web client (Vite SPA). M0 shell: PartySocket round-trip + Zustand store + placeholder toolbar.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5173",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@coboard/shared": "workspace:*",
+    "partysocket": "^1.1.4",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

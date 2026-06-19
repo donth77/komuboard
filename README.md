@@ -8,7 +8,7 @@
 
 ## What is this?
 
-This repository is currently a **planning package**, not yet code. It holds the canonical design and architecture documents that define what Coboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. `docs/index.html` is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
+This repository began as a **planning package** and now also carries the **M0 code foundations** under `packages/`. It holds the canonical design and architecture documents that define what Coboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. `docs/index.html` is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
 
 ## Documents
 
@@ -98,22 +98,24 @@ coboard/
     └── worker/               # Cloudflare Worker + Durable Object (PartyServer / Y-PartyServer)
 ```
 
-## Dev quickstart (planned)
+## Dev quickstart
 
-> These are the **target** developer commands once code exists — this repo is currently planning docs only.
+> **Status:** M0 foundations are scaffolded — a pnpm monorepo with a deployable Cloudflare Worker + Durable Object (PartyServer) WebSocket echo and a Vite web shell that connects to it. The realtime canvas core lands in M1 (see [docs/06](./docs/06-implementation-roadmap.md)).
 
 ```bash
-# Install all workspace dependencies
+# Install all workspace dependencies (Node 20+, pnpm 9)
 pnpm install
 
-# Run the full dev environment (client-web, vr, and worker)
+# Run the full local dev stack: worker (wrangler @ :8787) + web (vite @ :5173)
 pnpm dev
+# then open http://127.0.0.1:5173/?room=demo in two tabs to watch peers + the WS round-trip
 
-# Deploy the realtime backend (Workers + Durable Objects)
-pnpm wrangler deploy
+# Quality gates
+pnpm typecheck && pnpm lint && pnpm test   # vitest unit tests
+pnpm test:e2e                              # boots worker + web, asserts the WS echo
 
-# Deploy the static SPA + VR assets to Cloudflare Pages
-pnpm pages deploy
+# Deploy the realtime backend (requires a Cloudflare account)
+pnpm --filter @coboard/worker deploy
 ```
 
 Welcome aboard. Start with [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md), or open `docs/index.html` for the full interactive read.

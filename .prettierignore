@@ -1,0 +1,6 @@
+pnpm-lock.yaml
+dist/
+**/dist/
+docs/index.html
+mockups/
+node_modules/
