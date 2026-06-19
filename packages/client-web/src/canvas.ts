@@ -14,6 +14,7 @@ import {
   type StrokeObject,
   type StrokeStyle,
 } from "@coboard/shared";
+import { ViewportController } from "./viewport";
 
 export type ToolId = "select" | "hand" | "pen";
 
@@ -26,7 +27,6 @@ export interface CanvasOptions {
 
 const CURSOR_HZ = 30;
 const LERP = 0.3;
-const GRID = 24;
 const SELECT_BLUE = "#4a9eff";
 // Konva attr that tags a rendered node with its object id (the select tool's hit→id contract).
 // One const so the writer (renderObjects) and reader (objIdOf) can't drift on a string literal.
@@ -80,6 +80,8 @@ export class BoardCanvas {
   private readonly selected = new Set<string>();
   /** Local edit history (objects + z-order). Remote edits keep a different origin, so undo only reverts *your* changes. */
   private readonly undoManager: Y.UndoManager;
+  /** Camera: owns the stage transform (pan/zoom), wheel, grid, and zoom readout. */
+  private readonly viewport: ViewportController;
 
   private tool: ToolId = "select";
   private color = "#0e1116";
@@ -119,7 +121,6 @@ export class BoardCanvas {
   private renderedOrder: string[] = [];
   private raf = 0;
   private animating = false;
-  private zoomListener: ((pct: number) => void) | null = null;
   private selectionListener: ((count: number) => void) | null = null;
 
   constructor(private readonly opts: CanvasOptions) {
@@ -159,16 +160,23 @@ export class BoardCanvas {
     this.uiLayer.add(this.highlightGroup);
     this.uiLayer.add(this.transformer);
 
+    // Camera owns the stage transform; re-sync our viewport-dependent chrome on any change.
+    this.viewport = new ViewportController(this.stage, opts.container, () => {
+      this.scaleCursors();
+      this.styleTransformerForZoom();
+      this.renderSelectionBoxes();
+      this.renderRemoteSelections(true); // zoom changes screen-space geometry → force rebuild
+    });
+
     this.renderObjects();
     this.objects.observeDeep(() => this.renderObjects());
 
     this.bindPointer();
     this.bindSelection();
     this.bindTouch();
-    this.bindWheelZoom();
+    this.bindDragCursor();
     this.bindResize();
     this.bindAwareness();
-    this.syncGrid();
 
     opts.awareness.setLocalStateField("user", opts.user.name);
     opts.awareness.setLocalStateField("color", opts.user.color);
@@ -196,73 +204,26 @@ export class BoardCanvas {
     this.style = style;
   }
 
-  // ---- zoom controls (driven by the bottom-left widget) ----
+  // ---- zoom controls (delegated to the camera; driven by the bottom-left widget) ----
   setZoomListener(cb: (pct: number) => void): void {
-    this.zoomListener = cb;
-    this.notifyZoom();
+    this.viewport.setZoomListener(cb);
   }
   getZoomPercent(): number {
-    return Math.round(this.stage.scaleX() * 100);
-  }
-  private notifyZoom(): void {
-    this.zoomListener?.(Math.round(this.stage.scaleX() * 100));
-  }
-  private afterTransform(): void {
-    this.scaleCursors();
-    this.styleTransformerForZoom();
-    this.renderSelectionBoxes();
-    this.renderRemoteSelections(true); // zoom changed the geometry → force a rebuild (not in the cache key)
-    this.syncGrid();
-    this.stage.batchDraw();
-    this.notifyZoom();
-  }
-  private zoomAroundCenter(newScale: number): void {
-    const old = this.stage.scaleX();
-    const cx = this.stage.width() / 2;
-    const cy = this.stage.height() / 2;
-    const origin = { x: (cx - this.stage.x()) / old, y: (cy - this.stage.y()) / old };
-    this.stage.scale({ x: newScale, y: newScale });
-    this.stage.position({ x: cx - origin.x * newScale, y: cy - origin.y * newScale });
-    this.afterTransform();
+    return this.viewport.getZoomPercent();
   }
   zoomBy(factor: number): void {
-    this.zoomAroundCenter(Math.min(8, Math.max(0.1, this.stage.scaleX() * factor)));
+    this.viewport.zoomBy(factor);
   }
   resetZoom(): void {
-    this.zoomAroundCenter(0.5); // default zoom: 50%
+    this.viewport.resetZoom();
   }
   /** Set an absolute zoom (1 = 100%), clamped to the supported range. */
   zoomTo(scale: number): void {
-    this.zoomAroundCenter(Math.min(8, Math.max(0.1, scale)));
+    this.viewport.zoomTo(scale);
   }
   /** Frame all content in view (or reset when the board is empty). */
   zoomToFit(): void {
-    const box = this.content.getClientRect({ skipTransform: true });
-    if (!box.width || !box.height) {
-      this.resetZoom();
-      return;
-    }
-    const pad = 96;
-    const sw = this.stage.width();
-    const sh = this.stage.height();
-    const scale = Math.min(
-      8,
-      Math.max(0.1, Math.min((sw - pad) / box.width, (sh - pad) / box.height)),
-    );
-    this.stage.scale({ x: scale, y: scale });
-    this.stage.position({
-      x: (sw - box.width * scale) / 2 - box.x * scale,
-      y: (sh - box.height * scale) / 2 - box.y * scale,
-    });
-    this.afterTransform();
-  }
-
-  /** Keep the CSS dot grid locked to the camera (it pans + scales with zoom). */
-  private syncGrid(): void {
-    const size = GRID * this.stage.scaleX();
-    const c = this.opts.container;
-    c.style.backgroundSize = `${size}px ${size}px`;
-    c.style.backgroundPosition = `${this.stage.x()}px ${this.stage.y()}px`;
+    this.viewport.zoomToFitBox(this.content.getClientRect({ skipTransform: true }));
   }
 
   private point(): { x: number; y: number } {
@@ -545,7 +506,7 @@ export class BoardCanvas {
 
   /** Keep the transform box border + handles a constant screen size at any zoom. */
   private styleTransformerForZoom(): void {
-    const inv = 1 / this.stage.scaleX();
+    const inv = this.viewport.screenPx(1);
     this.transformer.anchorSize(9 * inv);
     this.transformer.borderStrokeWidth(1.5 * inv);
     this.transformer.anchorStrokeWidth(1.5 * inv);
@@ -610,7 +571,7 @@ export class BoardCanvas {
       height: 0,
       fill: "rgba(74, 158, 255, 0.12)",
       stroke: SELECT_BLUE,
-      strokeWidth: 1 / this.stage.scaleX(),
+      strokeWidth: this.viewport.screenPx(1),
       listening: false,
     });
     this.uiLayer.add(this.marquee);
@@ -660,7 +621,7 @@ export class BoardCanvas {
   private renderSelectionBoxes(): void {
     this.highlightGroup.destroyChildren();
     if (this.selected.size > 1) {
-      const sw = 1.2 / this.stage.scaleX();
+      const sw = this.viewport.screenPx(1.2);
       for (const id of this.selected) {
         const node = this.nodeById.get(id);
         if (!node) continue;
@@ -708,7 +669,7 @@ export class BoardCanvas {
     this.lastRemoteSelKey = key;
 
     this.remoteSelections.destroyChildren();
-    const inv = 1 / this.stage.scaleX();
+    const inv = this.viewport.screenPx(1);
     const pad = 4 * inv;
     for (const { color, ids } of peers) {
       for (const id of ids) {
@@ -752,16 +713,17 @@ export class BoardCanvas {
         this.pinch = { dist, cx: center.x, cy: center.y };
         return;
       }
-      const oldScale = this.stage.scaleX();
-      const newScale = Math.min(8, Math.max(0.1, oldScale * (dist / this.pinch.dist)));
+      const oldScale = this.viewport.scale();
+      const newScale = this.viewport.clamp(oldScale * (dist / this.pinch.dist));
       // The canvas point under the previous pinch centre is pinned to the new centre,
       // which folds zoom + two-finger pan into one transform.
       const cx = (this.pinch.cx - this.stage.x()) / oldScale;
       const cy = (this.pinch.cy - this.stage.y()) / oldScale;
-      this.stage.scale({ x: newScale, y: newScale });
-      this.stage.position({ x: center.x - cx * newScale, y: center.y - cy * newScale });
       this.pinch = { dist, cx: center.x, cy: center.y };
-      this.afterTransform();
+      this.viewport.applyTransform(newScale, {
+        x: center.x - cx * newScale,
+        y: center.y - cy * newScale,
+      });
     });
     const end = (e: Konva.KonvaEventObject<TouchEvent>): void => {
       if (((e.evt as TouchEvent).touches?.length ?? 0) < 2) this.pinch = null;
@@ -786,32 +748,8 @@ export class BoardCanvas {
     }
   }
 
-  // ---- pan / zoom ----
-  private bindWheelZoom(): void {
-    this.stage.on("wheel", (e) => {
-      e.evt.preventDefault();
-      const oldScale = this.stage.scaleX();
-      const pointer = this.stage.getPointerPosition();
-      if (!pointer) return;
-      const origin = {
-        x: (pointer.x - this.stage.x()) / oldScale,
-        y: (pointer.y - this.stage.y()) / oldScale,
-      };
-      const newScale = Math.min(
-        8,
-        Math.max(0.1, e.evt.deltaY > 0 ? oldScale / 1.08 : oldScale * 1.08),
-      );
-      this.stage.scale({ x: newScale, y: newScale });
-      this.stage.position({
-        x: pointer.x - origin.x * newScale,
-        y: pointer.y - origin.y * newScale,
-      });
-      this.afterTransform();
-    });
-    this.stage.on("dragmove", () => {
-      this.scaleCursors();
-      this.syncGrid();
-    });
+  // ---- hand-pan cursor (wheel-zoom + grid tracking live in ViewportController) ----
+  private bindDragCursor(): void {
     // Grab → grabbing while the hand tool is actively dragging.
     this.stage.on("dragstart", () => {
       if (this.tool === "hand") this.stage.container().style.cursor = "grabbing";
@@ -822,12 +760,7 @@ export class BoardCanvas {
   }
 
   private bindResize(): void {
-    this.resizeObserver = new ResizeObserver(() => {
-      this.stage.size({
-        width: this.opts.container.clientWidth,
-        height: this.opts.container.clientHeight,
-      });
-    });
+    this.resizeObserver = new ResizeObserver(() => this.viewport.resize());
     this.resizeObserver.observe(this.opts.container);
   }
 
@@ -859,7 +792,7 @@ export class BoardCanvas {
           String(state["user"] ?? "Guest"),
         );
         group.position(cursor);
-        group.scale({ x: 1 / this.stage.scaleX(), y: 1 / this.stage.scaleX() });
+        group.scale({ x: this.viewport.screenPx(1), y: this.viewport.screenPx(1) });
         this.cursors.set(clientId, group);
         this.overlay.add(group);
       }
@@ -902,7 +835,7 @@ export class BoardCanvas {
 
   /** Keep cursors a constant screen size regardless of zoom. */
   private scaleCursors(): void {
-    const inv = 1 / this.stage.scaleX();
+    const inv = this.viewport.screenPx(1);
     this.cursors.forEach((g) => g.scale({ x: inv, y: inv }));
   }
 
