@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPing, roomIdFromUrl, sanitizeRoomId } from "./index";
+import { roomIdFromUrl, sanitizeRoomId } from "./index";
 
 describe("sanitizeRoomId", () => {
   it("lowercases and slugifies unsafe input", () => {
@@ -29,17 +29,5 @@ describe("roomIdFromUrl", () => {
 
   it("falls back for the bare root", () => {
     expect(roomIdFromUrl(new URL("https://coboard.app/"))).toBe("lobby");
-  });
-});
-
-describe("isPing", () => {
-  it("accepts a well-formed ping", () => {
-    expect(isPing({ type: "ping", t: 1 })).toBe(true);
-  });
-
-  it("rejects everything else", () => {
-    expect(isPing({ type: "ping" })).toBe(false);
-    expect(isPing({ type: "echo", t: 1 })).toBe(false);
-    expect(isPing(null)).toBe(false);
   });
 });

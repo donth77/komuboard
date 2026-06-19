@@ -56,12 +56,7 @@ export function addStroke(doc: Y.Doc, stroke: StrokeObject): void {
 }
 
 export function deleteObject(doc: Y.Doc, id: string): void {
-  doc.transact(() => {
-    objectsMap(doc).delete(id);
-    const order = orderArray(doc);
-    const idx = order.toArray().indexOf(id);
-    if (idx >= 0) order.delete(idx, 1);
-  });
+  deleteObjects(doc, [id]); // one implementation of "delete + drop from z-order" (O(n), not O(n²))
 }
 
 /** Delete several objects atomically (e.g. a multi-selection). */
@@ -113,19 +108,28 @@ export function setObjectsPoints(
   });
 }
 
-/** Read a typed object out of its Y.Map (returns null for unknown types). */
+/** Read a typed object out of its Y.Map — returns null for unknown types or malformed data. */
 export function readObject(m: Y.Map<unknown>): BoardObject | null {
   if (m.get("type") !== "stroke") return null;
+  // CRDT/peer data is untrusted: points must be a flat [x0,y0,x1,y1,…] array of finite
+  // numbers. Reject anything malformed rather than fabricating a default (which would
+  // launder NaN/garbage into the renderer).
+  const rawPoints = m.get("points");
+  if (!Array.isArray(rawPoints) || rawPoints.length % 2 !== 0) return null;
+  for (const n of rawPoints) {
+    if (typeof n !== "number" || !Number.isFinite(n)) return null;
+  }
   const style = m.get("style");
   const opacity = m.get("opacity");
+  const width = m.get("width");
   return {
     id: String(m.get("id")),
     type: "stroke",
-    points: (m.get("points") as number[] | undefined) ?? [],
+    points: rawPoints as number[],
     color: String(m.get("color") ?? "#0e1116"),
-    width: Number(m.get("width") ?? 4),
+    width: typeof width === "number" && Number.isFinite(width) ? width : 4,
     style: style === "dashed" || style === "highlight" ? style : "solid",
-    opacity: typeof opacity === "number" ? opacity : 1,
+    opacity: typeof opacity === "number" && Number.isFinite(opacity) ? opacity : 1,
     authorId: String(m.get("authorId") ?? ""),
   };
 }
