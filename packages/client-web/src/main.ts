@@ -26,6 +26,7 @@ import "./zoombar";
 import type { ZoomDetail } from "./zoombar";
 import "./topbar";
 import "./drawer";
+import { initials, safePhotoUrl } from "./util";
 
 declare global {
   interface Window {
@@ -151,7 +152,7 @@ const canvas = new BoardCanvas({
 });
 if (window.__coboard) window.__coboard.canvas = canvas; // e2e hook: introspect remote presence
 canvas.setColor(penColor);
-canvas.setWidth(24);
+canvas.setWidth(14);
 provider.awareness.setLocalStateField("id", identity.id);
 
 // Publish my profile into the shared doc (synced once + persisted, never in
@@ -212,7 +213,6 @@ penPanelEl?.addEventListener("pen-change", (e) => {
   if (d.color !== undefined) canvas.setColor(d.color);
   if (d.width !== undefined) canvas.setWidth(d.width);
   if (d.style !== undefined) canvas.setStyle(d.style);
-  if (d.opacity !== undefined) canvas.setOpacity(d.opacity);
 });
 
 // Shortcuts overlay (reusable <co-dialog>).
@@ -336,10 +336,6 @@ store.subscribe((state) => {
 
 // Presence avatar row — avatars from awareness; click your own to rename.
 const presenceRowEl = document.querySelector("co-avatar-presence-row");
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return (((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?").slice(0, 2);
-}
 let lastPresenceKey = "";
 function renderPresenceRow(): void {
   if (!presenceRowEl) return;
@@ -419,8 +415,9 @@ let draft: { name: string; color: string; photo?: string } = {
 function renderDraftAvatar(): void {
   if (!dAvatar) return;
   dAvatar.style.setProperty("--av", draft.color);
-  if (draft.photo) {
-    dAvatar.style.backgroundImage = `url("${draft.photo}")`;
+  const photo = safePhotoUrl(draft.photo);
+  if (photo) {
+    dAvatar.style.backgroundImage = `url("${photo}")`;
     dAvatar.classList.add("has-photo");
     dAvatar.textContent = "";
   } else {

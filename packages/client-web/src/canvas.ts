@@ -28,6 +28,9 @@ const CURSOR_HZ = 30;
 const LERP = 0.3;
 const GRID = 24;
 const SELECT_BLUE = "#4a9eff";
+// Konva attr that tags a rendered node with its object id (the select tool's hit→id contract).
+// One const so the writer (renderObjects) and reader (objIdOf) can't drift on a string literal.
+const OBJ_ID_ATTR = "objId";
 // FigJam-style arrow pointer (Lucide mouse-pointer-2): used for the local CSS cursor
 // (black fill, white edge) AND remote presence cursors (filled in each user's colour).
 const CURSOR_PATH =
@@ -80,9 +83,9 @@ export class BoardCanvas {
 
   private tool: ToolId = "select";
   private color = "#0e1116";
-  private widthPx = 4;
+  private widthPx = 14;
   private style: StrokeStyle = "solid";
-  private opacity = 1;
+  private opacity = 1; // fixed default — the pen panel has no opacity control yet
   private drawing: { id: string; points: number[]; line: Konva.Line } | null = null;
   private marquee: Konva.Rect | null = null;
   private marqueeStart: { x: number; y: number } | null = null;
@@ -191,9 +194,6 @@ export class BoardCanvas {
   }
   setStyle(style: StrokeStyle): void {
     this.style = style;
-  }
-  setOpacity(opacity: number): void {
-    this.opacity = opacity;
   }
 
   // ---- zoom controls (driven by the bottom-left widget) ----
@@ -347,8 +347,7 @@ export class BoardCanvas {
         // Make stored strokes selectable: hittable along their stroke + tagged with id.
         line.listening(true);
         line.hitStrokeWidth(Math.max(obj.width, 14));
-        line.name("obj");
-        line.setAttr("objId", obj.id);
+        line.setAttr(OBJ_ID_ATTR, obj.id);
         this.content.add(line);
         this.nodeById.set(obj.id, line);
       }
@@ -446,7 +445,7 @@ export class BoardCanvas {
   private objIdOf(node: Konva.Node): string | null {
     let n: Konva.Node | null = node;
     while (n && n !== this.stage) {
-      const id = n.getAttr("objId");
+      const id = n.getAttr(OBJ_ID_ATTR);
       if (typeof id === "string") return id;
       n = n.getParent();
     }

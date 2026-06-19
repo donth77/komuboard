@@ -20,6 +20,7 @@
  *     the new one, so neighbours glide into the gap instead of snapping.
  */
 import { animate } from "motion";
+import { initials, safePhotoUrl } from "./util";
 
 export interface PresencePerson {
   id: string;
@@ -31,11 +32,6 @@ export interface PresencePerson {
 
 // Snappy spring with a hint of overshoot — close to Framer Motion's layout feel.
 const SPRING = { type: "spring", stiffness: 500, damping: 34 } as const;
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return (((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?").slice(0, 2);
-}
 
 function prefersReducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -100,8 +96,9 @@ export class CoAvatarPresenceRow extends HTMLElement {
     el.style.setProperty("--av", p.color);
     el.classList.toggle("self", p.me);
     el.title = p.me ? `${p.name} (you)` : p.name;
-    if (p.photo) {
-      el.style.backgroundImage = `url("${p.photo}")`;
+    const photo = safePhotoUrl(p.photo);
+    if (photo) {
+      el.style.backgroundImage = `url("${photo}")`;
       el.classList.add("has-photo");
       el.textContent = "";
     } else {

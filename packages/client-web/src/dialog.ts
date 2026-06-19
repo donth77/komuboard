@@ -15,6 +15,9 @@
  * Usage (programmatic):  createDialog({ title, body, footer, width, onClose })
  * Any element with [data-dialog-close] closes the dialog.
  */
+// Monotonic id source so each dialog's title can be referenced by aria-labelledby.
+let dialogTitleSeq = 0;
+
 export class CoDialog extends HTMLElement {
   private dialog?: HTMLDialogElement;
 
@@ -43,7 +46,12 @@ export class CoDialog extends HTMLElement {
       '<div class="dialog-body"></div>';
 
     const titleEl = dialog.querySelector<HTMLElement>(".dialog-title");
-    if (titleEl) titleEl.textContent = this.getAttribute("title") ?? "";
+    if (titleEl) {
+      titleEl.textContent = this.getAttribute("title") ?? "";
+      // Name the modal for screen readers (native <dialog> already gives focus-trap/Esc).
+      titleEl.id = `dialog-title-${++dialogTitleSeq}`;
+      dialog.setAttribute("aria-labelledby", titleEl.id);
+    }
     const bodyEl = dialog.querySelector<HTMLElement>(".dialog-body");
     body.forEach((el) => bodyEl?.appendChild(el));
     if (footer.length) {

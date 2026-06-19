@@ -1,6 +1,6 @@
 // <co-pen-panel> — the contextual pen properties panel (light-DOM Web Component).
 //
-// Owns its swatch grid, width/opacity sliders, and style segmented control, and
+// Owns its swatch grid, width slider, and style segmented control, and
 // reports edits via a single `pen-change` event carrying only the changed field.
 // The fixed palette + the initially-selected colour come in via properties; a
 // trailing rainbow swatch opens a <co-color-picker> for any custom colour.
@@ -14,7 +14,6 @@ export interface PenChange {
   color?: string;
   width?: number;
   style?: StrokeStyle;
-  opacity?: number; // 0..1
 }
 
 const STYLES: ReadonlyArray<readonly [StrokeStyle, string]> = [
@@ -71,17 +70,15 @@ export class CoPenPanel extends HTMLElement {
       '<div class="sheet-handle" aria-hidden="true"></div>' +
       '<div class="panel-sec">' +
       '<div class="swatches" data-swatches role="group" aria-label="Color"></div></div>' +
-      '<div class="panel-sec"><div class="panel-label">Stroke width · <b data-w-val>24</b> px</div>' +
-      '<input type="range" data-width min="1" max="96" value="24" /></div>' +
+      '<div class="panel-sec"><div class="panel-label">Stroke width · <b data-w-val>14</b> px</div>' +
+      '<input type="range" data-width min="1" max="96" value="14" /></div>' +
       '<div class="panel-sec">' +
       '<div class="seg" data-style role="group" aria-label="Style">' +
       STYLES.map(
         ([v, lbl], i) =>
           `<button class="seg-opt${i === 0 ? " on" : ""}" type="button" data-style-val="${v}">${lbl}</button>`,
       ).join("") +
-      "</div></div>" +
-      '<div class="panel-sec"><div class="panel-label">Opacity · <b data-o-val>100</b>%</div>' +
-      '<input type="range" data-opacity min="10" max="100" value="100" /></div>';
+      "</div></div>";
     this.#renderSwatches();
 
     // Mobile bottom sheet: the grab handle expands/collapses the sheet between fully
@@ -153,14 +150,6 @@ export class CoPenPanel extends HTMLElement {
       if (!t) return;
       seg.querySelectorAll(".seg-opt").forEach((s) => s.classList.toggle("on", s === t));
       this.#emit({ style: (t.getAttribute("data-style-val") as StrokeStyle) ?? "solid" });
-    });
-
-    const oIn = this.querySelector<HTMLInputElement>("[data-opacity]");
-    const oVal = this.querySelector<HTMLElement>("[data-o-val]");
-    oIn?.addEventListener("input", () => {
-      const pct = Number(oIn.value);
-      if (oVal) oVal.textContent = String(pct);
-      this.#emit({ opacity: pct / 100 });
     });
   }
 

@@ -100,8 +100,10 @@ export class CoColorPicker extends HTMLElement {
         : "") +
       '<input class="cp-hex" type="text" spellcheck="false" aria-label="Hex colour" />' +
       "</div>" +
-      '<div class="cp-hue" data-hue><div class="cp-thumb" data-hue-thumb></div></div>' +
-      '<div class="cp-sv" data-sv><div class="cp-thumb cp-sv-thumb" data-sv-thumb></div></div>';
+      '<div class="cp-hue" data-hue tabindex="0" role="slider" aria-label="Hue" aria-valuemin="0" aria-valuemax="360">' +
+      '<div class="cp-thumb" data-hue-thumb></div></div>' +
+      '<div class="cp-sv" data-sv tabindex="0" role="slider" aria-label="Saturation and brightness">' +
+      '<div class="cp-thumb cp-sv-thumb" data-sv-thumb></div></div>';
 
     const sv = this.querySelector<HTMLElement>("[data-sv]");
     const hue = this.querySelector<HTMLElement>("[data-hue]");
@@ -119,6 +121,25 @@ export class CoColorPicker extends HTMLElement {
       this.#emit();
     });
 
+    // Keyboard access for the 2-D SV square + hue track (the pointer drag above is mouse-only).
+    this.#keyNudge(sv, (e) => {
+      const step = e.shiftKey ? 0.1 : 0.02;
+      if (e.key === "ArrowLeft") this.#s = clamp01(this.#s - step);
+      else if (e.key === "ArrowRight") this.#s = clamp01(this.#s + step);
+      else if (e.key === "ArrowUp") this.#v = clamp01(this.#v + step);
+      else if (e.key === "ArrowDown") this.#v = clamp01(this.#v - step);
+      else return false;
+      return true;
+    });
+    this.#keyNudge(hue, (e) => {
+      const step = e.shiftKey ? 30 : 6;
+      if (e.key === "ArrowLeft" || e.key === "ArrowDown") this.#h = Math.max(0, this.#h - step);
+      else if (e.key === "ArrowRight" || e.key === "ArrowUp")
+        this.#h = Math.min(360, this.#h + step);
+      else return false;
+      return true;
+    });
+
     hex?.addEventListener("change", () => {
       const rgb = parseHex(hex.value);
       if (rgb) {
@@ -131,10 +152,14 @@ export class CoColorPicker extends HTMLElement {
     });
 
     this.querySelector(".cp-eyedropper")?.addEventListener("click", () => {
-      void new ED!().open().then((r) => {
-        this.value = r.sRGBHex;
-        this.#emit();
-      });
+      // EyeDropper.open() rejects when the user cancels with Esc — swallow that, don't log.
+      void new ED!()
+        .open()
+        .then((r) => {
+          this.value = r.sRGBHex;
+          this.#emit();
+        })
+        .catch(() => {});
     });
 
     this.#sync();
@@ -156,13 +181,29 @@ export class CoColorPicker extends HTMLElement {
     });
   }
 
+  /** Arrow-key nudging for a focusable track; `handle` mutates state and returns true if handled. */
+  #keyNudge(el: HTMLElement | null, handle: (e: KeyboardEvent) => boolean): void {
+    if (!el) return;
+    el.addEventListener("keydown", (e) => {
+      if (!handle(e)) return;
+      e.preventDefault();
+      this.#sync();
+      this.#emit();
+    });
+  }
+
   #sync(): void {
     const hue = `hsl(${this.#h}, 100%, 50%)`;
     const sv = this.querySelector<HTMLElement>("[data-sv]");
+    const hueEl = this.querySelector<HTMLElement>("[data-hue]");
     const svT = this.querySelector<HTMLElement>("[data-sv-thumb]");
     const hueT = this.querySelector<HTMLElement>("[data-hue-thumb]");
     const hex = this.querySelector<HTMLInputElement>(".cp-hex");
-    if (sv) sv.style.setProperty("--cp-hue", hue);
+    if (sv) {
+      sv.style.setProperty("--cp-hue", hue);
+      sv.setAttribute("aria-valuetext", this.value); // current colour, announced to screen readers
+    }
+    if (hueEl) hueEl.setAttribute("aria-valuenow", String(Math.round(this.#h)));
     if (svT) {
       svT.style.left = `${this.#s * 100}%`;
       svT.style.top = `${(1 - this.#v) * 100}%`;
