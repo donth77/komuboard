@@ -174,7 +174,7 @@ app.innerHTML = `
 
   <div class="zoombar">
     <button class="zb" id="zoom-out" type="button" aria-label="Zoom out">−</button>
-    <button class="zb pct" id="zoom-pct" type="button" title="Reset to 100%">100%</button>
+    <span class="zb pct"><input id="zoom-pct" type="text" inputmode="numeric" value="100" aria-label="Zoom percent" title="Type a zoom % and press Enter" />%</span>
     <button class="zb" id="zoom-in" type="button" aria-label="Zoom in">+</button>
     <span class="zb-sep"></span>
     <button class="zb" id="zoom-fit" type="button" aria-label="Zoom to fit">${icon("fit", "ico-sm")}</button>
@@ -420,13 +420,30 @@ facepileEl?.addEventListener("click", (e) => {
 });
 
 // Zoom + fullscreen widget.
-const zoomPctEl = document.getElementById("zoom-pct");
+const zoomInput = document.getElementById("zoom-pct") as HTMLInputElement | null;
 canvas.setZoomListener((pct) => {
-  if (zoomPctEl) zoomPctEl.textContent = `${pct}%`;
+  // don't clobber what the user is typing
+  if (zoomInput && document.activeElement !== zoomInput) zoomInput.value = String(pct);
 });
+function applyZoomInput(): void {
+  if (!zoomInput) return;
+  const pct = parseInt(zoomInput.value.replace(/[^0-9]/g, ""), 10);
+  if (Number.isFinite(pct) && pct > 0) canvas.zoomTo(pct / 100);
+  else zoomInput.value = String(canvas.getZoomPercent());
+}
+zoomInput?.addEventListener("focus", () => zoomInput.select());
+zoomInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    applyZoomInput();
+    zoomInput.blur();
+  } else if (e.key === "Escape") {
+    zoomInput.value = String(canvas.getZoomPercent());
+    zoomInput.blur();
+  }
+});
+zoomInput?.addEventListener("blur", applyZoomInput);
 document.getElementById("zoom-in")?.addEventListener("click", () => canvas.zoomBy(1.25));
 document.getElementById("zoom-out")?.addEventListener("click", () => canvas.zoomBy(1 / 1.25));
-zoomPctEl?.addEventListener("click", () => canvas.resetZoom());
 document.getElementById("zoom-fit")?.addEventListener("click", () => canvas.zoomToFit());
 document.getElementById("fullscreen")?.addEventListener("click", () => {
   if (document.fullscreenElement) void document.exitFullscreen();
@@ -436,8 +453,13 @@ document.getElementById("fullscreen")?.addEventListener("click", () => {
 // Read the real connection state directly (robust to provider event quirks),
 // refreshed on events + a 1 s poll so the readout never sticks.
 function updateConn(): void {
-  store.getState().setStatus(provider.wsconnected ? "connected" : "connecting");
-  syncedEl.textContent = provider.synced ? "synced" : "syncing…";
+  const connected = provider.wsconnected;
+  store
+    .getState()
+    .setStatus(
+      connected ? "connected" : provider.wsUnsuccessfulReconnects > 1 ? "disconnected" : "connecting",
+    );
+  syncedEl.textContent = provider.synced ? "synced" : connected ? "syncing…" : "—";
 }
 provider.on("status", updateConn);
 provider.on("sync", updateConn);

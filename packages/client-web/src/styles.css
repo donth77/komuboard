@@ -371,8 +371,26 @@ input[type="range"] {
   color: var(--ink);
 }
 .zb.pct {
-  min-width: 48px;
+  min-width: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 13px;
+  cursor: text;
+}
+.zb.pct input {
+  width: 32px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-align: right;
+  padding: 0;
+  outline: none;
+}
+.zb.pct input:focus {
+  color: var(--accent);
 }
 .zb-sep {
   width: 1px;

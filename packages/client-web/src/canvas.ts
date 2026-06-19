@@ -100,6 +100,9 @@ export class BoardCanvas {
     this.zoomListener = cb;
     this.notifyZoom();
   }
+  getZoomPercent(): number {
+    return Math.round(this.stage.scaleX() * 100);
+  }
   private notifyZoom(): void {
     this.zoomListener?.(Math.round(this.stage.scaleX() * 100));
   }
@@ -123,6 +126,10 @@ export class BoardCanvas {
   }
   resetZoom(): void {
     this.zoomAroundCenter(1);
+  }
+  /** Set an absolute zoom (1 = 100%), clamped to the supported range. */
+  zoomTo(scale: number): void {
+    this.zoomAroundCenter(Math.min(8, Math.max(0.1, scale)));
   }
   /** Frame all content in view (or reset when the board is empty). */
   zoomToFit(): void {
