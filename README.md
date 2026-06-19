@@ -4,7 +4,7 @@
 
 **Coboard** is a free-to-run, realtime, online collaborative whiteboard that works everywhere: desktop (mouse), mobile/tablet (touch), and VR headsets (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence — no signup. The same board document is the single source of truth shared by both the 2D web renderer and the immersive 3D VR renderer, so what you sketch on a phone shows up on a headset and vice versa, in real time.
 
-> Note: "Coboard" is a working/placeholder name — feel free to rename it before launch.
+> Note: "Coboard" is a working/placeholder name — feel free to rename it before launch. (The repository directory is currently `whiteboard-vr`, which is historical and shares a name with reference product #1 "Whiteboard VR"; the product itself is **Coboard**.)
 
 ## What is this?
 
@@ -48,7 +48,7 @@ The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockup
 - **VR layer:** A-Frame + Three.js (WebXR) — board as a textured 3D surface, strokes written into the same Yjs doc, avatars + cursors synced via awareness.
 - **Hosting:** SPA + VR assets on Cloudflare Pages (free CDN); realtime + API on Workers + Durable Objects (free tier).
 - **Auth:** anonymous-first (room id in URL); optional named accounts later.
-- **Client libs + tooling:** Lucide icons; light state store (Zustand/signals), React acceptable for toolbar/panels; Vitest (unit), Playwright (e2e + multiplayer); GitHub Actions → `wrangler deploy` + Pages deploy.
+- **Client libs + tooling:** Lucide icons; light state store (Zustand/signals); **React optional** (acceptable for toolbar/panels, not part of the canonical renderer stack); Vitest (unit), Playwright (e2e + multiplayer); GitHub Actions → `wrangler deploy` + Pages deploy.
 
 ## Reference products
 
@@ -78,7 +78,8 @@ coboard/
 │   ├── 04-technical-architecture.md
 │   ├── 05-scaling-and-cost.md
 │   ├── 06-implementation-roadmap.md
-│   └── 07-engineering-quality-security-accessibility.md
+│   ├── 07-engineering-quality-security-accessibility.md
+│   └── adr/                  # architecture decision records (one per ratified decision)
 ├── mockups/                  # high-fidelity HTML UI mockups + PNG screenshots
 │   ├── desktop.html          # desktop canvas + toolbar mockup (+ desktop.png)
 │   ├── mobile.html           # mobile/tablet touch layout (+ mobile.png)

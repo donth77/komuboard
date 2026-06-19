@@ -273,7 +273,7 @@ coboard/
 ├─ tsconfig.base.json          # strict, shared compiler options
 ├─ .github/workflows/ci.yml    # lint → typecheck → unit → e2e → deploy
 ├─ playwright.config.ts        # e2e + multiplayer + WebXR-emulator projects
-├─ docs/                       # 01..06 (this set)
+├─ docs/                       # 01..07 + adr/ (this set)
 ├─ README.md
 └─ packages/
    ├─ shared/                  # Yjs schema + typed accessors, awareness types, CRDT logic, templates

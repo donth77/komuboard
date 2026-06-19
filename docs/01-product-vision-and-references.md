@@ -154,7 +154,7 @@ Legend: ✅ yes · ⚠️ partial / limited · ❌ no. Cells reflect the project
 
 | Term | Definition |
 | --- | --- |
-| **Room** | A shareable, anonymous collaboration space addressed by a string id in the URL (the "room code"). One room maps to one backend Durable Object and one board document. |
+| **Room** | A shareable, anonymous collaboration space. The share URL carries a high-entropy **room id** (the capability); a short, human-typable **join code** is a rate-limited alias for entering the same room from another device (see [04 §8](./04-technical-architecture.md)). One room maps to one backend Durable Object and one board document. |
 | **Board** | The visual document of a room — strokes, sticky notes, shapes, text, connectors, frames. Rendered identically by the 2D web and 3D VR renderers because both read the same Yjs doc. |
 | **CRDT** (Conflict-free Replicated Data Type) | A data structure that lets many clients edit concurrently and converge to the same state without a central lock. Coboard uses **Yjs**, which ships tiny binary updates. |
 | **Awareness** | Yjs's `y-protocols/awareness` channel for **ephemeral** presence — cursors, selections, user color/name, cursor-chat text, and VR avatar head+hands poses. Broadcast to peers but **never persisted**. |

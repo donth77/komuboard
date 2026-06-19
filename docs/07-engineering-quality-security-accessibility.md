@@ -67,7 +67,7 @@ The wire model is Yjs binary deltas over PartySocket to a per-room Durable Objec
 ### 2.5 Memory
 
 - **CRDT tombstone / GC compaction.** Yjs keeps tombstones for deleted content; on long-lived boards this grows unboundedly (a headline risk — see [§6](#6-potential-issues-challenges--open-questions)). We run Yjs GC, and snapshot-compaction in the DO discards superseded log entries so the resident doc stays proportional to _live_ content, not total historical edits.
-- **Capped undo history.** The undo/redo stack (`Y.UndoManager`) is capped (depth + age) so an 8-hour session does not accumulate unbounded undo state in every client.
+- **Capped undo history.** The undo/redo stack (`Y.UndoManager`) is capped (depth + age) so an 8-hour session does not accumulate unbounded undo state in every client. Undo history is **per-session and in-memory** — it is cleared on reload/reconnect (the persisted Yjs doc is unaffected); we never replay it from storage.
 - **Three.js disposal.** Geometries, materials, and textures created for VR are explicitly `.dispose()`d when objects leave the viewport rect or when LOD tiers swap; the texture/canvas pool (§2.2) bounds allocation. We assert on a leaked-resource counter in dev builds.
 - **Konva node lifecycle.** Virtualized-out shapes destroy their Konva nodes (not just hide them) so off-screen content costs zero GPU/DOM.
 
@@ -159,7 +159,7 @@ Coboard is **anonymous-first and public-by-link** ([01](./01-product-vision-and-
 
 ### 4.2 Access control & room secrecy
 
-- **Room-id entropy.** Room ids are ≥ 128 bits of CSPRNG entropy, URL-safe — unguessable, so "secret link" is a meaningful (if soft) access boundary. Ids are never sequential.
+- **Room-id entropy.** The canonical **room id in the share URL** is high-entropy CSPRNG (**~128-bit class**, e.g. `nanoid(21)`), URL-safe and never sequential — the unguessable capability, so a "secret link" is a meaningful (if soft) access boundary. The short human **join code** ([04 §8](./04-technical-architecture.md)) is a separate **lower-entropy alias** (resolved via the D1 index) for typing on a headset/phone; it is **rate-limited and rotatable**, never the access boundary itself.
 - **Optional passcode.** A room can carry an optional passcode; the DO refuses `join` without it. Passcodes are checked server-side in the DO, never trusted from the client.
 - **Capability URLs.** The link _is_ the capability ("anyone with the link can edit"). We design for capability degradation later — **view-only vs edit capability tokens** in the URL fragment, distinct caps for the same room — without breaking the anonymous-first default.
 - **Authz path to named accounts.** Anonymous edit is the default; the model is built so **named accounts and per-room roles (owner/editor/viewer)** can be layered on later ([02](./02-features-and-scope.md)) without re-architecting — the DO already mediates every join and is the natural policy enforcement point.
@@ -208,7 +208,7 @@ Coboard is **anonymous-first and public-by-link** ([01](./01-product-vision-and-
 
 ### 4.10 Security checklist
 
-- [ ] Room ids ≥ 128-bit CSPRNG, URL-safe, non-sequential
+- [ ] Canonical room id high-entropy CSPRNG (~128-bit class), URL-safe, non-sequential; short join code is a rate-limited, rotatable alias
 - [ ] Optional passcode enforced server-side in the DO
 - [ ] Capability-URL model (view vs edit) designed in
 - [ ] Sticky/text rendered as text, never HTML, on the live board
@@ -269,7 +269,7 @@ VR accessibility follows spatial-UX + XAUR guidance (finding 3 + 4):
 
 ### 5.5 Tooling & process
 
-- **Automated:** `axe-core` runs in Playwright E2E ([06](./06-implementation-roadmap.md)) and fails CI on violations; ESLint a11y plugins on JSX.
+- **Automated:** `axe-core` runs in Playwright E2E ([06](./06-implementation-roadmap.md)) and fails CI on violations; ESLint a11y plugins on JSX (if React is used for panels — React is **optional**, not part of the canonical renderer stack; see [04 §9](./04-technical-architecture.md)).
 - **Manual:** a periodic **screen-reader pass** (VoiceOver/NVDA) over create/select/move/connect + presence announcements, and a keyboard-only pass, are part of release sign-off. Automated tools catch ~30–40%; the manual passes catch the canvas-mirror correctness that tools can't.
 
 ### 5.6 Accessibility checklist

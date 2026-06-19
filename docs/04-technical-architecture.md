@@ -64,7 +64,7 @@ flowchart TB
 |---|---|---|
 | `objects` | `Y.Map<Y.Map>` | All board objects keyed by `id` (the content store). |
 | `zorder` | `Y.Array<string>` | Render order: array of object `id`s, front-to-back. |
-| `meta` | `Y.Map` | Board metadata: `name`, `createdAt`, `schemaVersion`, `background`, `defaultBounds`. |
+| `meta` | `Y.Map` | Board metadata: `name`, `createdAt`, `schemaVersion`, `background` (board surface style — `dot-grid` default, `blank`, or a solid color), `defaultBounds` (optional `{x,y,w,h}` hint used to frame zoom-to-fit / the initial view on a new or empty room). |
 | `assets` | `Y.Map<Y.Map>` | Asset references (R2 keys) keyed by `assetId`. |
 
 Each object is a nested `Y.Map` (so that concurrent edits to different fields of the same object merge rather than clobber). Stroke point arrays use `Y.Array` so additive freehand drawing converges without conflict.
@@ -85,7 +85,9 @@ interface BaseObject {
   rotation: number;    // radians, about object center
   z: number;           // fractional z-rank (see §2.4); mirrors zorder
   style: Style;        // see below
-  authorId: string;    // awareness/client id of creator (anonymous)
+  authorId: string;    // stable per-room author token (client-generated, persisted in localStorage);
+                       // survives reload so attribution / sort-by-author stays stable — NOT the
+                       // ephemeral awareness id (§3.1)
   createdAt: number;   // epoch ms
   updatedAt: number;   // epoch ms
 }
@@ -138,7 +140,8 @@ Presence uses **`y-protocols/awareness`** — a separate, **ephemeral** state ch
 ```ts
 interface AwarenessState {
   // identity (set once on join)
-  id: string;            // client id (matches authorId)
+  id: string;            // ephemeral connection/awareness id (changes every session/reload)
+  authorId: string;      // stable per-room author token (matches objects' authorId, §2.2)
   name: string;          // "Wandering Otter" (random) or chosen name
   color: string;         // assigned label/cursor color
   tool: string;          // 'pen' | 'select' | 'sticky' | ... (current tool)
@@ -179,6 +182,8 @@ type Pose = { p: Vec3; q: [number, number, number, number] }; // position + quat
 | Viewport rect (2D pan/zoom **and** VR board-panel rect) | On change, debounced ~150 ms (it changes far less often than a cursor) | Latest `{x,y,w,h}` replaces previous. VR clients publish their board-panel viewport rect alongside the `xr` head/hands/laser poses (same coalesced tick) so follow/spotlight and off-screen edge indicators work identically across 2D and VR. |
 
 All awareness updates for a peer are **coalesced into a single `setLocalState` call per animation frame** and emitted as **one binary update**, so the worst case is ~30 inbound messages/sec/user regardless of how many fields changed. This is the core lever for staying inside the **20:1 inbound-WS billing rule** (see [05](./05-scaling-and-cost.md)). Awareness deltas are binary-encoded by `y-protocols`, not JSON.
+
+> **Canonical presence-rate budget (referenced package-wide).** "~20–30 Hz" across these docs means **target ~20 Hz, hard ceiling 30 Hz** (the testable cap in [02](./02-features-and-scope.md)); [05](./05-scaling-and-cost.md) cost-models a conservative **15 msg/s** per active drawer. These are one budget — target / ceiling / cost-model point — not three competing numbers.
 
 > **Invariant:** cursors and VR poses are awareness only. They are never persisted and never count as Yjs document history.
 
@@ -292,7 +297,7 @@ The per-upload size cap is **configurable; 30 MB by default** — a **product ch
 
 ### 5.3 Optional D1 room index
 
-A single D1 table `rooms(id PK, createdAt, lastSeenAt, objectCount, passcodeHash NULL)` supports a "your recent rooms" list, abuse throttling, and TTL cleanup of dead rooms. It is **optional** — Coboard functions with rooms addressed purely by URL; D1 is a convenience/index, never the source of truth.
+A single D1 table `rooms(id PK, code UNIQUE NULL, createdAt, lastSeenAt, objectCount, passcodeHash NULL)` supports a "your recent rooms" list, **short join-code → room-id alias resolution (§8)**, abuse throttling, and TTL cleanup of dead rooms. It is **optional** — Coboard functions with rooms addressed purely by URL; D1 is a convenience/index, never the source of truth.
 
 ### 5.4 partysub escape hatch
 
@@ -302,7 +307,7 @@ For a room exceeding a single DO's comfortable connection/broadcast zone (~a few
 
 ## 6. VR Architecture
 
-The VR client renders the **same Yjs document** — there is no separate sync path. A-Frame (declarative WebXR over Three.js) provides the scene, controllers, and headset integration; our networking is **not** networked-aframe's transport — we **adapt NAF's avatar/laser patterns but drive them from our Yjs + awareness layer** so 2D and VR share one source of truth.
+The VR client renders the **same Yjs document** — there is no separate sync path. A-Frame (declarative WebXR over Three.js) provides the scene, controllers, and headset integration; our networking is **not** networked-aframe's transport — we **adapt NAF's avatar/laser patterns but drive them from our Yjs + awareness layer** so 2D and VR share one source of truth. Both clients implement a single shared **`Renderer` interface** — `bind(doc, viewport)` → pixels/geometry — so app, tools, selection, undo, and presence logic stay renderer-agnostic and the two realities cannot diverge by construction (its maintainability role is detailed in [07 §3.3](./07-engineering-quality-security-accessibility.md)).
 
 ### 6.0 Session entry — the VR toggle and the 2D ↔ WebVR transition
 
@@ -450,7 +455,7 @@ This is powered entirely by the ephemeral `viewport` + `cursor` + `xr` awareness
 
 | Concern | Mitigation |
 |---|---|
-| Room guessability | Room ids are `nanoid(10)` from a 64-char alphabet (~60 bits entropy) — unguessable, share-by-link like the reference product. |
+| Room guessability | The **share URL carries a high-entropy room id** — CSPRNG, URL-safe, ~128-bit class (e.g. `nanoid(21)`), never sequential — so a "secret link" is a meaningful (if soft) access boundary. The short, human-typable **join code** shown in the UI (e.g. `K3F9-Q2`, disambiguated alphabet) is a separate **alias** resolved to the room id via the D1 index (§5.3) for joining from a headset/phone; being low-entropy it is **rate-limited and rotatable** ("new code" in the share sheet) and is **never** the security boundary. Consistent with [07 §4.2](./07-engineering-quality-security-accessibility.md). |
 | Private rooms | Optional **passcode**: `passcodeHash` (PBKDF2/Argon2-lite) stored in D1; the Worker gates the WS upgrade, rejecting before the DO is touched. |
 | Message flooding | Per-connection **rate limiting in the DO**: token bucket on inbound messages (e.g. cap ~60 msg/s/conn — above the 30 Hz design rate, below abuse); offenders are throttled then disconnected. Protects both stability and the request budget. |
 | Oversized payloads | Hard **input caps**: reject WS frames near the **32 MiB** limit; cap per-object size (e.g. stroke points length), sticky/text length, and uploads (**configurable; 30 MB default** — a product choice matching common whiteboard limits, not an R2/Cloudflare constraint — validated at the signed-URL Worker before R2; consistent with [02](./02-features-and-scope.md)). |
@@ -586,7 +591,7 @@ coboard/
 ├─ package.json                  # root scripts (dev, build, test, deploy)
 ├─ tsconfig.base.json
 ├─ README.md                     # → ./README.md (doc map)
-├─ docs/                         # 01..06 (this doc = 04)
+├─ docs/                         # 01..07 + adr/ (this doc = 04)
 ├─ packages/
 │  ├─ shared/                    # framework-agnostic core
 │  │  ├─ src/

@@ -247,7 +247,7 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 ### 2.12 Sticky Sort *(Could)*
 
 - **Story:** As a facilitator I want to auto-arrange sticky notes by color/author/reaction so that I can cluster ideas fast.
-- Sort reorganizes sticky positions by a chosen key (color, author, reaction count); the rearrangement is a normal undoable batch of Yjs updates.
+- Sort reorganizes sticky positions by a chosen key (color, author, reaction count); "by author" uses the **stable per-room author token** ([04 §2.2](./04-technical-architecture.md)), not the ephemeral connection id, so it survives reload. The rearrangement is a normal undoable batch of Yjs updates.
 - Sort is non-destructive to sticky content (only positions change).
 - Result is consistent across all clients.
 

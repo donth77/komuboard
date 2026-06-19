@@ -8,9 +8,9 @@
 
 ## 0. North star for this document
 
-Coboard's hard constraint (see [Foundation Brief](./01-product-vision-and-references.md)): **hostable AND runnable for $0 on free tiers, at meaningful concurrency.** This document derives a defensible headline number — **roughly 1,000–2,000 sustained concurrent collaborators across many rooms per Cloudflare account per day for $0** — and shows the arithmetic, the assumptions, and the levers that move it.
+Coboard's hard constraint (see [01 — Product Vision & References](./01-product-vision-and-references.md)): **hostable AND runnable for $0 on free tiers, at meaningful concurrency.** This document derives a defensible headline number — **~450 sustained concurrent collaborators under a balanced (~50%-active-editor) mix, scaling to ~1,000–2,000 under a realistic viewer-heavy mix, across many rooms per Cloudflare account per day for $0** (see §3.2) — and shows the arithmetic, the assumptions, and the levers that move it.
 
-> ⚠️ **All figures change.** Every number below is a snapshot for design purposes and **must be re-verified against current Cloudflare documentation before launch.** Cloudflare adjusts free allotments, billing ratios, and limits regularly (the WS size limit and SQLite-DO storage billing both changed in late 2025 / Jan 2026). Treat this doc as a model, not a contract. Primary sources to check:
+> ⚠️ **All figures change.** _(Figures in this doc are current as of June 2026.)_ Every number below is a snapshot for design purposes and **must be re-verified against current Cloudflare documentation before launch.** Cloudflare adjusts free allotments, billing ratios, and limits regularly (the WS size limit and SQLite-DO storage billing both changed in late 2025 / Jan 2026). Treat this doc as a model, not a contract. Primary sources to check:
 > - Workers limits & pricing: <https://developers.cloudflare.com/workers/platform/limits/> · <https://developers.cloudflare.com/workers/platform/pricing/>
 > - Durable Objects limits & pricing: <https://developers.cloudflare.com/durable-objects/platform/limits/> · <https://developers.cloudflare.com/durable-objects/platform/pricing/>
 > - WebSocket Hibernation API: <https://developers.cloudflare.com/durable-objects/api/websockets/>
@@ -73,7 +73,7 @@ We split user activity into two send-rate classes (content edits + awareness/cur
 | **Light editor** | Occasional sticky/shape edit, intermittent cursor motion | ~2 | ~120 |
 | **Idle viewer** | Watching, mostly still cursor | ~0.1 (hibernation keepalive ≈ free) | ~6 |
 
-We model with a **conservative active-drawer rate of 15 msg/s = 900 msg/min** as the worst-case sustained sender.
+We model with a **conservative active-drawer rate of 15 msg/s = 900 msg/min** as the worst-case sustained sender — the cost-model point of the canonical presence-rate budget (target ~20 Hz / ceiling 30 Hz; see [04 §3.2](./04-technical-architecture.md)).
 
 ---
 
@@ -106,7 +106,7 @@ per active-drawer-session                        ≈ 13,590 inbound msgs  (≈ 1
 | **100-person workshop** (1 session) | 25 | 50 | 25 | `25×13.5k + 50×1.8k + 25×0.18k = 337.5k + 90k + 4.5k ≈ 432k` | ✅ ~22% of budget |
 | **Whole-day classroom usage** (the 30-person room, 6 sessions back-to-back) | 8×6 | 12×6 | 10×6 | `6 × 131k ≈ 786k` | ✅ ~39% of budget |
 | **Many small rooms in parallel** (50 rooms × ~4 active + 6 viewers each, 1 session) | 200 | 0 | 300 | `200×13.5k + 300×0.18k = 2.70M + 54k ≈ 2.75M` | ⚠️ ~138% — **over** budget |
-| **Tuned small-room fleet** (same 500 people, but cursor coalesced harder to ~8 msg/s active + 30% duty) | 200 | 0 | 300 | `200×(30×0.30×480) + 54k = 200×2.16k + 54k ≈ 486k` | ✅ ~24% of budget |
+| **Tuned small-room fleet** (same 500 people, but cursor coalesced harder to ~4 msg/s active + 30% duty) | 200 | 0 | 300 | `200×(30×0.30×240) + 54k = 200×2.16k + 54k ≈ 486k` | ✅ ~24% of budget |
 
 ### 3.2 Headline numbers
 
@@ -155,7 +155,7 @@ When a *single* room exceeds the single-DO comfort zone, **partysub** backs one 
 
 ```mermaid
 flowchart TB
-  subgraph Logical Room "design-review"
+  subgraph logicalRoom["Logical room — design-review"]
     direction TB
     H[Coordinator / topic router]
     S1[Shard DO #1<br/>~150 conns]

@@ -667,6 +667,7 @@ Coboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaning
 
 - **QR code** is the fast path to get a phone or a VR headset into the room (open URL → Enter VR). The link and code are both copyable; "Copied!" is announced politely to screen readers.
 - Default access is **open edit, anonymous** (matches the no-signup reference model). Optional named accounts / private boards are a later, opt-in capability (see [02](./02-features-and-scope.md), [04 Auth](./04-technical-architecture.md)) — when present, the sheet gains access controls (view/edit, "named users only").
+- **Link vs. join code.** The **link** carries the full-entropy room id (the capability); the **room code** (`K3F9-Q2`) is a short, typable **join alias** for headsets/phones — rate-limited and rotatable (the `⟳` "new code" action), never the security boundary itself. See [04 §8](./04-technical-architecture.md) / [07 §4.2](./07-engineering-quality-security-accessibility.md).
 - Joining via a link/QR places the new participant at a sensible viewport (zoom-to-fit content, or the inviter's view if they're spotlighting), with a join toast for everyone.
 
 ---
