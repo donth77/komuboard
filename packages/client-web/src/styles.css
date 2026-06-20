@@ -1504,13 +1504,6 @@ input[type="range"] {
 .sm-label {
   flex: 1;
 }
-.sm-key {
-  color: var(--muted, #6b7280);
-  font-size: 13px;
-}
-.sm-item.on .sm-key {
-  color: var(--accent, #3b6ff6);
-}
 /* a divider above the first shape (separates the lines/arrows group from the shapes group) */
 .sm-item.sm-sep {
   margin-top: 7px;
@@ -2154,6 +2147,72 @@ input[type="range"] {
   border-radius: 3px;
   background: #ffec99;
   border: 1px solid rgba(0, 0, 0, 0.12);
+}
+/* ── Shape-mode controls — only visible when the bar edits a shape (.shape-mode on the root) ──── */
+.co-text-bar .ctb-shape-only {
+  display: none;
+}
+.co-text-bar.shape-mode .ctb-shape-only {
+  display: inline-flex;
+}
+.co-text-bar .ctb-shape-kind,
+.co-text-bar .ctb-fill,
+.co-text-bar .ctb-align {
+  gap: 3px;
+}
+.co-text-bar .ctb-shape-ico,
+.co-text-bar .ctb-align-ico {
+  display: inline-flex;
+}
+.co-text-bar .ctb-shape-ico svg,
+.co-text-bar .ctb-align-ico svg {
+  width: 20px;
+  height: 20px;
+}
+.co-text-bar .ctb-fill-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid rgba(0, 0, 0, 0.22);
+}
+/* shape-kind + alignment option grids (popovers) */
+.ctb-shape-pop {
+  flex-direction: row;
+  gap: 2px;
+  padding: 5px;
+}
+.ctb-align-pop {
+  flex-direction: row;
+  gap: 2px;
+  padding: 5px;
+}
+.ctb-shape-opt,
+.ctb-align-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink, #0e1116);
+  cursor: pointer;
+}
+.ctb-shape-opt svg,
+.ctb-align-opt svg {
+  width: 22px;
+  height: 22px;
+}
+.ctb-shape-opt:hover,
+.ctb-align-opt:hover {
+  background: var(--surface-2, #f1f3f5);
+}
+.ctb-shape-opt.on,
+.ctb-align-opt.on {
+  background: color-mix(in srgb, var(--accent, #3b6ff6) 16%, transparent);
+  color: var(--accent, #3b6ff6);
 }
 .ctb-pop {
   position: fixed;

@@ -13,35 +13,38 @@ export type ShapeChoice =
   | "triangle"
   | "divider";
 
-function smIco(path: string): string {
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="sm-ico">${path}</svg>`;
+/** Wrap inner SVG markup in a styled <svg>. `inner` is the full element(s) — paths included. */
+function smIco(inner: string): string {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="sm-ico">${inner}</svg>`;
 }
 
 interface Item {
   kind: ShapeChoice;
   label: string;
-  key?: string;
   svg: string;
   /** Draw a divider above this item (separates the lines/arrows group from the shapes group). */
   sep?: boolean;
 }
 
 const ITEMS: readonly Item[] = [
-  { kind: "line", label: "Line", key: "L", svg: "M5 19 19 5" },
-  { kind: "arrow", label: "Arrow", svg: "M5 19 18 6M11.5 6H18v6.5" },
-  { kind: "elbow", label: "Elbow arrow", svg: "M6 4v8a3 3 0 0 0 3 3h6M13 12l4 3-4 3" },
-  { kind: "block", label: "Block arrow", svg: "M4 20 13 11M10.5 6.5 18 5l-1.5 7.5z" },
+  { kind: "line", label: "Line", svg: '<path d="M5 19 19 5"/>' },
+  { kind: "arrow", label: "Arrow", svg: '<path d="M5 19 18 6M11.5 6H18v6.5"/>' },
+  { kind: "elbow", label: "Elbow arrow", svg: '<path d="M6 4v8a3 3 0 0 0 3 3h6M13 12l4 3-4 3"/>' },
+  {
+    kind: "block",
+    label: "Block arrow",
+    svg: '<path d="m4 20 9.5-9.5"/><path d="M9.5 6.5 18 5l-1.5 8.5z"/>',
+  },
   {
     kind: "rectangle",
     label: "Rectangle",
-    key: "R",
     sep: true,
     svg: '<rect x="4" y="6" width="16" height="12" rx="1.5"/>',
   },
-  { kind: "ellipse", label: "Oval", key: "O", svg: '<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>' },
-  { kind: "rhombus", label: "Rhombus", svg: "M12 4 20 12 12 20 4 12z" },
-  { kind: "triangle", label: "Triangle", svg: "M12 5 20 19H4z" },
-  { kind: "divider", label: "Divider", svg: "M4 12h16" },
+  { kind: "ellipse", label: "Oval", svg: '<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>' },
+  { kind: "rhombus", label: "Rhombus", svg: '<path d="M12 4 20 12 12 20 4 12z"/>' },
+  { kind: "triangle", label: "Triangle", svg: '<path d="M12 5 20 19H4z"/>' },
+  { kind: "divider", label: "Divider", svg: '<path d="M4 12h16"/>' },
 ];
 
 export class CoShapeMenu extends HTMLElement {
@@ -59,7 +62,6 @@ export class CoShapeMenu extends HTMLElement {
         `<button class="sm-item${it.sep ? " sm-sep" : ""}" type="button" role="menuitemradio" data-kind="${it.kind}">` +
         smIco(it.svg) +
         `<span class="sm-label">${it.label}</span>` +
-        `<span class="sm-key">${it.key ?? ""}</span>` +
         "</button>",
     ).join("");
     this.#sync();

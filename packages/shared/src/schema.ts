@@ -120,8 +120,8 @@ export const DEFAULT_STICKY_SIZE = 300;
 
 /** Shape boxes: default fill (white) + default size when click-placed rather than drag-sized. */
 export const DEFAULT_SHAPE_FILL = "#ffffff";
-export const DEFAULT_SHAPE_W = 200;
-export const DEFAULT_SHAPE_H = 120;
+export const DEFAULT_SHAPE_W = 280;
+export const DEFAULT_SHAPE_H = 200;
 const SHAPE_KINDS: readonly string[] = ["rectangle", "ellipse", "rhombus", "triangle", "divider"];
 
 export function objectsMap(doc: Y.Doc): Y.Map<Y.Map<unknown>> {

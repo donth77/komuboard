@@ -271,6 +271,9 @@ export class TextLayer {
         this.scheduleEditBroadcast(); // peers see the mark live
         this.reflectBar();
       },
+      setShapeKind: (kind) => this.setEditShape(kind),
+      setFill: (color) => this.setEditFill(color),
+      setAlign: (align) => this.setEditBlock({ align }),
     });
     this.render();
   }
@@ -515,18 +518,23 @@ export class TextLayer {
     this.scheduleEditBroadcast(); // peers see the recolour live
   }
 
-  // ---- placement ghost (a translucent sticky that tracks the cursor before you drop it) ----
-  /** Show/move a translucent placement preview of a sticky note, centred on the world point. */
-  showStickyGhost(world: { x: number; y: number }, color: string): void {
-    if (this.edit) return this.hideStickyGhost(); // a note is open → no ghost
+  // ---- placement ghost (a translucent preview that tracks the cursor before you drop a box) ----
+  private ensureGhost(): HTMLElement {
     let g = this.stickyGhost;
     if (!g) {
       g = document.createElement("div");
-      g.className = "co-text sticky co-text-ghost";
       this.root.appendChild(g);
       this.stickyGhost = g;
     }
+    return g;
+  }
+  /** Show/move a translucent placement preview of a sticky note, centred on the world point. */
+  showStickyGhost(world: { x: number; y: number }, color: string): void {
+    if (this.edit) return this.hideStickyGhost(); // a note is open → no ghost
+    const g = this.ensureGhost();
+    g.className = "co-text sticky co-text-ghost";
     g.style.background = color;
+    g.style.backgroundImage = "";
     this.layout(
       g,
       world.x - DEFAULT_STICKY_SIZE / 2,
@@ -535,6 +543,26 @@ export class TextLayer {
       DEFAULT_TEXT_SIZE,
       DEFAULT_TEXT_FONT,
       "center",
+    );
+  }
+  /** Show/move a translucent placement preview of a shape, centred on the world point. */
+  showShapeGhost(world: { x: number; y: number }, kind: ShapeKind, fill: string): void {
+    if (this.edit) return this.hideStickyGhost();
+    const g = this.ensureGhost();
+    g.className = "co-text co-text-ghost";
+    g.textContent = "";
+    this.applyShape(g, kind, fill);
+    const w = DEFAULT_SHAPE_W;
+    const h = kind === "divider" ? 8 : DEFAULT_SHAPE_H;
+    this.layout(
+      g,
+      world.x - w / 2,
+      world.y - h / 2,
+      w,
+      DEFAULT_TEXT_SIZE,
+      DEFAULT_TEXT_FONT,
+      "center",
+      h,
     );
   }
   hideStickyGhost(): void {
@@ -823,13 +851,39 @@ export class TextLayer {
     if (p.fontFamily != null) e.fontFamily = p.fontFamily;
     if (p.fontSize != null) e.fontSize = p.fontSize;
     if (p.align != null) e.align = p.align;
-    this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align);
-    // Re-centre on the same point (top y unchanged) so the box grows symmetrically and the toolbar —
-    // positioned from the box's top + centre — stays put while you click through sizes.
-    e.x = centerX - e.el.offsetWidth / cam.scale / 2;
-    this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align);
+    this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align, e.height);
+    // A shape is a fixed width×height card — don't re-centre it (only auto-grown text needs that).
+    if (e.shape == null) {
+      // Re-centre on the same point (top y unchanged) so the box grows symmetrically and the toolbar —
+      // positioned from the box's top + centre — stays put while you click through sizes.
+      e.x = centerX - e.el.offsetWidth / cam.scale / 2;
+      this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align);
+    }
     this.positionBar();
     this.scheduleEditBroadcast(); // peers see the block change live
+    this.reflectBar();
+  }
+
+  /** Shape mode: change the kind of the shape being edited (re-paints its outline live). */
+  private setEditShape(kind: ShapeKind): void {
+    const e = this.edit;
+    if (!e || e.shape == null) return;
+    e.shape = kind;
+    if (kind === "divider" && (e.height ?? 0) > 16) e.height = 8; // a divider is a thin rule
+    this.applyShape(e.el, kind, e.bg);
+    this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align, e.height);
+    this.positionBar();
+    this.scheduleEditBroadcast();
+    this.reflectBar();
+  }
+
+  /** Shape mode: change the fill colour of the shape being edited. */
+  private setEditFill(color: string): void {
+    const e = this.edit;
+    if (!e || e.shape == null) return;
+    e.bg = color;
+    this.applyShape(e.el, e.shape, color);
+    this.scheduleEditBroadcast();
     this.reflectBar();
   }
 
@@ -852,7 +906,7 @@ export class TextLayer {
   }
   private barState(): TextBarState {
     const e = this.edit;
-    return {
+    const state: TextBarState = {
       bold: document.queryCommandState("bold"),
       italic: document.queryCommandState("italic"),
       underline: document.queryCommandState("underline"),
@@ -862,6 +916,13 @@ export class TextLayer {
       fontSize: e?.fontSize ?? DEFAULT_TEXT_SIZE,
       color: document.queryCommandValue("foreColor") || INK,
     };
+    // Shape mode adds the shape kind / fill / alignment so the bar can show its extra controls.
+    if (e?.shape != null) {
+      state.shape = e.shape;
+      state.fill = e.bg ?? "#ffffff";
+      state.align = e.align;
+    }
+    return state;
   }
 
   // ---- selection + move (the select tool drives these; text has its own chrome, not the
@@ -970,6 +1031,7 @@ export class TextLayer {
         obj.fontSize,
         obj.fontFamily,
         obj.align,
+        obj.height, // keep a shape's fixed height while moving (else it collapses then snaps back)
       );
     }
     this.updateResizeChrome(); // keep the handles glued to the box while it moves

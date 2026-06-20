@@ -13,6 +13,7 @@ import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
 import { COLOR_NAMES } from "./draw-bar";
 import { SWATCHES } from "./palette";
+import type { ShapeKind, TextAlign } from "@coboard/shared";
 
 export interface TextBarHost {
   setFontFamily(css: string): void;
@@ -20,6 +21,10 @@ export interface TextBarHost {
   toggleBullets(): void;
   /** A mark changed via execCommand → TextLayer re-measures/broadcasts + re-reflects. */
   onFormat(): void;
+  /** Shape-mode controls (only used when the box being edited is a shape). */
+  setShapeKind(kind: ShapeKind): void;
+  setFill(color: string): void;
+  setAlign(align: TextAlign): void;
 }
 
 export interface TextBarState {
@@ -31,7 +36,15 @@ export interface TextBarState {
   fontFamily: string;
   fontSize: number;
   color: string;
+  /** When set, the bar enters shape mode (adds shape-select / fill / align controls). */
+  shape?: ShapeKind;
+  /** Current shape fill + text alignment (shape mode). */
+  fill?: string;
+  align?: TextAlign;
 }
+
+/** Which colour a colour popover/picker drives: text fore-colour, highlight, or a shape's fill. */
+type ColorKind = "fore" | "hilite" | "fill";
 
 interface FontOption {
   label: string;
@@ -82,6 +95,28 @@ const SVG = {
   // "type"/text-style glyph for the mobile marks group toggle (a serif capital T).
   type: '<path d="M4.5 5.5h11"/><path d="M10 5.5v9.5"/><path d="M8 15h4"/>',
 };
+// Shape glyphs for the shape-select control + its popover (drawable shapes only).
+const SHAPE_SVG: Record<ShapeKind, string> = {
+  rectangle: '<rect x="3.5" y="5" width="13" height="10" rx="1.2"/>',
+  ellipse: '<ellipse cx="10" cy="10" rx="7" ry="5.5"/>',
+  rhombus: '<path d="M10 3 17 10 10 17 3 10z"/>',
+  triangle: '<path d="M10 4 17 16H3z"/>',
+  divider: '<path d="M3 10h14"/>',
+};
+const SHAPE_NAMES: Record<ShapeKind, string> = {
+  rectangle: "Rectangle",
+  ellipse: "Oval",
+  rhombus: "Rhombus",
+  triangle: "Triangle",
+  divider: "Divider",
+};
+const SHAPE_ORDER: ShapeKind[] = ["rectangle", "ellipse", "rhombus", "triangle", "divider"];
+// Text-alignment glyphs (left / center / right).
+const ALIGN_SVG: Record<TextAlign, string> = {
+  left: '<path d="M4 5.5h12M4 10h8M4 14.5h11"/>',
+  center: '<path d="M4 5.5h12M6 10h8M5 14.5h10"/>',
+  right: '<path d="M4 5.5h12M8 10h8M5 14.5h11"/>',
+};
 function ico(path: string): string {
   return `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 }
@@ -104,7 +139,7 @@ export class TextBar {
   private readonly sizeLabel: HTMLElement;
   private state: TextBarState | null = null;
   private picker: CoColorPicker | null = null;
-  private pickerKind: "fore" | "hilite" = "fore";
+  private pickerKind: ColorKind = "fore";
   private pickerRange: Range | null = null;
   /** Close the custom picker when clicking anywhere outside it + the toolbar. */
   private readonly onDocDown = (e: PointerEvent): void => {
@@ -124,6 +159,10 @@ export class TextBar {
     el.className = "co-text-bar";
     el.style.display = "none";
     el.innerHTML =
+      // Shape-only leading controls: shape-select + fill colour (shown only in shape mode).
+      `<button class="ctb-btn ctb-shape-only ctb-shape-kind" data-act="shape-kind" data-tip="Shape"><span class="ctb-shape-ico">${ico(SHAPE_SVG.rectangle)}</span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-btn ctb-shape-only ctb-fill" data-act="fill" data-tip="Fill color"><span class="ctb-fill-dot" data-fill></span><span class="ctb-caret">▾</span></button>` +
+      `<span class="ctb-sep ctb-shape-only"></span>` +
       `<button class="ctb-text" data-act="font" data-tip="Font"><span class="ctb-font-label">Sans</span><span class="ctb-caret">▾</span></button>` +
       `<button class="ctb-text" data-act="size" data-tip="Font size"><span class="ctb-size-label">Large</span><span class="ctb-caret">▾</span></button>` +
       `<span class="ctb-sep"></span>` +
@@ -143,7 +182,10 @@ export class TextBar {
       `<button class="ctb-btn" data-act="link" data-tip="Link">${ico(SVG.link)}</button>` +
       `<span class="ctb-sep"></span>` +
       `<button class="ctb-btn ctb-color" data-act="color" data-tip="Text color"><span class="ctb-a">A</span><span class="ctb-underbar" data-swatch></span></button>` +
-      `<button class="ctb-btn ctb-hl" data-act="highlight" data-tip="Highlight"><span class="ctb-hl-box" data-hlswatch></span></button>`;
+      `<button class="ctb-btn ctb-hl" data-act="highlight" data-tip="Highlight"><span class="ctb-hl-box" data-hlswatch></span></button>` +
+      // Shape-only trailing control: text alignment (matters for shapes' centred labels).
+      `<span class="ctb-sep ctb-shape-only"></span>` +
+      `<button class="ctb-btn ctb-shape-only ctb-align" data-act="align" data-tip="Alignment"><span class="ctb-align-ico">${ico(ALIGN_SVG.center)}</span><span class="ctb-caret">▾</span></button>`;
     document.body.appendChild(el);
     this.root = el;
     this.fontLabel = el.querySelector(".ctb-font-label") as HTMLElement;
@@ -175,6 +217,12 @@ export class TextBar {
           return this.openColorPop(btn, "fore");
         case "highlight":
           return this.openColorPop(btn, "hilite");
+        case "shape-kind":
+          return this.openShapePop(btn);
+        case "fill":
+          return this.openColorPop(btn, "fill");
+        case "align":
+          return this.openAlignPop(btn);
       }
     });
   }
@@ -194,7 +242,12 @@ export class TextBar {
     this.host.onFormat();
   }
 
-  private applyColor(kind: "fore" | "hilite", hex: string, savedRange?: Range): void {
+  private applyColor(kind: ColorKind, hex: string, savedRange?: Range): void {
+    if (kind === "fill") {
+      // Shape fill is a block prop (no execCommand / selection) — route straight to the host.
+      this.host.setFill(hex || "#ffffff");
+      return;
+    }
     this.editor?.focus();
     if (savedRange) {
       const s = window.getSelection();
@@ -208,17 +261,23 @@ export class TextBar {
   }
 
   /** Colour popover matching the draw tool: the shared swatches (.sw) + a custom-colour picker. */
-  private openColorPop(anchor: HTMLElement, kind: "fore" | "hilite"): void {
-    const id = kind === "fore" ? "color" : "highlight";
+  private openColorPop(anchor: HTMLElement, kind: ColorKind): void {
+    const id = kind === "fore" ? "color" : kind === "fill" ? "fill" : "highlight";
     if (this.pop?.dataset.for === id) {
       this.closePop();
       return;
     }
     this.closePop();
-    const colors = kind === "fore" ? SWATCHES : HIGHLIGHTS;
-    const names = kind === "fore" ? COLOR_NAMES : HIGHLIGHT_NAMES;
-    // Ring the active swatch (like the draw tool). Only foreground has a tracked current colour.
-    const cur = kind === "fore" ? (this.state?.color || "").toLowerCase() : "";
+    const colors = kind === "hilite" ? HIGHLIGHTS : SWATCHES; // fore + fill share the full palette
+    const names = kind === "hilite" ? HIGHLIGHT_NAMES : COLOR_NAMES;
+    // Ring the active swatch. Foreground tracks `color`; fill tracks `fill`; highlight none.
+    const cur =
+      (kind === "fore"
+        ? this.state?.color
+        : kind === "fill"
+          ? this.state?.fill
+          : ""
+      )?.toLowerCase() ?? "";
     const sw = colors
       .map((c) =>
         c
@@ -248,8 +307,71 @@ export class TextBar {
     this.pop = pop;
   }
 
+  /** Shape-kind popover (shape mode): a grid of the drawable shapes; picking changes the box's kind. */
+  private openShapePop(anchor: HTMLElement): void {
+    if (this.pop?.dataset.for === "shape-kind") {
+      this.closePop();
+      return;
+    }
+    this.closePop();
+    const cur = this.state?.shape;
+    const pop = document.createElement("div");
+    pop.className = "ctb-pop ctb-shape-pop";
+    pop.dataset.for = "shape-kind";
+    pop.addEventListener("mousedown", (e) => e.preventDefault());
+    pop.innerHTML = SHAPE_ORDER.map(
+      (k) =>
+        `<button class="ctb-shape-opt${k === cur ? " on" : ""}" type="button" data-kind="${k}" data-tip="${SHAPE_NAMES[k]}">${ico(SHAPE_SVG[k])}</button>`,
+    ).join("");
+    pop.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-kind]");
+      if (!b) return;
+      this.host.setShapeKind(b.getAttribute("data-kind") as ShapeKind);
+      this.closePop();
+    });
+    document.body.appendChild(pop);
+    const ar = anchor.getBoundingClientRect();
+    const pw = pop.offsetWidth || 200;
+    pop.style.left = `${Math.max(8, Math.min(ar.left, window.innerWidth - pw - 8))}px`;
+    pop.style.top = `${ar.bottom + 6}px`;
+    this.pop = pop;
+  }
+
+  /** Alignment popover (shape mode): left / center / right for the shape's label. */
+  private openAlignPop(anchor: HTMLElement): void {
+    if (this.pop?.dataset.for === "align") {
+      this.closePop();
+      return;
+    }
+    this.closePop();
+    const cur = this.state?.align ?? "center";
+    const pop = document.createElement("div");
+    pop.className = "ctb-pop ctb-align-pop";
+    pop.dataset.for = "align";
+    pop.addEventListener("mousedown", (e) => e.preventDefault());
+    const aligns: TextAlign[] = ["left", "center", "right"];
+    pop.innerHTML = aligns
+      .map(
+        (a) =>
+          `<button class="ctb-align-opt${a === cur ? " on" : ""}" type="button" data-align="${a}" data-tip="${a[0]!.toUpperCase() + a.slice(1)}">${ico(ALIGN_SVG[a])}</button>`,
+      )
+      .join("");
+    pop.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-align]");
+      if (!b) return;
+      this.host.setAlign(b.getAttribute("data-align") as TextAlign);
+      this.closePop();
+    });
+    document.body.appendChild(pop);
+    const ar = anchor.getBoundingClientRect();
+    const pw = pop.offsetWidth || 130;
+    pop.style.left = `${Math.max(8, Math.min(ar.left + ar.width / 2 - pw / 2, window.innerWidth - pw - 8))}px`;
+    pop.style.top = `${ar.bottom + 6}px`;
+    this.pop = pop;
+  }
+
   /** The shared <co-color-picker> for an arbitrary colour (reuses the draw tool's picker). */
-  private openPicker(kind: "fore" | "hilite", anchor: HTMLElement): void {
+  private openPicker(kind: ColorKind, anchor: HTMLElement): void {
     const sel = window.getSelection();
     this.pickerRange = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null; // save before focus moves
     this.pickerKind = kind;
@@ -264,7 +386,8 @@ export class TextBar {
         if (s && s.rangeCount) this.pickerRange = s.getRangeAt(0).cloneRange(); // keep the range valid
       });
     }
-    this.picker.value = this.state?.color || "#0e1116";
+    this.picker.value =
+      (this.pickerKind === "fill" ? this.state?.fill : this.state?.color) || "#0e1116";
     this.picker.classList.remove("hidden");
     const r = anchor.getBoundingClientRect();
     const pw = this.picker.offsetWidth || 232;
@@ -553,6 +676,17 @@ export class TextBar {
     this.root.querySelector<HTMLElement>('[data-act="bullet"]')?.classList.toggle("on", s.bullet);
     const sw = this.root.querySelector<HTMLElement>("[data-swatch]");
     if (sw) sw.style.background = s.color || "#0e1116";
+    // Shape mode: toggle the shape-only controls + reflect shape kind / fill / alignment.
+    const isShape = s.shape != null;
+    this.root.classList.toggle("shape-mode", isShape);
+    if (isShape) {
+      const ico2 = this.root.querySelector<HTMLElement>(".ctb-shape-ico");
+      if (ico2 && s.shape) ico2.innerHTML = ico(SHAPE_SVG[s.shape]);
+      const dot = this.root.querySelector<HTMLElement>("[data-fill]");
+      if (dot) dot.style.background = s.fill || "#ffffff";
+      const aico = this.root.querySelector<HTMLElement>(".ctb-align-ico");
+      if (aico) aico.innerHTML = ico(ALIGN_SVG[s.align ?? "center"]);
+    }
   }
   private markBtn(mark: string): HTMLElement | null {
     return this.root.querySelector<HTMLElement>(`[data-mark="${mark}"]`);

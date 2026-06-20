@@ -365,7 +365,7 @@ export class BoardCanvas {
       this.textLayer.commit();
       this.suppressAutoSelect = false;
     }
-    if (tool !== "sticky") this.textLayer.hideStickyGhost(); // ghost only rides with the sticky tool
+    if (tool !== "sticky" && tool !== "shapes") this.textLayer.hideStickyGhost(); // ghost rides the place tools
     this.tool = tool;
     this.stage.draggable(tool === "hand");
     this.stage.container().style.cursor =
@@ -631,6 +631,8 @@ export class BoardCanvas {
       const p = this.point();
       this.publishCursor(p);
       if (this.tool === "sticky") this.textLayer.showStickyGhost(p, this.stickyColor); // placement preview
+      if (this.tool === "shapes")
+        this.textLayer.showShapeGhost(p, this.currentShape, DEFAULT_SHAPE_FILL);
       if (this.tool === "text") {
         // I-beam over an existing text box (click to edit it); the default cursor over empty board.
         this.stage.container().style.cursor = this.textLayer.hitTest(p) ? "text" : CURSOR_URL;
