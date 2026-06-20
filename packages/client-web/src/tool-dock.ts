@@ -29,10 +29,10 @@ export class CoToolDock extends HTMLElement {
     if (this.#wired) return;
     this.#wired = true;
     this.innerHTML = TOOLS.map(([name, key, label, tool]) => {
-      const tip = tool
-        ? `${label} <kbd class="kbd">${key.toUpperCase()}</kbd>`
-        : `${label} <span class="tip-soon">Soon</span>`;
-      return `<button class="tool${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" aria-label="${label}">${icon(name)}<span class="tool-tip">${tip}</span></button>`;
+      // Tooltip uses the body-level singleton (always top-most — never hidden under a submenu;
+      // see tooltip.ts): beside the vertical dock, with the shortcut key as a chip for wired tools.
+      const keyAttr = tool ? ` data-tip-key="${key.toUpperCase()}"` : "";
+      return `<button class="tool${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" data-tip="${label}" data-tip-pos="right"${keyAttr} aria-label="${label}">${icon(name)}</button>`;
     }).join("");
     this.#sync();
     this.addEventListener("click", (e) => {
@@ -54,7 +54,9 @@ export class CoToolDock extends HTMLElement {
 
   #sync(): void {
     for (const b of this.querySelectorAll<HTMLElement>(".tool[data-tool]")) {
-      b.classList.toggle("active", b.getAttribute("data-tool") === this.#active);
+      const on = b.getAttribute("data-tool") === this.#active;
+      b.classList.toggle("active", on);
+      b.classList.toggle("tip-off", on); // the active tool suppresses its own tooltip (you know what it is)
     }
   }
 }

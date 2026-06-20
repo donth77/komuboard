@@ -40,20 +40,44 @@ function place(): void {
   if (!tip || !anchor) return;
   const a = anchor.getBoundingClientRect();
   const t = tip.getBoundingClientRect();
-  let top = a.top - t.height - GAP; // prefer above…
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  // Beside the element (data-tip-pos="right") — for a vertical toolbar, where above/below would
+  // overlap neighbours. Sits to the right, flips left if it'd clip the edge; centred vertically.
+  if (anchor.getAttribute("data-tip-pos") === "right") {
+    let left = a.right + GAP;
+    let sideLeft = false;
+    if (left + t.width > vw - PAD) {
+      left = a.left - t.width - GAP;
+      sideLeft = true;
+    }
+    const centerY = a.top + a.height / 2;
+    const top = Math.max(PAD, Math.min(centerY - t.height / 2, vh - t.height - PAD));
+    const tailY = Math.max(TAIL, Math.min(centerY - top, t.height - TAIL));
+    tip.style.left = `${Math.round(left)}px`;
+    tip.style.top = `${Math.round(top)}px`;
+    tip.style.setProperty("--tail-y", `${Math.round(tailY)}px`);
+    tip.classList.add("side");
+    tip.classList.toggle("side-left", sideLeft);
+    tip.classList.remove("below");
+    return;
+  }
+  // Default: above the element, flipping below near the top edge; centred + clamped horizontally.
+  let top = a.top - t.height - GAP;
   let below = false;
   if (top < PAD) {
     top = a.bottom + GAP; // …flip below when it would clip the top edge
     below = true;
   }
   const centerX = a.left + a.width / 2;
-  const left = Math.max(PAD, Math.min(centerX - t.width / 2, window.innerWidth - t.width - PAD));
+  const left = Math.max(PAD, Math.min(centerX - t.width / 2, vw - t.width - PAD));
   // Tail points at the element's centre, kept on the pill after the edge-clamp above.
   const tailX = Math.max(TAIL, Math.min(centerX - left, t.width - TAIL));
   tip.style.left = `${Math.round(left)}px`;
   tip.style.top = `${Math.round(top)}px`;
   tip.style.setProperty("--tail-x", `${Math.round(tailX)}px`);
   tip.classList.toggle("below", below);
+  tip.classList.remove("side", "side-left");
 }
 
 function show(el: HTMLElement): void {

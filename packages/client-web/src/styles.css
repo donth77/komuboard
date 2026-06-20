@@ -1079,19 +1079,36 @@ input[type="range"] {
 .co-tip::after {
   content: "";
   position: absolute;
-  left: var(--tail-x, 50%);
-  transform: translateX(-50%);
   border: 5px solid transparent;
 }
-.co-tip:not(.below)::after {
-  /* pill sits above the element → tail points down at it */
+.co-tip:not(.below):not(.side)::after {
+  /* pill above the element → tail at the bottom, pointing down */
   top: 100%;
+  left: var(--tail-x, 50%);
+  transform: translateX(-50%);
   border-top-color: #1e1e1e;
 }
 .co-tip.below::after {
-  /* pill sits below the element → tail points up at it */
+  /* pill below the element → tail at the top, pointing up */
   bottom: 100%;
+  left: var(--tail-x, 50%);
+  transform: translateX(-50%);
   border-bottom-color: #1e1e1e;
+}
+.co-tip.side::after {
+  /* pill beside the element (vertical toolbars) → tail centred vertically */
+  top: var(--tail-y, 50%);
+  transform: translateY(-50%);
+}
+.co-tip.side:not(.side-left)::after {
+  /* to the right of the element → tail on the pill's left, pointing left */
+  right: 100%;
+  border-right-color: #1e1e1e;
+}
+.co-tip.side.side-left::after {
+  /* flipped to the left of the element → tail on the pill's right, pointing right */
+  left: 100%;
+  border-left-color: #1e1e1e;
 }
 
 /* ---------- custom colour picker (FigJam-style) ---------- */
@@ -1177,62 +1194,11 @@ input[type="range"] {
   pointer-events: none;
 }
 
-/* ---------- tool dock hover tooltips (name + shortcut, to the right) ---------- */
-.dock .tool {
-  position: relative;
-}
-.tool-tip {
-  position: absolute;
-  left: calc(100% + 12px);
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  background: #1e1e1e;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 9px;
-  border-radius: 8px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 110ms var(--ease);
-  z-index: 70;
-}
-.tool-tip::before {
-  content: "";
-  position: absolute;
-  right: 100%;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 5px solid transparent;
-  border-right-color: #1e1e1e;
-}
-/* keep the kbd pill legible on the dark tooltip in both themes */
-.tool-tip .kbd {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.28);
-  color: #fff;
-}
-/* Shortcut chip inside a hover tooltip pill (e.g. the zoom in/out hints) — legible on the dark pill. */
+/* Shortcut chip inside a hover tooltip pill (dock shortcuts, zoom in/out hints) — legible on the dark pill. */
 .co-tip .kbd {
   background: rgba(255, 255, 255, 0.15);
   border-color: rgba(255, 255, 255, 0.28);
   color: #fff;
-}
-.tool-tip .tip-soon {
-  color: #9aa4b2;
-}
-/* no tooltip for the currently-selected tool — you already know what it is */
-.dock .tool:not(.active):hover .tool-tip {
-  opacity: 1;
-}
-/* while the draw menu is open it sits where these right-side tooltips would render,
-   so they'd stack behind it — suppress dock tooltips for the duration (#app id wins) */
-#app.pen-open .dock .tool:not(.active):hover .tool-tip {
-  opacity: 0;
 }
 
 /* profile colour swatches mirror the pen palette (circular + gap selection ring) */
@@ -1658,19 +1624,22 @@ input[type="range"] {
    Mobile (≤640px) — last in the file so every override wins on order.
    ==================================================================== */
 @media (max-width: 640px) {
-  /* the draw bar becomes the bottom mini-sheet on mobile: a .sheet-wrap clip + slide that makes it
-     expand/collapse seamlessly from the toolbar, holding the compact button row. Its style/colour/
-     width popovers float UP above the sheet — they're body-appended, so the clip never touches
-     them (see #openPop in draw-bar.ts). */
-  .draw-bar {
+  /* Every mobile mini-sheet (draw bar, sticky palette, shape menu) shares this: it lives in a
+     .sheet-wrap clip whose bottom edge is the dock's top, so it expands out of / collapses into the
+     toolbar. A grab handle drives the drag-to-collapse (wireSheetHandle in mobile-sheet.ts). Their
+     own popovers float UP, body-appended, so the clip never touches them. */
+  .mini-sheet {
     position: absolute;
     left: 0;
     right: 0;
     top: auto;
     bottom: 0; /* sits on the wrapper's bottom edge = the dock's top */
     margin: 0 auto;
-    width: min(340px, calc(100vw - 20px));
-    flex-direction: column; /* grab handle on top, button row below */
+    width: min(360px, calc(100vw - 20px));
+    max-width: min(360px, calc(100vw - 20px));
+    min-width: 0;
+    flex-direction: column; /* grab handle on top, content below */
+    align-items: stretch;
     gap: 4px; /* handle(22) + this gap = the 26px collapsed tab → only the handle peeks */
     padding: 0 8px 10px;
     border-radius: 16px 16px 0 0;
@@ -1680,15 +1649,18 @@ input[type="range"] {
     transition: transform 280ms var(--ease);
     will-change: transform;
   }
+  .draw-bar.mini-sheet {
+    width: min(340px, calc(100vw - 20px));
+  }
   .draw-bar .db-row {
     flex-direction: row;
     justify-content: center;
     gap: 6px;
   }
-  .draw-bar.collapsed {
+  .mini-sheet.collapsed {
     transform: translateY(calc(100% - 26px)); /* leave a 26px grab-handle tab (just the handle) */
   }
-  .draw-bar.hidden {
+  .mini-sheet.hidden {
     /* override the global `.hidden { display:none }` so the sheet can animate down into the dock */
     display: flex !important;
     transform: translateY(101%);
@@ -1727,67 +1699,60 @@ input[type="range"] {
     justify-content: center;
     z-index: 45;
   }
-  /* while the draw sheet is out, the dock's top merges seamlessly with it:
+  /* while any mini-sheet is out, the dock's top merges seamlessly with it:
      square top corners, no top border, no top shadow */
-  #app.pen-open .dock {
+  #app.sheet-open .dock {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
     border-top-color: transparent;
     box-shadow: 0 14px 16px -3px rgba(0, 0, 0, 0.2);
   }
   /* collapsed to a tab → show the toolbar's top edge again so the seam is visible */
-  #app.pen-open:has(co-draw-bar.collapsed) .dock {
+  #app.sheet-open:has(.mini-sheet.collapsed) .dock {
     border-top-color: var(--border);
   }
-  /* Sticky palette + shape menu become floating bottom mini-sheets above the dock (like the draw
-     bar): full-width pill, a grab-handle on top, sliding up from the dock area. */
-  .sticky-bar,
-  .shape-menu {
-    left: 0;
-    right: 0;
-    top: auto;
-    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
-    margin: 0 auto;
-    width: min(360px, calc(100vw - 20px));
-    min-width: 0;
-    max-width: min(360px, calc(100vw - 20px));
-    max-height: 50vh;
-    transform: none;
-    flex-direction: column;
-    align-items: stretch;
-    padding: 12px 14px 16px;
-    border-radius: 18px;
-    box-shadow: var(--shadow);
-    z-index: 45;
-  }
-  /* the grab-handle pill that signals "this is a sheet" */
-  .sticky-bar::before,
-  .shape-menu::before {
-    content: "";
-    flex: none;
-    width: 36px;
-    height: 4px;
-    margin: 0 auto 12px;
-    border-radius: 999px;
-    background: var(--border, #e4e7ec);
-  }
+  /* Sticky palette + shape menu are mini-sheets too (.mini-sheet handles position/slide/collapse);
+     here we just lay out their content. The sticky swatches wrap in a centred row. */
   .sticky-bar .swatches {
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: center;
     gap: 14px;
+    padding: 2px 4px 4px;
   }
   .sticky-bar .sw {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
   }
-  /* shape menu stays a vertical list inside the sheet (an iOS-style action sheet), scrolling if
-     it's taller than the sheet's cap. The handle (::before) sits on top in the column flow. */
+  /* shape menu → a centred icon-button row (labels hidden), wrapping to a second row as needed. */
   .shape-menu {
-    overflow-y: auto;
+    flex-flow: row wrap;
+    justify-content: center;
+    gap: 4px;
+    padding-bottom: 12px;
   }
   .shape-menu .sm-item {
-    height: 44px;
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    justify-content: center;
+  }
+  .shape-menu .sm-item .sm-label {
+    display: none;
+  }
+  .shape-menu .sm-item.sm-sep {
+    margin-top: 0;
+  }
+  .shape-menu .sm-item.sm-sep::before {
+    display: none; /* the lines/shapes divider doesn't fit a wrap grid */
+  }
+  .shape-menu .sm-ico {
+    width: 26px;
+    height: 26px;
+  }
+  /* the grab handle must span the full sheet width even though the shape items wrap in a row */
+  .mini-sheet > .sheet-handle {
+    flex-basis: 100%;
   }
   /* On a phone, B/I/U/S collapse into ONE toggle (below) so the toolbar fits a single row with no
      overflow + no dead space. Clamp to the viewport; wrap is only a safety net for very long labels.
@@ -1838,26 +1803,6 @@ input[type="range"] {
     transform: translateX(-50%) scaleY(1);
     opacity: 1;
     pointer-events: auto;
-  }
-  /* tool tooltips flip above the now-horizontal dock; drop the shortcut key on touch */
-  .tool-tip {
-    left: 50%;
-    right: auto;
-    top: auto;
-    bottom: calc(100% + 12px);
-    transform: translateX(-50%);
-  }
-  .tool-tip::before {
-    left: 50%;
-    right: auto;
-    top: auto;
-    bottom: -9px;
-    transform: translateX(-50%);
-    border: 5px solid transparent;
-    border-top-color: #1e1e1e;
-  }
-  .tool-tip .kbd {
-    display: none;
   }
 
   /* Clip window whose bottom edge IS the dock's top: the sheet slides within it and is

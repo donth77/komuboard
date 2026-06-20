@@ -8,6 +8,7 @@ import { icon, iconFilled } from "./icons";
 import type { StrokeStyle } from "@coboard/shared";
 import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
+import { wireSheetHandle } from "./mobile-sheet";
 
 /** The `pen-change` event detail — only the changed field(s) are present. */
 export interface PenChange {
@@ -45,7 +46,7 @@ export class CoDrawBar extends HTMLElement {
   #wired = false;
 
   connectedCallback(): void {
-    this.classList.add("draw-bar");
+    this.classList.add("draw-bar", "mini-sheet");
     this.setAttribute("role", "toolbar");
     this.setAttribute("aria-label", "Draw options");
     if (this.#wired) return;
@@ -98,48 +99,12 @@ export class CoDrawBar extends HTMLElement {
     });
   }
 
-  // Mobile bottom sheet: the grab handle expands/collapses the sheet between fully open and a
-  // peek "tab" (the pen tool stays selected throughout — switching tools is what dismisses it).
-  // Tap toggles; a drag follows the finger and snaps to the nearest state. TAB must match the
-  // .draw-bar.collapsed translate in styles.css. Closes any open popover on collapse. (Hidden on desktop.)
+  // Mobile bottom sheet: the grab handle expands/collapses the sheet between fully open and a peek
+  // "tab" (the pen tool stays selected throughout — switching tools is what dismisses it). The
+  // drag-to-collapse behaviour is shared with the sticky/shape sheets (see mobile-sheet.ts).
   #wireHandle(): void {
     const handle = this.querySelector<HTMLElement>(".sheet-handle");
-    if (!handle) return;
-    const TAB = 26;
-    let startY = 0;
-    let dy = 0;
-    let dragging = false;
-    let wasCollapsed = false;
-    handle.addEventListener("pointerdown", (e) => {
-      dragging = true;
-      startY = e.clientY;
-      dy = 0;
-      wasCollapsed = this.classList.contains("collapsed");
-      this.#closePop(); // a floating popover shouldn't hover over a sliding sheet
-      this.style.transition = "none";
-      handle.setPointerCapture(e.pointerId);
-    });
-    handle.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      dy = e.clientY - startY;
-      const base = wasCollapsed ? this.offsetHeight - TAB : 0;
-      const t = Math.min(this.offsetHeight - TAB, Math.max(0, base + dy));
-      this.style.transform = `translateY(${t}px)`;
-    });
-    const endDrag = (): void => {
-      if (!dragging) return;
-      dragging = false;
-      this.style.transition = ""; // restore the CSS slide transition
-      this.style.transform = ""; // hand control back to the .collapsed class
-      if (Math.abs(dy) < 5) {
-        this.classList.toggle("collapsed"); // tap → toggle open / tab
-      } else {
-        const base = wasCollapsed ? this.offsetHeight - TAB : 0;
-        this.classList.toggle("collapsed", base + dy > (this.offsetHeight - TAB) / 2); // snap nearest
-      }
-    };
-    handle.addEventListener("pointerup", endDrag);
-    handle.addEventListener("pointercancel", endDrag);
+    if (handle) wireSheetHandle(this, handle, () => this.#closePop());
   }
 
   // ---- brushes (pen / highlighter map onto the existing StrokeStyle) ----

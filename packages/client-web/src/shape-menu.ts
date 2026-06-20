@@ -1,6 +1,9 @@
 // <co-shape-menu> — the "Shapes and lines" picker: a vertical FigJam-style menu (lines/arrows on
 // top, shapes below) shown when the Shapes tool is active. Picking an item sets the kind drawn next
 // and emits `shape-change` (bubbling → #app in main.ts → canvas). Light DOM. Sibling of <co-draw-bar>.
+// On mobile it's a mini bottom-sheet (drag-to-collapse) like the draw bar — see mobile-sheet.ts.
+
+import { ensureSheetHandle, wireSheetHandle } from "./mobile-sheet";
 
 export type ShapeChoice =
   | "line"
@@ -52,18 +55,19 @@ export class CoShapeMenu extends HTMLElement {
   #wired = false;
 
   connectedCallback(): void {
-    this.classList.add("shape-menu");
+    this.classList.add("shape-menu", "mini-sheet");
     this.setAttribute("role", "menu");
     this.setAttribute("aria-label", "Shapes and lines");
     if (this.#wired) return;
     this.#wired = true;
     this.innerHTML = ITEMS.map(
       (it) =>
-        `<button class="sm-item${it.sep ? " sm-sep" : ""}" type="button" role="menuitemradio" data-kind="${it.kind}">` +
+        `<button class="sm-item${it.sep ? " sm-sep" : ""}" type="button" role="menuitemradio" data-kind="${it.kind}" data-tip="${it.label}" aria-label="${it.label}">` +
         smIco(it.svg) +
         `<span class="sm-label">${it.label}</span>` +
         "</button>",
     ).join("");
+    wireSheetHandle(this, ensureSheetHandle(this)); // mobile sheet drag-to-collapse
     this.#sync();
     this.addEventListener("click", (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLElement>(".sm-item");

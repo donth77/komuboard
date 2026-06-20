@@ -144,9 +144,11 @@ app.innerHTML = `
 
   <co-tool-dock></co-tool-dock>
 
-  <div class="sheet-wrap"><co-draw-bar></co-draw-bar></div>
-  <co-sticky-bar class="hidden"></co-sticky-bar>
-  <co-shape-menu class="hidden"></co-shape-menu>
+  <div class="sheet-wrap">
+    <co-draw-bar></co-draw-bar>
+    <co-sticky-bar class="hidden"></co-sticky-bar>
+    <co-shape-menu class="hidden"></co-shape-menu>
+  </div>
 
   <co-zoombar></co-zoombar>
 
@@ -204,30 +206,39 @@ const shapeMenuEl = document.querySelector("co-shape-menu");
 const DRAWABLE_SHAPES = new Set(["rectangle", "ellipse", "rhombus", "triangle", "divider"]);
 const mobileMql = window.matchMedia("(max-width: 640px)");
 let currentTool: ToolId = "select";
-// Apply a tool to the canvas + panel visibility (does NOT touch the dock highlight).
+// Each of these tools owns a mobile mini-sheet (draw bar / sticky palette / shape menu).
+const sheetForTool = (tool: ToolId): Element | null =>
+  tool === "pen"
+    ? drawBarEl
+    : tool === "sticky"
+      ? stickyBarEl
+      : tool === "shapes"
+        ? shapeMenuEl
+        : null;
+const ALL_SHEETS = [drawBarEl, stickyBarEl, shapeMenuEl];
+// Apply a tool to the canvas + sheet visibility (does NOT touch the dock highlight).
 function applyTool(tool: ToolId): void {
   currentTool = tool;
   canvas.setTool(tool);
-  const isPen = tool === "pen";
-  drawBarEl?.classList.toggle("hidden", !isPen); // the draw bar shows while the Draw tool is active
-  drawBarEl?.classList.remove("collapsed"); // pen → fully expand the mobile sheet; non-pen → hidden wins
-  app?.classList.toggle("pen-open", isPen); // dock top merges with the sheet/tab while pen is active
-  stickyBarEl?.classList.toggle("hidden", tool !== "sticky"); // colour palette shows with the Sticky tool
-  shapeMenuEl?.classList.toggle("hidden", tool !== "shapes"); // shape picker shows with the Shapes tool
+  const active = sheetForTool(tool);
+  for (const el of ALL_SHEETS) {
+    el?.classList.toggle("hidden", el !== active);
+    if (el !== active) el?.classList.remove("collapsed");
+  }
+  active?.classList.remove("collapsed"); // newly shown → fully expanded
+  app?.classList.toggle("sheet-open", !!active); // dock top merges with the open sheet
 }
-// Show/hide the draw menu (desktop bar + mobile sheet) without changing the active tool —
-// re-clicking the already-selected Draw icon toggles it. `pen-open` tracks "menu visible".
-function toggleDrawMenu(): void {
-  // Mobile: the Draw tool stays selected, so keep the sheet in place — collapse it to the pull-tab
-  // (tap again to expand). Switching to another tool is what hides it fully (see applyTool).
+// Re-clicking the active tool toggles its sheet (the tool stays selected) — same for all three.
+function toggleSheet(el: Element | null): void {
+  if (!el) return;
   if (mobileMql.matches) {
-    drawBarEl?.classList.toggle("collapsed");
+    el.classList.toggle("collapsed"); // mobile: collapse to the pull-tab / re-expand
     return;
   }
-  // Desktop: toggle the floating bar's visibility entirely (no tab affordance there).
-  const open = !!app?.classList.contains("pen-open");
-  drawBarEl?.classList.toggle("hidden", open);
-  app?.classList.toggle("pen-open", !open);
+  // Desktop: toggle the floating panel's visibility entirely (no tab affordance there).
+  const open = !el.classList.contains("hidden");
+  el.classList.toggle("hidden", open);
+  app?.classList.toggle("sheet-open", !open);
 }
 // Programmatic selection (keyboard) also drives the dock's own highlight.
 function selectTool(tool: ToolId): void {
@@ -236,8 +247,8 @@ function selectTool(tool: ToolId): void {
 }
 dock?.addEventListener("tool-change", (e) => {
   const tool = (e as CustomEvent<{ tool: ToolId }>).detail.tool;
-  // Clicking Draw while it's already active toggles its menu (the pen tool stays selected).
-  if (tool === "pen" && currentTool === "pen") toggleDrawMenu();
+  // Clicking a sheet tool while it's already active toggles its sheet (the tool stays selected).
+  if (tool === currentTool && sheetForTool(tool)) toggleSheet(sheetForTool(tool));
   else applyTool(tool);
 });
 applyTool(currentTool); // sync initial state: select is default → draw bar hidden

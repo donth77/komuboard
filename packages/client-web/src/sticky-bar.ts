@@ -4,13 +4,14 @@
 // canvas). Light DOM; reuses the global `.sw` swatch styling. Sibling pattern to <co-draw-bar>.
 
 import { STICKY_COLORS, STICKY_COLOR_NAMES } from "@coboard/shared";
+import { ensureSheetHandle, wireSheetHandle } from "./mobile-sheet";
 
 export class CoStickyBar extends HTMLElement {
   #color = "";
   #wired = false;
 
   connectedCallback(): void {
-    this.classList.add("sticky-bar");
+    this.classList.add("sticky-bar", "mini-sheet");
     this.setAttribute("role", "toolbar");
     this.setAttribute("aria-label", "Sticky note colours");
     if (this.#wired) return;
@@ -22,6 +23,7 @@ export class CoStickyBar extends HTMLElement {
         return `<button class="sw" type="button" data-color="${c}" data-tip="${name}" style="--sw:${c}" aria-label="${name}"></button>`;
       }).join("") +
       "</div>";
+    wireSheetHandle(this, ensureSheetHandle(this)); // mobile sheet drag-to-collapse
     this.#sync();
     this.addEventListener("click", (e) => {
       const sw = (e.target as HTMLElement).closest<HTMLElement>(".sw");
