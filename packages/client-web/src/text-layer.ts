@@ -1208,20 +1208,45 @@ export class TextLayer {
 
     if (rs.isShape) {
       // A shape resizes its box freely (width×height), font fixed. Each edge in the handle name
-      // moves; the opposite edge stays anchored.
+      // moves; the opposite edge stays anchored. Holding Shift locks the original aspect ratio.
       const h = rs.handle;
       const ow = rs.ow ?? rs.baseW;
       const oh = rs.oh ?? MIN_TEXT_W;
-      if (h.includes("e")) width = Math.max(MIN_TEXT_W, ow + wdx);
+      let nw = ow;
+      let nh = oh;
+      let nx = rs.ox;
+      let ny = rs.oy;
+      if (h.includes("e")) nw = Math.max(MIN_TEXT_W, ow + wdx);
       if (h.includes("w")) {
-        width = Math.max(MIN_TEXT_W, ow - wdx);
-        x = rs.ox + (ow - width); // anchor the right edge
+        nw = Math.max(MIN_TEXT_W, ow - wdx);
+        nx = rs.ox + (ow - nw); // anchor the right edge
       }
-      if (h.includes("s")) height = Math.max(MIN_TEXT_W, oh + wdy);
+      if (h.includes("s")) nh = Math.max(MIN_TEXT_W, oh + wdy);
       if (h.includes("n")) {
-        height = Math.max(MIN_TEXT_W, oh - wdy);
-        y = rs.oy + (oh - height); // anchor the bottom edge
+        nh = Math.max(MIN_TEXT_W, oh - wdy);
+        ny = rs.oy + (oh - nh); // anchor the bottom edge
       }
+      if (e.shiftKey && oh > 0) {
+        const ratio = ow / oh;
+        if (h.length === 2) {
+          // corner → scale both dimensions uniformly (grow to contain the cursor), anchor opposite corner
+          const s = Math.max(nw / ow, nh / oh);
+          nw = Math.max(MIN_TEXT_W, ow * s);
+          nh = Math.max(MIN_TEXT_W, oh * s);
+          nx = h.includes("w") ? rs.ox + (ow - nw) : rs.ox;
+          ny = h.includes("n") ? rs.oy + (oh - nh) : rs.oy;
+        } else if (h === "e" || h === "w") {
+          nh = Math.max(MIN_TEXT_W, nw / ratio); // width drives; height follows, centred vertically
+          ny = rs.oy + (oh - nh) / 2;
+        } else {
+          nw = Math.max(MIN_TEXT_W, nh * ratio); // height drives; width follows, centred horizontally
+          nx = rs.ox + (ow - nw) / 2;
+        }
+      }
+      x = nx;
+      y = ny;
+      width = nw;
+      height = nh;
     } else if (rs.handle === "e") {
       width = Math.max(MIN_TEXT_W, rs.baseW + wdx); // grow/shrink width (auto-width → fixed)
     } else if (rs.handle === "w") {
