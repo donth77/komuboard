@@ -395,10 +395,19 @@ export class TextLayer {
       el.style.width = "";
       el.style.whiteSpace = "pre";
     }
-    // A shape is a fixed width×height card; a sticky is a square (min-height tracks its width).
-    el.style.height = height != null ? `${height * cam.scale}px` : "";
-    el.style.minHeight =
-      el.classList.contains("sticky") && width != null ? `${width * cam.scale}px` : "";
+    // Height as a *minimum* that grows to fit text (so extra lines never overflow the box):
+    //   shape  → min-height is its set box height; a sticky → its square (min-height = width);
+    //   plain text → no height constraint.
+    const isSticky = el.classList.contains("sticky");
+    const isShape = el.classList.contains("shape");
+    el.style.height = "";
+    if (isShape && height != null) {
+      el.style.minHeight = `${height * cam.scale}px`;
+    } else if (isSticky && width != null) {
+      el.style.minHeight = `${width * cam.scale}px`;
+    } else {
+      el.style.minHeight = "";
+    }
     // Record world-space size for hit-testing (offset* are screen px → divide by scale).
     const id = el.dataset.id;
     const ow = el.offsetWidth;
