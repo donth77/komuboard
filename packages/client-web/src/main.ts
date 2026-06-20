@@ -22,6 +22,7 @@ import "./avatar-presence-row";
 import type { PresencePerson } from "./avatar-presence-row";
 import "./tool-dock";
 import "./sticky-bar";
+import "./shape-menu";
 import type { PenChange } from "./draw-bar";
 import "./zoombar";
 import type { ZoomDetail } from "./zoombar";
@@ -145,6 +146,7 @@ app.innerHTML = `
 
   <div class="sheet-wrap"><co-draw-bar></co-draw-bar></div>
   <co-sticky-bar class="hidden"></co-sticky-bar>
+  <co-shape-menu class="hidden"></co-shape-menu>
 
   <co-zoombar></co-zoombar>
 
@@ -197,6 +199,9 @@ if (stickyBarEl) {
   stickyBarEl.color = DEFAULT_STICKY_COLOR;
   canvas.setStickyColor(DEFAULT_STICKY_COLOR);
 }
+const shapeMenuEl = document.querySelector("co-shape-menu");
+// Shape kinds the canvas can draw today (lines/arrows are connectors — a later increment).
+const DRAWABLE_SHAPES = new Set(["rectangle", "ellipse", "rhombus", "triangle", "divider"]);
 const mobileMql = window.matchMedia("(max-width: 640px)");
 let currentTool: ToolId = "select";
 // Apply a tool to the canvas + panel visibility (does NOT touch the dock highlight).
@@ -208,6 +213,7 @@ function applyTool(tool: ToolId): void {
   drawBarEl?.classList.remove("collapsed"); // pen → fully expand the mobile sheet; non-pen → hidden wins
   app?.classList.toggle("pen-open", isPen); // dock top merges with the sheet/tab while pen is active
   stickyBarEl?.classList.toggle("hidden", tool !== "sticky"); // colour palette shows with the Sticky tool
+  shapeMenuEl?.classList.toggle("hidden", tool !== "shapes"); // shape picker shows with the Shapes tool
 }
 // Show/hide the draw menu (desktop bar + mobile sheet) without changing the active tool —
 // re-clicking the already-selected Draw icon toggles it. `pen-open` tracks "menu visible".
@@ -249,6 +255,12 @@ app?.addEventListener("sticky-color", (e) => {
   canvas.setStickyColor((e as CustomEvent<{ color: string }>).detail.color);
 });
 
+// <co-shape-menu> emits `shape-change` → set the shape drawn next (lines/arrows land later).
+app?.addEventListener("shape-change", (e) => {
+  const kind = (e as CustomEvent<{ kind: string }>).detail.kind;
+  if (DRAWABLE_SHAPES.has(kind)) canvas.setShape(kind as Parameters<typeof canvas.setShape>[0]);
+});
+
 // Shortcuts overlay (reusable <co-dialog>).
 const shortcutsDialog = createDialog({
   title: "Keyboard shortcuts",
@@ -273,7 +285,14 @@ function isTyping(el: EventTarget | null): boolean {
 }
 
 // Keyboard: V/H/P tools, hold Space to pan, ? for the shortcuts menu, Esc to close.
-const KEY_TOOL: Record<string, ToolId> = { v: "select", h: "hand", p: "pen", t: "text" };
+const KEY_TOOL: Record<string, ToolId> = {
+  v: "select",
+  h: "hand",
+  p: "pen",
+  t: "text",
+  s: "sticky",
+  r: "shapes",
+};
 let spacePanning = false;
 window.addEventListener("keydown", (e) => {
   if (document.querySelector("dialog[open]")) return; // an open dialog owns the keyboard (Esc closes it)

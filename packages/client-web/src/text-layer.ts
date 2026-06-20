@@ -13,6 +13,9 @@
 
 import {
   addText,
+  DEFAULT_SHAPE_FILL,
+  DEFAULT_SHAPE_H,
+  DEFAULT_SHAPE_W,
   DEFAULT_STICKY_SIZE,
   DEFAULT_TEXT_FONT,
   DEFAULT_TEXT_SIZE,
@@ -26,6 +29,7 @@ import {
   setTextRuns,
   setTextStyle,
   translateObjects,
+  type ShapeKind,
   type TextAlign,
   type TextObject,
   type TextRun,
@@ -73,8 +77,11 @@ interface EditSession {
   fontSize: number;
   fontFamily: string;
   align: TextAlign;
-  /** Sticky-note paper colour, when this box is a sticky note. */
+  /** Sticky-note paper colour, when this box is a sticky note; or the fill, when it's a shape. */
   bg?: string;
+  /** Shape outline + fixed box height, when this box is a shape. */
+  shape?: ShapeKind;
+  height?: number;
 }
 
 /** A peer's in-progress edit, streamed over awareness (geometry travels too so a brand-new box —
@@ -89,6 +96,8 @@ interface TextEditState {
   align: TextAlign;
   /** Sticky-note paper colour (so peers render the live edit as a coloured note). */
   bg?: string;
+  shape?: ShapeKind;
+  height?: number;
   runs: TextRun[];
 }
 
@@ -100,9 +109,25 @@ type Geom = {
   fontFamily: string;
   align: TextAlign;
   bg?: string;
+  shape?: ShapeKind;
+  height?: number;
 };
 
 const INK = "#0e1116"; // default text ink (matches the pen default)
+const SHAPE_STROKE = "#1f2933"; // shape outline colour (matches the CSS border)
+// Polygon shapes drawn as an SVG-outline background (rectangle/ellipse/divider use a CSS border).
+// Points are in a 0..100 viewBox, inset slightly so the stroke isn't clipped at the edges.
+const SHAPE_POLYGONS: Record<string, string> = {
+  triangle: "50,4 96,96 4,96",
+  rhombus: "50,4 96,50 50,96 4,50",
+};
+/** A polygon outline + fill as an SVG data URI, stretched to the box via preserveAspectRatio=none. */
+function shapeSvg(points: string, fill: string): string {
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'>` +
+    `<polygon points='${points}' fill='${fill}' stroke='${SHAPE_STROKE}' stroke-width='2' stroke-linejoin='round'/></svg>`;
+  return "data:image/svg+xml," + encodeURIComponent(svg);
+}
 /** A click that moves less than this (screen px) is a tap-to-place, not a drag-to-size box. */
 const TAP_SLOP_PX = 6;
 /** Resize floors (world units): a box can't get narrower / its font smaller than these. */
@@ -271,7 +296,7 @@ export class TextLayer {
       this.paint(el, obj);
       this.root.appendChild(el); // (re)append in z-order — cheap for a handful of boxes
       const g = this.effectiveGeom(id, obj);
-      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, obj.height);
     }
     for (const [id, el] of this.els) {
       if (seen.has(id)) continue;
@@ -297,7 +322,8 @@ export class TextLayer {
   private paint(el: HTMLElement, obj: TextObject): void {
     el.innerHTML = runsToHtml(obj.runs);
     el.style.color = INK; // default ink; per-run colours override via the rendered spans
-    this.applySticky(el, obj.bg);
+    if (obj.shape) this.applyShape(el, obj.shape, obj.bg);
+    else this.applySticky(el, obj.bg);
   }
 
   /** Toggle the sticky-note look (coloured padded card) on a box element. */
@@ -312,7 +338,30 @@ export class TextLayer {
     }
   }
 
-  /** Position + size an element in screen space from its world geometry and the camera. */
+  /** Toggle the shape look (outline + fill + centred "Add text" label) on a box element. Rectangle/
+   *  ellipse/divider are drawn with a crisp CSS border (their `shape-<kind>` class); polygon shapes
+   *  (triangle/rhombus) use an SVG-outline background so they actually look like the shape. */
+  private applyShape(el: HTMLElement, kind: string | undefined, fill: string | undefined): void {
+    for (const c of [...el.classList]) if (c.startsWith("shape")) el.classList.remove(c);
+    el.style.backgroundImage = "";
+    if (!kind) {
+      el.style.removeProperty("height");
+      return;
+    }
+    el.classList.add("shape", `shape-${kind}`);
+    const f = fill || "#ffffff";
+    const poly = SHAPE_POLYGONS[kind];
+    if (poly) {
+      // SVG polygon outline + fill, stretched to the box (preserveAspectRatio none).
+      el.style.background = "transparent";
+      el.style.backgroundImage = `url("${shapeSvg(poly, f)}")`;
+    } else {
+      el.style.background = f; // rectangle / ellipse / divider use the CSS border
+    }
+  }
+
+  /** Position + size an element in screen space from its world geometry and the camera. A shape box
+   *  passes an explicit `height` (it's a fixed width×height card, not auto-grown like text). */
   private layout(
     el: HTMLElement,
     x: number,
@@ -321,6 +370,7 @@ export class TextLayer {
     fontSize: number,
     fontFamily: string,
     align: TextAlign,
+    height?: number,
   ): void {
     const cam = this.opts.camera();
     el.style.left = `${x * cam.scale + cam.x}px`;
@@ -335,17 +385,41 @@ export class TextLayer {
       el.style.width = "";
       el.style.whiteSpace = "pre";
     }
-    // A sticky note is a square card: its min-height tracks the (wrap) width.
+    // A shape is a fixed width×height card; a sticky is a square (min-height tracks its width).
+    el.style.height = height != null ? `${height * cam.scale}px` : "";
     el.style.minHeight =
       el.classList.contains("sticky") && width != null ? `${width * cam.scale}px` : "";
     // Record world-space size for hit-testing (offset* are screen px → divide by scale).
     const id = el.dataset.id;
-    if (id) {
-      this.sizes.set(id, {
-        w: width ?? el.offsetWidth / cam.scale,
-        h: el.offsetHeight / cam.scale,
-      });
+    const ow = el.offsetWidth;
+    const oh = el.offsetHeight;
+    // A display:none box (a peer is mid-edit on it → its copy is hidden) measures 0×0; skip the
+    // write so its last good size survives. Caching a zero makes it un-hittable (unselectable) once
+    // un-hidden — setRemoteEditIds re-measures it for accuracy when the peer's edit ends.
+    if (id && (ow > 0 || oh > 0)) {
+      this.sizes.set(id, { w: width ?? ow / cam.scale, h: oh / cam.scale });
     }
+  }
+
+  /** Re-lay-out + re-measure a single box — used when it's un-hidden after a peer's edit ends, so
+   *  its size cache refreshes now that it's visible again (a render while hidden would have cached 0). */
+  private relayoutBox(id: string): void {
+    const el = this.els.get(id);
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    if (!el || obj?.type !== "text") return;
+    const g = this.effectiveGeom(id, obj);
+    this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, obj.height);
+  }
+
+  /** Swap in a new set of peer-edited ids: hide/un-hide the affected copies, then re-measure any
+   *  box that was just un-hidden (it may have cached a 0 size while it was display:none). */
+  private setRemoteEditIds(next: Set<string>): void {
+    const unhidden: string[] = [];
+    for (const id of this.remoteEditIds) if (!next.has(id)) unhidden.push(id);
+    this.remoteEditIds = next;
+    this.updateDisplayVisibility();
+    for (const id of unhidden) this.relayoutBox(id);
   }
 
   /** Re-run layout for every box + the editor + peers' live edits after a camera change. */
@@ -355,16 +429,16 @@ export class TextLayer {
       const obj = m ? readObject(m) : null;
       if (obj?.type !== "text") continue;
       const g = this.effectiveGeom(id, obj);
-      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, obj.height);
     }
     if (this.edit) {
       const e = this.edit;
-      this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align);
+      this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align, e.height);
       this.positionBar();
     }
     for (const [cid, el] of this.remoteEdits) {
       const g = this.remoteGeom.get(cid);
-      if (g) this.layout(el, g.x, g.y, g.width, g.fontSize, g.fontFamily, g.align);
+      if (g) this.layout(el, g.x, g.y, g.width, g.fontSize, g.fontFamily, g.align, g.height);
     }
     this.updateResizeChrome();
   }
@@ -481,7 +555,9 @@ export class TextLayer {
       align: obj.align,
     };
     if (obj.width != null) session.width = obj.width;
+    if (obj.height != null) session.height = obj.height;
     if (obj.bg != null) session.bg = obj.bg;
+    if (obj.shape != null) session.shape = obj.shape;
     this.openEditor(session, runsToHtml(obj.runs), selectAll, caretAt);
   }
 
@@ -507,6 +583,31 @@ export class TextLayer {
     }
   }
 
+  /** Shapes tool: drop a new shape box (fixed width×height) centred on the point + open for a label. */
+  shapeAt(world: { x: number; y: number }, kind: ShapeKind, fill: string): void {
+    if (this.edit) this.commit();
+    const hit = this.hitTest(world);
+    if (hit) {
+      if (this.remoteEditIds.has(hit)) return; // a peer owns this box
+      this.beginEdit(hit);
+      return;
+    }
+    const w = DEFAULT_SHAPE_W;
+    const h = kind === "divider" ? 8 : DEFAULT_SHAPE_H;
+    this.openEditor({
+      id: null,
+      x: world.x - w / 2,
+      y: world.y - h / 2,
+      width: w,
+      height: h,
+      fontSize: DEFAULT_TEXT_SIZE,
+      fontFamily: DEFAULT_TEXT_FONT,
+      align: "center",
+      bg: fill || DEFAULT_SHAPE_FILL,
+      shape: kind,
+    });
+  }
+
   private openEditor(
     session: Omit<EditSession, "el">,
     seedHtml = "",
@@ -519,7 +620,9 @@ export class TextLayer {
     el.spellcheck = false;
     el.innerHTML = seedHtml;
     el.style.color = INK;
-    this.applySticky(el, session.bg); // colour + square the editor when it's a sticky note
+    // Shape (outline + fixed height) or sticky (coloured square) styling on the editor itself.
+    if (session.shape) this.applyShape(el, session.shape, session.bg);
+    else this.applySticky(el, session.bg);
     this.hideStickyGhost(); // the real note replaces the placement preview
     this.root.appendChild(el);
     this.edit = { ...session, el };
@@ -533,6 +636,7 @@ export class TextLayer {
       session.fontSize,
       session.fontFamily,
       session.align,
+      session.height,
     );
 
     el.addEventListener("pointerdown", (e) => e.stopPropagation()); // don't reach Konva (marquee/draw)
@@ -1242,6 +1346,8 @@ export class TextLayer {
     };
     if (e.width != null) state.width = e.width;
     if (e.bg != null) state.bg = e.bg;
+    if (e.shape != null) state.shape = e.shape;
+    if (e.height != null) state.height = e.height;
     this.opts.awareness.setLocalStateField("textedit", state);
   }
 
@@ -1273,7 +1379,9 @@ export class TextLayer {
         align: te.align === "center" || te.align === "right" ? te.align : "left",
       };
       if (typeof te.width === "number" && isFinite(te.width)) g.width = te.width;
+      if (typeof te.height === "number" && isFinite(te.height)) g.height = te.height;
       if (typeof te.bg === "string" && te.bg) g.bg = te.bg;
+      if (typeof te.shape === "string") g.shape = te.shape;
       let el = this.remoteEdits.get(cid);
       if (!el) {
         el = document.createElement("div");
@@ -1284,16 +1392,15 @@ export class TextLayer {
       el.innerHTML = runsToHtml(te.runs);
       el.style.color = INK;
       el.style.setProperty("--remote", typeof st.color === "string" ? st.color : "#4a9eff");
-      this.applySticky(el, g.bg); // a peer's live sticky shows its paper colour + square shape
+      // a peer's live shape/sticky shows its outline + fill (or paper colour + square)
+      if (g.shape) this.applyShape(el, g.shape, g.bg);
+      else this.applySticky(el, g.bg);
       this.remoteGeom.set(cid, g);
-      this.layout(el, g.x, g.y, g.width, g.fontSize, g.fontFamily, g.align);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, g.fontFamily, g.align, g.height);
     }
     // Idle fast-path: nothing remote now, nothing left over → only touch visibility if it changed.
     if (!any && this.remoteEdits.size === 0) {
-      if (this.remoteEditIds.size) {
-        this.remoteEditIds = editingIds;
-        this.updateDisplayVisibility();
-      }
+      if (this.remoteEditIds.size) this.setRemoteEditIds(editingIds);
       return;
     }
     for (const [cid, el] of this.remoteEdits) {
@@ -1302,8 +1409,7 @@ export class TextLayer {
       this.remoteEdits.delete(cid);
       this.remoteGeom.delete(cid);
     }
-    this.remoteEditIds = editingIds;
-    this.updateDisplayVisibility();
+    this.setRemoteEditIds(editingIds);
   }
 
   /** Serialize the editor to runs and write it back to the doc (or discard/delete if empty). */
@@ -1319,7 +1425,7 @@ export class TextLayer {
     }
     const runs = elementToRuns(e.el); // read the DOM before detaching it
     const hasText = runsToText(runs).trim().length > 0;
-    const keep = hasText || e.bg != null; // a sticky note persists even when its text is empty
+    const keep = hasText || e.bg != null || e.shape != null; // a sticky/shape persists when empty
     if (e.id) {
       const disp = this.els.get(e.id);
       if (disp) disp.style.display = ""; // unhide the display copy
@@ -1338,6 +1444,7 @@ export class TextLayer {
             align: e.align,
             ...(e.bg != null ? { bg: e.bg } : {}),
           });
+          if (e.height != null) setTextGeometry(this.opts.doc, id, { height: e.height });
         });
       } else {
         deleteObject(this.opts.doc, id);
@@ -1355,7 +1462,9 @@ export class TextLayer {
         authorId: String(this.opts.awareness.clientID),
       };
       if (e.width != null) obj.width = e.width;
+      if (e.height != null) obj.height = e.height;
       if (e.bg != null) obj.bg = e.bg;
+      if (e.shape != null) obj.shape = e.shape;
       addText(this.opts.doc, obj);
     }
     // Stop the live broadcast last, so peers' ephemeral copy overlaps the freshly-committed doc

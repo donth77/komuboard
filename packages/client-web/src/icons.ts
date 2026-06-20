@@ -18,6 +18,9 @@ export const ICONS: Record<string, string> = {
   text: '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
   rect: '<rect x="3" y="3" width="18" height="18" rx="2"/>',
   ellipse: '<circle cx="12" cy="12" r="9"/>',
+  // "Shapes and lines" tool: a 2×2 cluster — square, circle, triangle, diagonal arrow.
+  shapes:
+    '<rect x="3" y="3" width="7.5" height="7.5" rx="1.2"/><circle cx="17.5" cy="6.8" r="3.7"/><path d="M6.8 13.5 3 20.5h7.5z"/><path d="M13.5 20.5 20 14M14.5 14H20v5.5"/>',
   fit: '<path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>',
   expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',

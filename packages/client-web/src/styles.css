@@ -1451,6 +1451,81 @@ input[type="range"] {
     0 0 0 4px var(--accent);
 }
 
+/* ── Shapes-and-lines picker (<co-shape-menu>) — a vertical dropdown shown with the Shapes tool ── */
+.shape-menu {
+  position: absolute;
+  left: 84px; /* mirrors the draw/sticky bars — just right of the dock */
+  top: calc(56px + (100vh - 56px) / 2);
+  transform: translateY(-50%);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 224px;
+  padding: 6px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e4e7ec);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+}
+.shape-menu.hidden {
+  display: none;
+}
+.sm-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink, #0e1116);
+  font:
+    15px Inter,
+    system-ui,
+    sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.sm-item:hover {
+  background: var(--surface-2, #f1f3f5);
+}
+.sm-item.on {
+  background: color-mix(in srgb, var(--accent, #3b6ff6) 12%, transparent);
+  color: var(--accent, #3b6ff6);
+}
+.sm-ico {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+.sm-label {
+  flex: 1;
+}
+.sm-key {
+  color: var(--muted, #6b7280);
+  font-size: 13px;
+}
+.sm-item.on .sm-key {
+  color: var(--accent, #3b6ff6);
+}
+/* a divider above the first shape (separates the lines/arrows group from the shapes group) */
+.sm-item.sm-sep {
+  margin-top: 7px;
+  position: relative;
+}
+.sm-item.sm-sep::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 6px;
+  right: 6px;
+  height: 1px;
+  background: var(--border, #e4e7ec);
+}
+
 /* the button row: a vertical stack on desktop (becomes a horizontal row on the mobile sheet) */
 .db-row {
   display: flex;
@@ -1879,6 +1954,48 @@ input[type="range"] {
 .co-text-ghost {
   opacity: 0.5;
   pointer-events: none;
+}
+/* ── Shapes — a text box with a `shape` renders as an outlined card with a centred label ──────── */
+.co-text.shape {
+  padding: 0.5em;
+  box-sizing: border-box;
+  border: 1.5px solid #1f2933;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center; /* centre the label both axes */
+  word-break: break-word;
+}
+.co-text.shape-ellipse {
+  border-radius: 50%;
+}
+.co-text.shape-divider {
+  border: none;
+  border-top: 2px solid #1f2933;
+  border-radius: 0;
+}
+/* polygon shapes draw their outline as an SVG background → no CSS border; the SVG fills the box */
+.co-text.shape-triangle,
+.co-text.shape-rhombus {
+  border: none;
+  border-radius: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
+/* the triangle's label sits lower (its width is widest near the base) */
+.co-text.shape-triangle {
+  justify-content: flex-end;
+  padding-bottom: 0.9em;
+}
+/* "Add text" placeholder while a shape is empty (display copy or the editor before you type). */
+.co-text.shape:empty::before {
+  content: "Add text";
+  color: #98a2b3;
+}
+.co-text.shape.selected {
+  box-shadow: 0 0 0 1.5px #4a9eff;
 }
 /* Resize handles for a single selected text box (the box itself only hosts the handles — the
    selection ring is drawn on the .co-text). */

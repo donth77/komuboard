@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import {
   addStroke,
+  DEFAULT_SHAPE_FILL,
   DEFAULT_STICKY_COLOR,
   deleteObjects,
   objectsMap,
@@ -12,13 +13,14 @@ import {
   setObjectsPoints,
   translateObjects,
   type PresenceState,
+  type ShapeKind,
   type StrokeObject,
   type StrokeStyle,
 } from "@coboard/shared";
 import { ViewportController } from "./viewport";
 import { TextLayer } from "./text-layer";
 
-export type ToolId = "select" | "hand" | "pen" | "text" | "sticky";
+export type ToolId = "select" | "hand" | "pen" | "text" | "sticky" | "shapes";
 
 export interface CanvasOptions {
   container: HTMLElement;
@@ -140,6 +142,8 @@ export class BoardCanvas {
   private tool: ToolId = "select";
   private color = "#0e1116";
   private stickyColor: string = DEFAULT_STICKY_COLOR;
+  /** The shape/line kind the "Shapes and lines" tool draws next (driven by the shape menu). */
+  private currentShape: ShapeKind = "rectangle";
   /** True while setTool is baking an open editor → suppresses the commit's auto-revert-to-select. */
   private suppressAutoSelect = false;
   private widthPx = 14;
@@ -303,10 +307,11 @@ export class BoardCanvas {
         this.publishSelection(); // …and broadcast it so peers see the text outline
       },
       onCommitted: () => {
-        // Finishing a box placed with the text/sticky tool reverts to select (FigJam one-shot).
+        // Finishing a box placed with the text/sticky/shapes tool reverts to select (one-shot).
         // Suppressed when the commit was triggered by an explicit tool switch (don't fight the user).
         if (this.suppressAutoSelect) return;
-        if (this.tool === "text" || this.tool === "sticky") this.opts.requestTool?.("select");
+        if (this.tool === "text" || this.tool === "sticky" || this.tool === "shapes")
+          this.opts.requestTool?.("select");
       },
     });
 
@@ -339,6 +344,7 @@ export class BoardCanvas {
     this.bindAwareness();
     this.bindText();
     this.bindSticky();
+    this.bindShapes();
 
     opts.awareness.setLocalStateField("user", opts.user.name);
     opts.awareness.setLocalStateField("color", opts.user.color);
@@ -351,9 +357,10 @@ export class BoardCanvas {
       this.clearSelection();
       this.cancelMarquee();
     }
-    // Leaving a text-editing tool (text or sticky) bakes any open editor into the doc. The bake
+    // Leaving a text-editing tool (text/sticky/shapes) bakes any open editor into the doc. The bake
     // must NOT trigger the commit's auto-revert-to-select (the user is explicitly choosing a tool).
-    if ((this.tool === "text" || this.tool === "sticky") && tool !== this.tool) {
+    const editingTool = (t: ToolId): boolean => t === "text" || t === "sticky" || t === "shapes";
+    if (editingTool(this.tool) && tool !== this.tool) {
       this.suppressAutoSelect = true;
       this.textLayer.commit();
       this.suppressAutoSelect = false;
@@ -374,6 +381,10 @@ export class BoardCanvas {
   setStickyColor(color: string): void {
     this.stickyColor = color;
     this.textLayer.setStickyColor(color); // recolours the note currently being edited, too
+  }
+  /** The shape/line the "Shapes and lines" tool draws next (driven by the shape menu). */
+  setShape(kind: ShapeKind): void {
+    this.currentShape = kind;
   }
   setColor(color: string): void {
     this.color = color;
@@ -720,6 +731,12 @@ export class BoardCanvas {
 
   private bindSticky(): void {
     this.bindTapPlace("sticky", (at) => this.textLayer.stickyAt(at, this.stickyColor));
+  }
+
+  private bindShapes(): void {
+    this.bindTapPlace("shapes", (at) =>
+      this.textLayer.shapeAt(at, this.currentShape, DEFAULT_SHAPE_FILL),
+    );
   }
 
   // ---- selection (FigJam-style: marquee + click select, move, resize) ----
@@ -1309,11 +1326,13 @@ export class BoardCanvas {
     // we just opened + focused → it commits instantly (the "menu flicker" + text never sticks on
     // mobile). Cancelling the touch's default action suppresses the emulation; the Konva pointer
     // events (which place + focus the box) still fire, so placement keeps working.
+    const placing = (): boolean =>
+      this.tool === "text" || this.tool === "sticky" || this.tool === "shapes";
     this.stage.on("touchend", (e) => {
-      if (this.tool === "text" || this.tool === "sticky") e.evt.preventDefault();
+      if (placing()) e.evt.preventDefault();
     });
     this.stage.on("touchstart", (e) => {
-      if (this.tool === "text" || this.tool === "sticky") e.evt.preventDefault();
+      if (placing()) e.evt.preventDefault();
     });
     this.stage.on("touchmove", (e) => {
       const touches = (e.evt as TouchEvent).touches;

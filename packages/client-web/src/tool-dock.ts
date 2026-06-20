@@ -15,8 +15,7 @@ const TOOLS: ReadonlyArray<readonly [string, string, string, ToolId | null]> = [
   ["pen", "p", "Draw", "pen"],
   ["sticky", "s", "Sticky note", "sticky"],
   ["text", "t", "Text", "text"],
-  ["rect", "r", "Rectangle", null],
-  ["ellipse", "o", "Ellipse", null],
+  ["shapes", "r", "Shapes and lines", "shapes"],
 ];
 
 export class CoToolDock extends HTMLElement {

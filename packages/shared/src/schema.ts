@@ -50,6 +50,10 @@ export interface TextRun {
 
 export type TextAlign = "left" | "center" | "right";
 
+/** Shape outlines the "Shapes and lines" tool can draw as text-bearing boxes (lines/arrows are a
+ *  separate ConnectorObject). The box renders the outline + a centred label. */
+export type ShapeKind = "rectangle" | "ellipse" | "rhombus" | "triangle" | "divider";
+
 export interface TextObject {
   id: string;
   type: "text";
@@ -57,8 +61,14 @@ export interface TextObject {
   x: number;
   y: number;
   /** Box width in canvas units. Absent = auto-width (grows to the longest line, no wrap);
-   *  present = fixed width that wraps. Height always derives from the wrapped content. */
+   *  present = fixed width that wraps. Height always derives from the wrapped content — except a
+   *  shape box (`shape` set), which is a fixed width×height the resize handles stretch freely. */
   width?: number;
+  /** Fixed box height (canvas units) — only set for shape boxes. */
+  height?: number;
+  /** When set, the box renders as a shape outline (rectangle/ellipse/…) with a centred label and a
+   *  `bg` fill. Drawn by the "Shapes and lines" tool. */
+  shape?: ShapeKind;
   /** Rich content as styled runs (a single LWW field). */
   runs: TextRun[];
   fontFamily: string;
@@ -66,7 +76,8 @@ export interface TextObject {
   fontSize: number;
   align: TextAlign;
   /** Sticky-note paper colour (hex). When present the box renders as a sticky note (a coloured,
-   *  padded, square card with centred text) rather than a plain text box. */
+   *  padded, square card with centred text) rather than a plain text box. For a shape box this is
+   *  the fill colour (default white). */
   bg?: string;
   authorId: string;
 }
@@ -107,6 +118,12 @@ export const STICKY_COLOR_NAMES: Record<string, string> = {
 export const DEFAULT_STICKY_COLOR = "#ffec99";
 export const DEFAULT_STICKY_SIZE = 300;
 
+/** Shape boxes: default fill (white) + default size when click-placed rather than drag-sized. */
+export const DEFAULT_SHAPE_FILL = "#ffffff";
+export const DEFAULT_SHAPE_W = 200;
+export const DEFAULT_SHAPE_H = 120;
+const SHAPE_KINDS: readonly string[] = ["rectangle", "ellipse", "rhombus", "triangle", "divider"];
+
 export function objectsMap(doc: Y.Doc): Y.Map<Y.Map<unknown>> {
   return doc.getMap<Y.Map<unknown>>("objects");
 }
@@ -141,6 +158,8 @@ export function addText(doc: Y.Doc, t: TextObject): void {
     m.set("x", t.x);
     m.set("y", t.y);
     if (t.width != null) m.set("width", t.width);
+    if (t.height != null) m.set("height", t.height);
+    if (t.shape != null) m.set("shape", t.shape);
     m.set("runs", t.runs);
     m.set("fontFamily", t.fontFamily);
     m.set("fontSize", t.fontSize);
@@ -164,7 +183,7 @@ export function setTextRuns(doc: Y.Doc, id: string, runs: TextRun[]): void {
 export function setTextGeometry(
   doc: Y.Doc,
   id: string,
-  geom: { x?: number; y?: number; width?: number },
+  geom: { x?: number; y?: number; width?: number; height?: number },
 ): void {
   doc.transact(() => {
     const m = objectsMap(doc).get(id);
@@ -172,6 +191,7 @@ export function setTextGeometry(
     if (geom.x != null) m.set("x", geom.x);
     if (geom.y != null) m.set("y", geom.y);
     if (geom.width != null) m.set("width", geom.width);
+    if (geom.height != null) m.set("height", geom.height);
   });
 }
 
@@ -328,8 +348,12 @@ function readText(m: Y.Map<unknown>): TextObject | null {
   };
   // exactOptionalPropertyTypes: only attach width when it's a usable number (never `undefined`).
   if (typeof width === "number" && Number.isFinite(width) && width > 0) text.width = width;
+  const height = m.get("height");
+  if (typeof height === "number" && Number.isFinite(height) && height > 0) text.height = height;
   const bg = m.get("bg");
   if (typeof bg === "string" && bg) text.bg = bg;
+  const shape = m.get("shape");
+  if (typeof shape === "string" && SHAPE_KINDS.includes(shape)) text.shape = shape as ShapeKind;
   return text;
 }
 
