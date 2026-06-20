@@ -1635,22 +1635,25 @@ input[type="range"] {
     top: auto;
     bottom: 0; /* sits on the wrapper's bottom edge = the dock's top */
     margin: 0 auto;
-    width: min(360px, calc(100vw - 20px));
-    max-width: min(360px, calc(100vw - 20px));
+    width: min(340px, calc(100vw - 20px)); /* matches the dock → looks like one toolbar extension */
+    max-width: min(340px, calc(100vw - 20px));
     min-width: 0;
     flex-direction: column; /* grab handle on top, content below */
     align-items: stretch;
     gap: 4px; /* handle(22) + this gap = the 26px collapsed tab → only the handle peeks */
     padding: 0 8px 10px;
     border-radius: 16px 16px 0 0;
-    box-shadow: var(--shadow);
+    /* No shadow on the sheet itself — it's a flush extension of the dock, whose downward shadow
+       elevates the whole unit; a sheet shadow would cast up onto the canvas above it. */
+    box-shadow: none;
     pointer-events: auto;
     transform: translateY(0);
     transition: transform 280ms var(--ease);
     will-change: transform;
   }
-  .draw-bar.mini-sheet {
-    width: min(340px, calc(100vw - 20px));
+  /* the grab handle is a fixed-height row at the top; never let it flex-grow to fill the sheet */
+  .mini-sheet > .sheet-handle {
+    flex: 0 0 22px;
   }
   .draw-bar .db-row {
     flex-direction: row;
@@ -1699,13 +1702,13 @@ input[type="range"] {
     justify-content: center;
     z-index: 45;
   }
-  /* while any mini-sheet is out, the dock's top merges seamlessly with it:
-     square top corners, no top border, no top shadow */
+  /* while any mini-sheet is out, the dock's top merges seamlessly with it: square top corners,
+     no top border, and a strictly-downward shadow so nothing is cast UP onto the sheet above it. */
   #app.sheet-open .dock {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
     border-top-color: transparent;
-    box-shadow: 0 14px 16px -3px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 14px 20px -8px rgba(16, 17, 22, 0.22);
   }
   /* collapsed to a tab → show the toolbar's top edge again so the seam is visible */
   #app.sheet-open:has(.mini-sheet.collapsed) .dock {
@@ -1750,9 +1753,10 @@ input[type="range"] {
     width: 26px;
     height: 26px;
   }
-  /* the grab handle must span the full sheet width even though the shape items wrap in a row */
-  .mini-sheet > .sheet-handle {
-    flex-basis: 100%;
+  /* the shape menu wraps in a row, so its handle needs a full-width row of its own (the column
+     sheets keep the fixed-height handle from .mini-sheet > .sheet-handle above) */
+  .shape-menu > .sheet-handle {
+    flex: 0 0 100%;
   }
   /* On a phone, B/I/U/S collapse into ONE toggle (below) so the toolbar fits a single row with no
      overflow + no dead space. Clamp to the viewport; wrap is only a safety net for very long labels.
