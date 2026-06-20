@@ -122,9 +122,9 @@ export class ViewportController {
     this.zoomAnim = requestAnimationFrame(tick);
   }
   resetZoom(): void {
-    // Reset to the initial view: 50% zoom AND recenter the canvas (world origin at
+    // Reset to the initial view: 100% zoom AND recenter the canvas (world origin at
     // the viewport center) — returns to exactly where the board opened.
-    this.applyTransform(0.5, { x: this.stage.width() / 2, y: this.stage.height() / 2 });
+    this.applyTransform(1, { x: this.stage.width() / 2, y: this.stage.height() / 2 });
   }
   /** Set an absolute zoom (1 = 100%), clamped to the supported range. */
   zoomTo(scale: number): void {

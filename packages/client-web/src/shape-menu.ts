@@ -1,4 +1,4 @@
-// <co-shape-menu> — the "Shapes and lines" picker: a vertical FigJam-style menu (lines/arrows on
+// <co-shape-menu> — the "Shapes and lines" picker: a vertical menu (lines/arrows on
 // top, shapes below) shown when the Shapes tool is active. Picking an item sets the kind drawn next
 // and emits `shape-change` (bubbling → #app in main.ts → canvas). Light DOM. Sibling of <co-draw-bar>.
 // On mobile it's a mini bottom-sheet (drag-to-collapse) like the draw bar — see mobile-sheet.ts.
@@ -13,8 +13,7 @@ export type ShapeChoice =
   | "rectangle"
   | "ellipse"
   | "rhombus"
-  | "triangle"
-  | "divider";
+  | "triangle";
 
 /** Wrap inner SVG markup in a styled <svg>. `inner` is the full element(s) — paths included. */
 function smIco(inner: string): string {
@@ -47,7 +46,6 @@ const ITEMS: readonly Item[] = [
   { kind: "ellipse", label: "Oval", svg: '<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>' },
   { kind: "rhombus", label: "Rhombus", svg: '<path d="M12 4 20 12 12 20 4 12z"/>' },
   { kind: "triangle", label: "Triangle", svg: '<path d="M12 5 20 19H4z"/>' },
-  { kind: "divider", label: "Divider", svg: '<path d="M4 12h16"/>' },
 ];
 
 export class CoShapeMenu extends HTMLElement {
@@ -62,7 +60,9 @@ export class CoShapeMenu extends HTMLElement {
     this.#wired = true;
     this.innerHTML = ITEMS.map(
       (it) =>
-        `<button class="sm-item${it.sep ? " sm-sep" : ""}" type="button" role="menuitemradio" data-kind="${it.kind}" data-tip="${it.label}" aria-label="${it.label}">` +
+        // No data-tip: the visible label already names it on desktop (the icon-only mobile sheet
+        // doesn't use hover tooltips), so a tooltip would just echo the label.
+        `<button class="sm-item${it.sep ? " sm-sep" : ""}" type="button" role="menuitemradio" data-kind="${it.kind}" aria-label="${it.label}">` +
         smIco(it.svg) +
         `<span class="sm-label">${it.label}</span>` +
         "</button>",

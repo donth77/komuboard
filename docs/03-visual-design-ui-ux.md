@@ -500,7 +500,7 @@ All presence is **ephemeral awareness** (never persisted — see [04](./04-techn
 
 ### 7.4 Cursor chat
 
-- Press **`/`** (or click "chat at cursor") → an input bubble attaches to your cursor; typing shows live to others next to your cursor (FigJam-style).
+- Press **`/`** (or click "chat at cursor") → an input bubble attaches to your cursor; typing shows live to others next to your cursor.
 - `Enter`/`⌘Enter` sends → the bubble persists ~6s then fades; `Esc` cancels.
 - Bubble uses `--surface-raised`, `--text`, identity-color left accent bar; it follows the cursor so the conversation stays spatial.
 - Cursor chat is **not** persisted to the document; it is awareness-only. A separate **Comments** tool (Phase 2) anchors threaded, persisted notes to objects/positions.

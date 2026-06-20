@@ -158,7 +158,7 @@ interface AwarenessState {
   // 2D presence (high frequency)
   cursor?: { x: number; y: number }; // board coords, NOT screen px
   selection?: string[]; // selected object ids
-  chat?: { text: string; ts: number }; // cursor-chat line (FigJam-style)
+  chat?: { text: string; ts: number }; // cursor-chat line
 
   // VR presence (only present in immersive mode)
   xr?: {

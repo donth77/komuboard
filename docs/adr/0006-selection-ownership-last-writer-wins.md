@@ -33,7 +33,7 @@ Constraints:
 
 **Good**
 
-- No stale or duplicate transform boxes; "I clicked it, it's mine" matches user expectation (FigJam-style).
+- No stale or duplicate transform boxes; "I clicked it, it's mine" matches user expectation.
 - No server-side selection state or locking — fits the CRDT-first, free-to-run model; the relay (Durable Object) stays dumb.
 - Clock-free, so immune to client clock skew.
 - The rule is renderer-agnostic: 2D and VR converge to the same owner as long as both run the pass.

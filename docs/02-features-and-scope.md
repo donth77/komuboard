@@ -388,7 +388,7 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 - **Labeled, colored cursors.** Every connected user has a stable color and a name label; remote cursors render with that color + label so people are distinguishable at a glance (Canva-style colorful labeled cursors).
 - **Smooth interpolation.** Remote cursor motion is interpolated between received samples (not teleported), so movement looks fluid even though updates are throttled to ~20–30 Hz.
 - **Presence avatars + join/leave.** A presence stack/list shows who is in the room; joins and leaves update it within ~1–2s; closing a tab removes that user's cursor and avatar.
-- **Cursor chat (Phase 2).** Type-at-cursor text floats by the user's pointer and fades on timeout/dismiss (FigJam-style).
+- **Cursor chat (Phase 2).** Type-at-cursor text floats by the user's pointer and fades on timeout/dismiss.
 - **VR laser pointers + avatars (Phase 3).** VR users' head/hands poses and laser-pointer direction are presence too, shown to 2D and VR peers alike.
 - **Awareness channel, ephemeral, never persisted.** All of the above ride the **Yjs `y-protocols/awareness`** channel — broadcast but **not** written to the persisted content doc. A room reload shows zero stale cursors/selections/chat.
 - **Budget-aware transport.** Cursor/pose updates are throttled, coalesced, and binary-encoded to respect the 20:1 inbound-WS billing ratio and the free request budget. Outbound WS messages are not billed; hibernation pauses idle duration charges. See [05 — Scaling & Cost](./05-scaling-and-cost.md) and [04 — Architecture](./04-technical-architecture.md).

@@ -17,6 +17,7 @@ import {
 import { BoardCanvas, type ToolId } from "./canvas";
 import { createAppStore } from "./store";
 import { createDialog } from "./dialog";
+import { MOD_KEY, SHIFT_KEY } from "./platform";
 import { settingsControlsHTML, syncSettingsControls } from "./settings-controls";
 import "./avatar-presence-row";
 import type { PresencePerson } from "./avatar-presence-row";
@@ -126,7 +127,7 @@ const identity = loadIdentity();
 const user: PresenceState = { name: identity.name, color: identity.color };
 window.__coboard = { doc: ydoc, provider, awareness: provider.awareness };
 
-// pen state — FigJam-style fixed palette (./palette); a trailing rainbow swatch opens the custom picker.
+// pen state — fixed palette (./palette); a trailing rainbow swatch opens the custom picker.
 const penColor = "#0e1116";
 
 // --------------------------------------------------------------------------
@@ -169,10 +170,15 @@ const canvas = new BoardCanvas({
   user,
   // Revert to select after a text/sticky box is placed + finished (drives the dock highlight too).
   requestTool: (tool) => selectTool(tool),
+  // After drawing / placing a sticky / placing a shape, collapse the mobile mini-sheet to reclaim
+  // canvas space (desktop has no collapse — the sheets are floating panels).
+  onPlaced: () => {
+    if (mobileMql.matches) sheetForTool(currentTool)?.classList.add("collapsed");
+  },
 });
 if (window.__coboard) window.__coboard.canvas = canvas; // e2e hook: introspect remote presence
 canvas.setColor(penColor);
-canvas.setWidth(14);
+canvas.setWidth(8);
 provider.awareness.setLocalStateField("id", identity.id);
 
 // Publish my profile into the shared doc (synced once + persisted, never in
@@ -202,8 +208,9 @@ if (stickyBarEl) {
   canvas.setStickyColor(DEFAULT_STICKY_COLOR);
 }
 const shapeMenuEl = document.querySelector("co-shape-menu");
-// Shape kinds the canvas can draw today (lines/arrows are connectors — a later increment).
-const DRAWABLE_SHAPES = new Set(["rectangle", "ellipse", "rhombus", "triangle", "divider"]);
+// The "Shapes and lines" menu has two groups: shape boxes (placed) and connectors (drawn as arrows).
+const DRAWABLE_SHAPES = new Set(["rectangle", "ellipse", "rhombus", "triangle"]);
+const CONNECTOR_KINDS = new Set(["line", "arrow", "elbow", "block"]);
 const mobileMql = window.matchMedia("(max-width: 640px)");
 let currentTool: ToolId = "select";
 // Each of these tools owns a mobile mini-sheet (draw bar / sticky palette / shape menu).
@@ -266,10 +273,13 @@ app?.addEventListener("sticky-color", (e) => {
   canvas.setStickyColor((e as CustomEvent<{ color: string }>).detail.color);
 });
 
-// <co-shape-menu> emits `shape-change` → set the shape drawn next (lines/arrows land later).
+// <co-shape-menu> emits `shape-change` → either set the shape box drawn next, or switch the tool
+// into connector-draw mode (line/arrow/elbow/block draw on drag, snapping to shape sides).
 app?.addEventListener("shape-change", (e) => {
   const kind = (e as CustomEvent<{ kind: string }>).detail.kind;
   if (DRAWABLE_SHAPES.has(kind)) canvas.setShape(kind as Parameters<typeof canvas.setShape>[0]);
+  else if (CONNECTOR_KINDS.has(kind))
+    canvas.setConnector(kind as Parameters<typeof canvas.setConnector>[0]);
 });
 
 // Shortcuts overlay (reusable <co-dialog>).
@@ -281,12 +291,14 @@ const shortcutsDialog = createDialog({
     '<div class="kbd-row"><span>Hand / pan</span><kbd class="kbd">H</kbd></div>' +
     '<div class="kbd-row"><span>Pen</span><kbd class="kbd">P</kbd></div>' +
     '<div class="kbd-row"><span>Text</span><kbd class="kbd">T</kbd></div>' +
-    '<div class="kbd-row"><span>Select all</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">A</kbd></span></div>' +
+    `<div class="kbd-row"><span>Select all</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">A</kbd></span></div>` +
+    `<div class="kbd-row"><span>Copy</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">C</kbd></span></div>` +
+    `<div class="kbd-row"><span>Paste</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">V</kbd></span></div>` +
     '<div class="kbd-row"><span>Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">⌫</kbd></span></div>' +
-    '<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">Z</kbd></span></div>' +
-    '<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">⇧</kbd> <kbd class="kbd">Z</kbd></span></div>' +
+    `<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
+    `<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     '<div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
-    '<div class="kbd-row"><span>Zoom in / out</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">+</kbd> / <kbd class="kbd">−</kbd></span></div>' +
+    `<div class="kbd-row"><span>Zoom in / out</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">+</kbd> / <kbd class="kbd">−</kbd></span></div>` +
     '<div class="kbd-row"><span>Toggle this menu</span><kbd class="kbd">?</kbd></div>',
 });
 
@@ -354,6 +366,18 @@ window.addEventListener("keydown", (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
     canvas.selectAll();
+    e.preventDefault();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
+    if (canvas.hasSelection()) {
+      canvas.copySelection();
+      e.preventDefault(); // copying selected objects, not the page → suppress native copy
+    }
+    return; // nothing selected → let the browser handle ⌘/Ctrl+C (e.g. copy selected UI text)
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
+    canvas.pasteSelection();
     e.preventDefault();
     return;
   }

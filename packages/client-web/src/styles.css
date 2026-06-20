@@ -288,7 +288,7 @@ body {
   user-select: none;
   -webkit-user-select: none;
 
-  /* ---- DOTS (default, FigJam-style) ---- */
+  /* ---- DOTS ---- */
   /* Fallback (no relative-color syntax): single tier — still LOD-sized, just no crossfade. */
   background-image: radial-gradient(
     var(--grid) var(--grid-dot, 1.6px),
@@ -861,6 +861,7 @@ input[type="range"] {
   padding: 0;
   width: 360px;
   max-width: calc(100% - 32px);
+  max-height: min(82dvh, 720px); /* never exceed the viewport; long bodies scroll (.dialog-body) */
   border-radius: 18px;
   background: var(--surface);
   color: var(--ink);
@@ -876,6 +877,8 @@ input[type="range"] {
 .dialog[open] {
   opacity: 1;
   transform: none;
+  display: flex; /* column layout so the head/foot stay put while .dialog-body scrolls */
+  flex-direction: column;
 }
 @starting-style {
   .dialog[open] {
@@ -908,12 +911,16 @@ input[type="range"] {
   font-weight: 700;
   font-size: 15px;
   border-bottom: 1px solid var(--border);
+  flex: 0 0 auto; /* fixed header — never shrinks/scrolls */
 }
 .dialog-body {
   padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1 1 auto; /* takes the remaining height… */
+  min-height: 0; /* …and may shrink within the flex column so overflow-y can scroll */
+  overflow-y: auto; /* scroll long content (e.g. the keyboard-shortcuts list) */
 }
 .dialog-foot {
   display: flex;
@@ -921,6 +928,7 @@ input[type="range"] {
   gap: 8px;
   padding: 14px 18px;
   border-top: 1px solid var(--border);
+  flex: 0 0 auto; /* fixed footer — never shrinks/scrolls */
 }
 .avatar-edit {
   display: flex;
@@ -1034,7 +1042,7 @@ input[type="range"] {
   }
 }
 
-/* ---------- custom rainbow swatch (FigJam-style) — opens the colour picker ---------- */
+/* ---------- custom rainbow swatch — opens the colour picker ---------- */
 .sw-custom {
   background: conic-gradient(
     from 90deg,
@@ -1050,7 +1058,7 @@ input[type="range"] {
   ) !important;
   border: 2px solid var(--surface) !important;
 }
-/* Hover/focus tooltip — a single FigJam-style dark pill rendered in <body> at the very top of
+/* Hover/focus tooltip — a single dark pill rendered in <body> at the very top of
    the stacking order (see tooltip.ts), so it's ALWAYS painted above every chrome layer no
    matter which stacking context the hovered element lives in. (A ::after pseudo-pill was
    trapped in each host's context — a top-bar pill could be covered by a side panel.) Any
@@ -1111,7 +1119,7 @@ input[type="range"] {
   border-left-color: #1e1e1e;
 }
 
-/* ---------- custom colour picker (FigJam-style) ---------- */
+/* ---------- custom color picker ---------- */
 .color-picker {
   position: fixed;
   z-index: 80;
@@ -1661,7 +1669,9 @@ input[type="range"] {
     gap: 6px;
   }
   .mini-sheet.collapsed {
-    transform: translateY(calc(100% - 26px)); /* leave a 26px grab-handle tab (just the handle) */
+    /* Leave only the 22px grab handle peeking — short of the content below it (the sticky's active
+       swatch has a selection ring that overflows ~3px upward, so a taller tab would reveal its tip). */
+    transform: translateY(calc(100% - 22px));
   }
   .mini-sheet.hidden {
     /* override the global `.hidden { display:none }` so the sheet can animate down into the dock */
@@ -1727,12 +1737,23 @@ input[type="range"] {
     width: 32px;
     height: 32px;
   }
-  /* shape menu → a centred icon-button row (labels hidden), wrapping to a second row as needed. */
+  /* shape menu → a 4-column icon grid (labels hidden): the four lines/arrows on the top row, the
+     four shapes on the bottom row, with a faint divider in the gap between them. */
   .shape-menu {
-    flex-flow: row wrap;
+    display: grid;
+    grid-template-columns: repeat(4, 52px);
     justify-content: center;
-    gap: 4px;
+    column-gap: 6px;
+    row-gap: 6px;
     padding-bottom: 12px;
+  }
+  /* Keep the grid layout while the sheet slides out. The shared `.mini-sheet.hidden { display:flex }`
+     (which overrides `.hidden { display:none }` so the sheet can animate down) would otherwise restack
+     the 8 grid items into a tall flex *column* mid-animation — and since the sheet is anchored
+     bottom:0, that column balloons UPWARD into the canvas before it slides away. The draw/sticky bars
+     are already flex columns, so they don't reflow; only the grid menu needs this. */
+  .shape-menu.hidden {
+    display: grid !important;
   }
   .shape-menu .sm-item {
     width: 52px;
@@ -1743,20 +1764,26 @@ input[type="range"] {
   .shape-menu .sm-item .sm-label {
     display: none;
   }
-  .shape-menu .sm-item.sm-sep {
-    margin-top: 0;
-  }
-  .shape-menu .sm-item.sm-sep::before {
-    display: none; /* the lines/shapes divider doesn't fit a wrap grid */
-  }
   .shape-menu .sm-ico {
     width: 26px;
     height: 26px;
   }
-  /* the shape menu wraps in a row, so its handle needs a full-width row of its own (the column
-     sheets keep the fixed-height handle from .mini-sheet > .sheet-handle above) */
+  /* the lines/shapes divider — a faint full-width line in the gap between the two rows. The first
+     shape (rectangle, .sm-sep) sits at column 1 of the bottom row, so its ::before spans all four. */
+  .shape-menu .sm-item.sm-sep {
+    margin-top: 0;
+    position: relative;
+  }
+  .shape-menu .sm-item.sm-sep::before {
+    display: block;
+    top: -3px;
+    left: 0;
+    right: auto;
+    width: calc(400% + 18px); /* 4 cells × 52px + 3 gaps × 6px = the full row width */
+  }
+  /* the handle spans the full grid width as its own top row */
   .shape-menu > .sheet-handle {
-    flex: 0 0 100%;
+    grid-column: 1 / -1;
   }
   /* On a phone, B/I/U/S collapse into ONE toggle (below) so the toolbar fits a single row with no
      overflow + no dead space. Clamp to the viewport; wrap is only a safety net for very long labels.
@@ -1785,11 +1812,11 @@ input[type="range"] {
   }
   .co-text-bar .ctb-marks .ctb-marks-menu {
     position: absolute;
-    top: calc(100% + 8px);
+    bottom: calc(100% + 8px); /* open UPWARD (above the bar) so it never covers the edited node */
     left: 50%;
     transform: translateX(-50%) scaleY(0);
-    transform-origin: top center;
-    flex-direction: column;
+    transform-origin: bottom center;
+    flex-direction: row; /* a horizontal mini-bar (like the alignment flyout) */
     gap: 2px;
     padding: 4px;
     background: var(--surface, #ffffff);
@@ -1924,6 +1951,10 @@ input[type="range"] {
   pointer-events: none;
 }
 /* ── Shapes — a text box with a `shape` renders as an outlined card with a centred label ──────── */
+/* The box is a flex column that vertically centres an INNER `.co-text-body`. The body is the actual
+   text/contenteditable and is content-sized, so when it's empty it's just one line tall — centred by
+   the flex, which puts its caret at the box's centre (an editable === box would be full-height and
+   strand the empty caret at the top). Horizontal placement is left to `text-align`. */
 .co-text.shape {
   padding: 0.7em;
   box-sizing: border-box;
@@ -1931,19 +1962,15 @@ input[type="range"] {
   border-radius: 4px;
   display: flex;
   flex-direction: column;
-  /* Vertically centre the label; horizontal placement is left to `text-align` (so the alignment
-     control works). The text block is full-width (align-items: stretch) — NOT shrink-wrapped — so
-     text-align actually moves it, and the "Add text" placeholder follows the same alignment. */
   justify-content: center;
   word-break: break-word;
 }
+.co-text-body {
+  width: 100%; /* stretch so text-align positions the text; height stays content-sized (centred) */
+  outline: none;
+}
 .co-text.shape-ellipse {
   border-radius: 50%;
-}
-.co-text.shape-divider {
-  border: none;
-  border-top: 2px solid #1f2933;
-  border-radius: 0;
 }
 /* polygon shapes draw their outline as an SVG background → no CSS border; the SVG fills the box */
 .co-text.shape-triangle,
@@ -1959,21 +1986,28 @@ input[type="range"] {
   justify-content: flex-end;
   padding-bottom: 0.9em;
 }
-/* "Add text" placeholder while a shape is empty (display copy or the editor before you type).
-   It's an ABSOLUTE overlay (out of the flex flow) so it doesn't consume the box's centred flex
-   line — that line stays available for the empty editor's caret, which then sits where the text
-   will go (centred) instead of being stranded at the top-left. */
-.co-text.shape:empty::before {
+/* "Add text" placeholder while a shape's body is empty — but ONLY when the shape is selected
+   (.selected) or being edited (.co-text-editor). An idle, unselected empty shape shows nothing, so
+   the canvas isn't littered with "Add text" prompts. An ABSOLUTE overlay on the box (not in the
+   editable's line, which would shove the caret to its right). It uses the SAME flex centring +
+   padding + text-align as the box, so it paints exactly over where the centred inner body's
+   caret/text sits. Shown via :has when the body has no text. */
+.co-text.shape.selected:has(> .co-text-body:empty)::before,
+.co-text.co-text-editor.shape:has(> .co-text-body:empty)::before {
   content: "Add text";
   position: absolute;
   inset: 0;
+  padding: inherit;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  justify-content: center; /* vertical centre; horizontal follows the inherited text-align */
+  justify-content: center;
+  text-align: inherit; /* matches the active horizontal alignment */
   color: #98a2b3;
   pointer-events: none;
 }
-.co-text.shape-triangle:empty::before {
+.co-text.shape-triangle.selected:has(> .co-text-body:empty)::before,
+.co-text.co-text-editor.shape-triangle:has(> .co-text-body:empty)::before {
   justify-content: flex-end; /* match the triangle's lower-sitting label */
 }
 .co-text.shape.selected {
@@ -1985,6 +2019,193 @@ input[type="range"] {
   position: absolute;
   z-index: 2;
   pointer-events: none;
+}
+/* Connector attach points — the 4 round dots floating just outside a shape's sides (one per side).
+   Positioned in screen space by the text layer; purely visual (snapping is computed from geometry). */
+.co-connector-dots {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.co-connector-dot {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #7ab8ff;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 0 1px rgba(74, 158, 255, 0.5);
+  transform: translate(-50%, -50%);
+}
+/* The locked snap point while drawing a connector — larger + solid (the lock indicator). */
+.co-connector-dot.is-snapped {
+  width: 16px;
+  height: 16px;
+  background: #3b6ff6;
+  box-shadow: 0 0 0 3px rgba(59, 111, 246, 0.3);
+}
+/* Endpoint handles for a selected connector — white circles with a blue ring, draggable to
+   re-point / re-bind the end (screen-space, positioned by the canvas). */
+.co-connector-handles {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.co-connector-handle {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2.5px solid #4a9eff;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+.co-connector-handle:active {
+  cursor: grabbing;
+}
+
+/* ── Connector edit bar — a light floating toolbar above a selected connector (matches the text /
+   draw bars; FigJam's dark pill is only a layout reference). ───────────────────────────────────── */
+.co-connector-bar {
+  position: fixed;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  color: var(--ink, #0e1116);
+  user-select: none;
+}
+.co-connector-bar .cb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.co-connector-bar .cb-btn:hover {
+  background: var(--surface-2, #f1f3f5);
+}
+.co-connector-bar .cb-ico {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+.co-connector-bar .cb-weight .cb-ico {
+  width: 18px;
+  height: 18px;
+}
+.co-connector-bar .cb-caret {
+  font-size: 9px;
+  opacity: 0.55;
+}
+.co-connector-bar .cb-color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #1f2933;
+  border: 1.5px solid rgba(0, 0, 0, 0.18);
+}
+.co-connector-bar .cb-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 3px;
+  background: var(--border, #e3e6ea);
+}
+.cb-pop {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 6px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+.cb-pop .cb-opt,
+.cb-pop .cb-weight-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink, #0e1116);
+  cursor: pointer;
+}
+.cb-pop .cb-opt:hover,
+.cb-pop .cb-weight-opt:hover {
+  background: var(--surface-2, #f1f3f5);
+}
+.cb-pop .cb-opt.on,
+.cb-pop .cb-weight-opt.on {
+  background: color-mix(in srgb, var(--accent, #3b6ff6) 16%, transparent);
+  color: var(--accent, #3b6ff6);
+}
+.cb-pop .cb-opt .cb-ico {
+  width: 24px;
+  height: 24px;
+}
+/* line-weight popover: a named vertical list (Thin / Medium / …) with a preview line per row */
+.cb-pop-list {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  min-width: 150px;
+}
+.cb-pop-list .cb-weight-opt {
+  width: 100%;
+  height: 34px;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 10px;
+  font:
+    14px Inter,
+    system-ui,
+    sans-serif;
+}
+.cb-pop-list .cb-weight-line {
+  flex: 0 0 56px;
+  border-radius: 3px;
+  background: currentColor;
+}
+.cb-swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 24px);
+  gap: 8px;
+  padding: 2px;
+}
+.cb-sw {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--sw);
+  border: 2px solid var(--surface, #ffffff);
+  box-shadow: 0 0 0 1px var(--border, #e3e6ea);
+  cursor: pointer;
+  padding: 0;
+}
+.cb-sw.on {
+  box-shadow:
+    0 0 0 2px var(--surface, #ffffff),
+    0 0 0 4px var(--accent, #3b6ff6);
 }
 .co-text-handle {
   position: absolute;
@@ -2103,6 +2324,39 @@ input[type="range"] {
   align-items: center;
   gap: 2px;
 }
+/* Shape mode (any viewport): the shape bar already carries shape-select / fill / align, so collapse
+   B/I/U/S into the flyout toggle to keep it compact — the same flyout the mobile bar uses. */
+.co-text-bar.shape-mode .ctb-marks {
+  position: relative;
+}
+.co-text-bar.shape-mode .ctb-marks-toggle {
+  display: inline-flex;
+}
+.co-text-bar.shape-mode .ctb-marks-menu {
+  position: absolute;
+  bottom: calc(100% + 8px); /* open UPWARD (above the bar) so it never covers the edited node */
+  left: 50%;
+  transform: translateX(-50%) scaleY(0);
+  transform-origin: bottom center;
+  flex-direction: row; /* a horizontal mini-bar (like the alignment flyout) */
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 150ms var(--ease, ease),
+    opacity 150ms var(--ease, ease);
+  z-index: 2;
+}
+.co-text-bar.shape-mode .ctb-marks.open .ctb-marks-menu {
+  transform: translateX(-50%) scaleY(1);
+  opacity: 1;
+  pointer-events: auto;
+}
 .co-text-bar .ctb-btn.on {
   background: color-mix(in srgb, var(--accent, #3b6ff6) 16%, transparent);
   color: var(--accent, #3b6ff6);
@@ -2163,10 +2417,12 @@ input[type="range"] {
 }
 .co-text-bar .ctb-shape-kind,
 .co-text-bar .ctb-fill,
+.co-text-bar .ctb-border,
 .co-text-bar .ctb-align {
   gap: 3px;
 }
 .co-text-bar .ctb-shape-ico,
+.co-text-bar .ctb-border-ico,
 .co-text-bar .ctb-align-ico {
   display: inline-flex;
 }
@@ -2175,12 +2431,25 @@ input[type="range"] {
   width: 20px;
   height: 20px;
 }
+/* the border icon (line-weight glyph) is filled, so it sizes a touch smaller for balance */
+.co-text-bar .ctb-border-ico svg {
+  width: 17px;
+  height: 17px;
+}
+.co-text-bar .ctb-border-ico.is-none {
+  opacity: 0.4;
+}
 .co-text-bar .ctb-fill-dot {
   width: 18px;
   height: 18px;
   border-radius: 50%;
   background: #ffffff;
   border: 1.5px solid rgba(0, 0, 0, 0.22);
+}
+/* "no fill" indicator — a red crossout slash over a transparent dot */
+.co-text-bar .ctb-fill-dot.is-none {
+  background:
+    linear-gradient(135deg, transparent 43%, #e03131 43%, #e03131 57%, transparent 57%), #ffffff;
 }
 /* shape-kind + alignment option grids (popovers) */
 .ctb-shape-pop {
@@ -2219,6 +2488,58 @@ input[type="range"] {
 .ctb-align-opt.on {
   background: color-mix(in srgb, var(--accent, #3b6ff6) 16%, transparent);
   color: var(--accent, #3b6ff6);
+}
+/* border popover — a row of line styles above a grid of border-colour swatches.
+ * `.ctb-pop.ctb-border-pop` keeps specificity above the base `.ctb-pop` (defined later in source). */
+.ctb-pop.ctb-border-pop {
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.ctb-border-styles {
+  display: flex;
+  gap: 6px;
+}
+.ctb-border-style {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 40px;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink, #0e1116);
+  cursor: pointer;
+}
+.ctb-border-style svg {
+  width: 22px;
+  height: 22px;
+}
+.ctb-border-style:hover {
+  background: var(--surface-2, #f1f3f5);
+}
+.ctb-border-style.on {
+  background: color-mix(in srgb, var(--accent, #3b6ff6) 16%, transparent);
+  color: var(--accent, #3b6ff6);
+}
+.ctb-border-pop .swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 26px);
+  justify-content: center;
+  column-gap: 14px;
+  row-gap: 12px;
+}
+.ctb-border-pop .sw {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+.ctb-border-pop .sw.on {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
 }
 .ctb-pop {
   position: fixed;
@@ -2297,6 +2618,11 @@ input[type="range"] {
   gap: 6px;
   padding: 6px;
   overflow: visible;
+}
+/* The text being linked, painted while the URL input has focus (the native selection can't show —
+   the document's only selection is in the input). Driven by the CSS Custom Highlight API. */
+::highlight(co-link-target) {
+  background: color-mix(in srgb, var(--accent, #3b6ff6) 30%, transparent);
 }
 .ctb-link-pop::after {
   content: "";

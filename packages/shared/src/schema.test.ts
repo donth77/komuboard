@@ -1,19 +1,25 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import {
+  addConnector,
   addStroke,
   addText,
+  cloneObject,
+  DEFAULT_CONNECTOR_WIDTH,
   DEFAULT_TEXT_SIZE,
   deleteObject,
   deleteObjects,
   objectsMap,
   orderArray,
   readObject,
+  setConnectorEnds,
   setObjectsPoints,
   setTextGeometry,
   setTextRuns,
+  sideMidpoint,
   translateObjects,
   type BoardObject,
+  type ConnectorObject,
   type StrokeObject,
   type TextObject,
 } from "./schema";
@@ -264,5 +270,150 @@ describe("text objects", () => {
     expect(asText(readObject(objectsMap(b).get("t1")!)).runs).toEqual([
       { text: "shared", bold: true },
     ]);
+  });
+});
+
+function asConnector(obj: BoardObject | null): ConnectorObject {
+  if (!obj || obj.type !== "connector") throw new Error("expected a connector object");
+  return obj;
+}
+
+function connector(id: string, over: Partial<ConnectorObject> = {}): ConnectorObject {
+  return {
+    id,
+    type: "connector",
+    kind: "arrow",
+    from: { x: 0, y: 0 },
+    to: { x: 100, y: 0 },
+    color: "#1f2933",
+    width: 6,
+    style: "solid",
+    startCap: "none",
+    endCap: "line",
+    authorId: "u1",
+    ...over,
+  };
+}
+
+describe("connectors", () => {
+  it("round-trips a free-ended connector through the doc", () => {
+    const doc = new Y.Doc();
+    addConnector(doc, connector("c1", { kind: "elbow", to: { x: 80, y: 40 } }));
+    expect(orderArray(doc).toArray()).toEqual(["c1"]);
+    expect(asConnector(readObject(objectsMap(doc).get("c1")!))).toMatchObject({
+      id: "c1",
+      type: "connector",
+      kind: "elbow",
+      from: { x: 0, y: 0 },
+      to: { x: 80, y: 40 },
+    });
+  });
+
+  it("persists a bound end (shapeId + side) and drops a half-binding", () => {
+    const doc = new Y.Doc();
+    addConnector(doc, connector("c1", { from: { x: 0, y: 0, shapeId: "s1", side: "right" } }));
+    const c = asConnector(readObject(objectsMap(doc).get("c1")!));
+    expect(c.from).toEqual({ x: 0, y: 0, shapeId: "s1", side: "right" });
+    // A binding missing its side is dropped → the end stays free.
+    rawObject(doc, "c2", {
+      type: "connector",
+      kind: "arrow",
+      from: { x: 1, y: 2, shapeId: "s1" },
+      to: { x: 3, y: 4 },
+    });
+    expect(asConnector(readObject(objectsMap(doc).get("c2")!)).from).toEqual({ x: 1, y: 2 });
+  });
+
+  it("readConnector rejects non-finite endpoints, defaults bad kind/width", () => {
+    const doc = new Y.Doc();
+    rawObject(doc, "bad", { type: "connector", from: { x: NaN, y: 0 }, to: { x: 1, y: 1 } });
+    expect(readObject(objectsMap(doc).get("bad")!)).toBeNull();
+    rawObject(doc, "messy", {
+      type: "connector",
+      kind: "squiggle",
+      from: { x: 0, y: 0 },
+      to: { x: 1, y: 1 },
+      width: -5,
+    });
+    const c = asConnector(readObject(objectsMap(doc).get("messy")!));
+    expect(c.kind).toBe("arrow");
+    expect(c.width).toBe(DEFAULT_CONNECTOR_WIDTH);
+  });
+
+  it("setConnectorEnds re-binds an end", () => {
+    const doc = new Y.Doc();
+    addConnector(doc, connector("c1"));
+    setConnectorEnds(doc, "c1", { to: { x: 5, y: 5, shapeId: "s9", side: "left" } });
+    expect(asConnector(readObject(objectsMap(doc).get("c1")!)).to).toEqual({
+      x: 5,
+      y: 5,
+      shapeId: "s9",
+      side: "left",
+    });
+  });
+
+  it("translateObjects shifts free endpoints", () => {
+    const doc = new Y.Doc();
+    addConnector(doc, connector("c1", { from: { x: 0, y: 0 }, to: { x: 10, y: 0 } }));
+    translateObjects(doc, ["c1"], 5, 7);
+    const c = asConnector(readObject(objectsMap(doc).get("c1")!));
+    expect(c.from).toEqual({ x: 5, y: 7 });
+    expect(c.to).toEqual({ x: 15, y: 7 });
+  });
+
+  it("deleteObject removes a connector + its z-order entry", () => {
+    const doc = new Y.Doc();
+    addConnector(doc, connector("c1"));
+    deleteObject(doc, "c1");
+    expect(objectsMap(doc).has("c1")).toBe(false);
+    expect(orderArray(doc).toArray()).toEqual([]);
+  });
+
+  it("sideMidpoint returns each side's mid-edge", () => {
+    const rect = { x: 10, y: 20, width: 100, height: 60 };
+    expect(sideMidpoint(rect, "top")).toEqual({ x: 60, y: 20 });
+    expect(sideMidpoint(rect, "bottom")).toEqual({ x: 60, y: 80 });
+    expect(sideMidpoint(rect, "left")).toEqual({ x: 10, y: 50 });
+    expect(sideMidpoint(rect, "right")).toEqual({ x: 110, y: 50 });
+  });
+});
+
+describe("cloneObject (copy / paste)", () => {
+  it("clones a stroke with a fresh id/author and offsets every point", () => {
+    const src = stroke("s1", [0, 0, 10, 20]);
+    const clone = asStroke(cloneObject(src, "s2", "me", 5, -3));
+    expect(clone).toMatchObject({ id: "s2", authorId: "me", points: [5, -3, 15, 17] });
+    expect(src.points).toEqual([0, 0, 10, 20]); // original untouched
+  });
+
+  it("clones a text object: offsets x/y and deep-copies runs", () => {
+    const src = textObj("t1", { x: 100, y: 50, runs: [{ text: "hi", bold: true }] });
+    const clone = asText(cloneObject(src, "t2", "me", 10, 10));
+    expect(clone).toMatchObject({ id: "t2", x: 110, y: 60, authorId: "me" });
+    expect(clone.runs).toEqual([{ text: "hi", bold: true }]);
+    expect(clone.runs).not.toBe(src.runs); // deep copy, not a shared reference
+    expect(clone.runs[0]).not.toBe(src.runs[0]);
+  });
+
+  it("clones a connector: offsets endpoints and remaps a bound shape via idMap", () => {
+    const src = connector("c1", {
+      from: { x: 0, y: 0, shapeId: "shapeA", side: "right" },
+      to: { x: 40, y: 0, shapeId: "shapeB", side: "left" },
+    });
+    const idMap = new Map([["shapeA", "shapeA2"]]); // only shapeA was copied alongside the connector
+    const clone = asConnector(cloneObject(src, "c2", "me", 8, 8, idMap));
+    expect(clone).toMatchObject({ id: "c2", authorId: "me" });
+    expect(clone.from).toMatchObject({ x: 8, y: 8, side: "right" });
+    expect(clone.to).toMatchObject({ x: 48, y: 8, side: "left" });
+    // the end bound to a copied shape rebinds to the copy; the other keeps its original binding
+    expect(clone.from.shapeId).toBe("shapeA2");
+    expect(clone.to.shapeId).toBe("shapeB");
+  });
+
+  it("keeps a free (unbound) connector end unbound", () => {
+    const src = connector("c1", { from: { x: 0, y: 0 }, to: { x: 10, y: 10 } });
+    const clone = asConnector(cloneObject(src, "c2", "me", 2, 2));
+    expect(clone.from.shapeId).toBeUndefined();
+    expect(clone.to.shapeId).toBeUndefined();
   });
 });

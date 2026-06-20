@@ -52,7 +52,69 @@ export type TextAlign = "left" | "center" | "right";
 
 /** Shape outlines the "Shapes and lines" tool can draw as text-bearing boxes (lines/arrows are a
  *  separate ConnectorObject). The box renders the outline + a centred label. */
-export type ShapeKind = "rectangle" | "ellipse" | "rhombus" | "triangle" | "divider";
+export type ShapeKind = "rectangle" | "ellipse" | "rhombus" | "triangle";
+/** A shape's border style: a solid line, a dashed line, or no border at all. */
+export type BorderStyle = "solid" | "dashed" | "none";
+
+// --- Connectors (lines / arrows between points, optionally bound to a shape's side) ---
+
+/** The connector glyphs the "Shapes and lines" tool can draw. `line` = no head, `arrow` = single
+ *  head, `elbow` = right-angled arrow, `block` = a thicker filled-head arrow. */
+export type ConnectorKind = "line" | "arrow" | "elbow" | "block";
+/** Which side of a shape a connector end binds to (its mid-edge is the attach point). */
+export type ConnectorSide = "top" | "right" | "bottom" | "left";
+export type ConnectorStyle = "solid" | "dashed";
+export const CONNECTOR_SIDES: readonly ConnectorSide[] = ["top", "right", "bottom", "left"];
+/** The marker drawn at a connector endpoint: nothing, an open (line) arrowhead, a filled arrowhead,
+ *  an outlined white-filled arrowhead, a dot, or a diamond. Each end (start/end) chooses its own. */
+export type ConnectorCap = "none" | "line" | "arrow" | "triangle" | "circle" | "diamond";
+export const CONNECTOR_CAPS: readonly ConnectorCap[] = [
+  "none",
+  "line",
+  "arrow",
+  "triangle",
+  "circle",
+  "diamond",
+];
+
+/** One end of a connector. Always carries a world `{x, y}` (the fallback / last-resolved point); a
+ *  *bound* end also carries `{shapeId, side}` and re-resolves to that shape's side mid-edge each
+ *  render, so the connector re-routes when the shape moves. If the shape is gone, the stored point
+ *  is used (the end gracefully becomes free). */
+export interface ConnectorEnd {
+  x: number;
+  y: number;
+  shapeId?: string;
+  side?: ConnectorSide;
+}
+
+export interface ConnectorObject {
+  id: string;
+  type: "connector";
+  kind: ConnectorKind;
+  from: ConnectorEnd;
+  to: ConnectorEnd;
+  color: string;
+  width: number;
+  style: ConnectorStyle;
+  /** Endpoint markers (default: start `none`, end `arrow`). Edited via the selected-connector bar. */
+  startCap: ConnectorCap;
+  endCap: ConnectorCap;
+  /** Optional label, anchored at the connector's midpoint. */
+  label?: string;
+  authorId: string;
+}
+
+/** The default caps for a freshly-drawn connector of each menu kind — so the rendered arrow matches
+ *  its menu icon: `arrow`/`elbow` get an OPEN head, `block` a filled head, `line` none. */
+export function defaultCapsFor(kind: ConnectorKind): {
+  startCap: ConnectorCap;
+  endCap: ConnectorCap;
+} {
+  if (kind === "line") return { startCap: "none", endCap: "none" };
+  if (kind === "block") return { startCap: "none", endCap: "triangle" }; // outlined head (its icon)
+  return { startCap: "none", endCap: "line" }; // arrow / elbow → open head
+}
 
 export interface TextObject {
   id: string;
@@ -79,15 +141,19 @@ export interface TextObject {
    *  padded, square card with centred text) rather than a plain text box. For a shape box this is
    *  the fill colour (default white). */
   bg?: string;
+  /** Shape outline colour (hex) — defaults to a dark ink when absent. */
+  borderColor?: string;
+  /** Shape outline style (solid / dashed / none) — defaults to solid when absent. */
+  borderStyle?: BorderStyle;
   authorId: string;
 }
 
-export type BoardObject = StrokeObject | TextObject;
+export type BoardObject = StrokeObject | TextObject | ConnectorObject;
 
 /** Defaults for a freshly-created text box (shared so the renderer + schema can't drift).
- *  Size 40 = the "Large" preset in the text toolbar. */
+ *  Size 24 = the "Medium" preset in the text toolbar. */
 export const DEFAULT_TEXT_FONT = "Inter, system-ui, -apple-system, sans-serif";
-export const DEFAULT_TEXT_SIZE = 40;
+export const DEFAULT_TEXT_SIZE = 24;
 
 /** Sticky-note palette (soft pastels) — mirrors the FigJam sticky colours. */
 export const STICKY_COLORS: readonly string[] = [
@@ -114,15 +180,40 @@ export const STICKY_COLOR_NAMES: Record<string, string> = {
   "#D0BFFF": "Purple",
   "#FCC2D7": "Pink",
 };
-/** Default colour + square size (canvas units) of a freshly-dropped sticky note (FigJam-large). */
+/** Default colour + square size (canvas units) of a freshly-dropped sticky note (≈150 px at the 100% default zoom). */
 export const DEFAULT_STICKY_COLOR = "#ffec99";
-export const DEFAULT_STICKY_SIZE = 300;
+export const DEFAULT_STICKY_SIZE = 150;
 
 /** Shape boxes: default fill (white) + default size when click-placed rather than drag-sized. */
 export const DEFAULT_SHAPE_FILL = "#ffffff";
-export const DEFAULT_SHAPE_W = 360;
-export const DEFAULT_SHAPE_H = 260;
-const SHAPE_KINDS: readonly string[] = ["rectangle", "ellipse", "rhombus", "triangle", "divider"];
+export const DEFAULT_SHAPE_W = 180;
+export const DEFAULT_SHAPE_H = 130;
+const SHAPE_KINDS: readonly string[] = ["rectangle", "ellipse", "rhombus", "triangle"];
+
+/** Connectors: default ink + line width (canvas units), and the kinds the menu can draw. */
+export const DEFAULT_CONNECTOR_COLOR = "#1f2933";
+export const DEFAULT_CONNECTOR_WIDTH = 5; // = the "Medium" weight option in the connector bar
+const CONNECTOR_KINDS: readonly string[] = ["line", "arrow", "elbow", "block"];
+
+/** The mid-edge point of a shape's side, in canvas coords — where a connector end bound to that side
+ *  attaches (and re-routes to as the shape moves/resizes). `rect` is the shape's box. */
+export function sideMidpoint(
+  rect: { x: number; y: number; width: number; height: number },
+  side: ConnectorSide,
+): { x: number; y: number } {
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  switch (side) {
+    case "top":
+      return { x: cx, y: rect.y };
+    case "bottom":
+      return { x: cx, y: rect.y + rect.height };
+    case "left":
+      return { x: rect.x, y: cy };
+    case "right":
+      return { x: rect.x + rect.width, y: cy };
+  }
+}
 
 export function objectsMap(doc: Y.Doc): Y.Map<Y.Map<unknown>> {
   return doc.getMap<Y.Map<unknown>>("objects");
@@ -165,9 +256,130 @@ export function addText(doc: Y.Doc, t: TextObject): void {
     m.set("fontSize", t.fontSize);
     m.set("align", t.align);
     if (t.bg != null) m.set("bg", t.bg);
+    if (t.borderColor != null) m.set("borderColor", t.borderColor);
+    if (t.borderStyle != null) m.set("borderStyle", t.borderStyle);
     m.set("authorId", t.authorId);
     objectsMap(doc).set(t.id, m);
     orderArray(doc).push([t.id]);
+  });
+}
+
+/** A connector end as a plain object for the Y.Map (only stores the binding when BOTH parts exist). */
+function connectorEndToPlain(e: ConnectorEnd): Record<string, unknown> {
+  const o: Record<string, unknown> = { x: e.x, y: e.y };
+  if (e.shapeId != null && e.side != null) {
+    o.shapeId = e.shapeId;
+    o.side = e.side;
+  }
+  return o;
+}
+
+/** Append a connector (line/arrow) to the document (atomic: object + z-order in one transaction). */
+export function addConnector(doc: Y.Doc, c: ConnectorObject): void {
+  doc.transact(() => {
+    const m = new Y.Map<unknown>();
+    m.set("id", c.id);
+    m.set("type", "connector");
+    m.set("kind", c.kind);
+    m.set("from", connectorEndToPlain(c.from));
+    m.set("to", connectorEndToPlain(c.to));
+    m.set("color", c.color);
+    m.set("width", c.width);
+    m.set("style", c.style);
+    m.set("startCap", c.startCap);
+    m.set("endCap", c.endCap);
+    if (c.label != null) m.set("label", c.label);
+    m.set("authorId", c.authorId);
+    objectsMap(doc).set(c.id, m);
+    orderArray(doc).push([c.id]);
+  });
+}
+
+/** Add any board object to the doc, dispatching by type (used by paste / future import). */
+export function addObject(doc: Y.Doc, obj: BoardObject): void {
+  if (obj.type === "stroke") addStroke(doc, obj);
+  else if (obj.type === "text") addText(doc, obj);
+  else addConnector(doc, obj);
+}
+
+/**
+ * Clone a board object for paste: assign a fresh `id` + `authorId`, offset its geometry by (dx, dy),
+ * and — for a connector — remap each endpoint's shape *binding* through `idMap` so a connector copied
+ * alongside its shapes attaches to the COPIES (an end bound to a shape that wasn't copied keeps its
+ * original binding). Deep-copies nested arrays (stroke points, text runs) so the clone shares no state.
+ */
+export function cloneObject(
+  obj: BoardObject,
+  id: string,
+  authorId: string,
+  dx: number,
+  dy: number,
+  idMap?: ReadonlyMap<string, string>,
+): BoardObject {
+  if (obj.type === "stroke") {
+    return {
+      ...obj,
+      id,
+      authorId,
+      points: obj.points.map((v, i) => (i % 2 === 0 ? v + dx : v + dy)),
+    };
+  }
+  if (obj.type === "text") {
+    return {
+      ...obj,
+      id,
+      authorId,
+      x: obj.x + dx,
+      y: obj.y + dy,
+      runs: obj.runs.map((r) => ({ ...r })),
+    };
+  }
+  const remap = (e: ConnectorEnd): ConnectorEnd => {
+    const out: ConnectorEnd = { ...e, x: e.x + dx, y: e.y + dy };
+    const mapped = e.shapeId != null ? idMap?.get(e.shapeId) : undefined;
+    if (mapped != null) out.shapeId = mapped;
+    return out;
+  };
+  return { ...obj, id, authorId, from: remap(obj.from), to: remap(obj.to) };
+}
+
+/** Update a connector's appearance (colour / width / dash / endpoint caps / label). Omitted fields
+ *  are left unchanged; pass `label: ""` to clear the label. */
+export function setConnectorStyle(
+  doc: Y.Doc,
+  id: string,
+  s: {
+    color?: string;
+    width?: number;
+    style?: ConnectorStyle;
+    startCap?: ConnectorCap;
+    endCap?: ConnectorCap;
+    label?: string;
+  },
+): void {
+  doc.transact(() => {
+    const m = objectsMap(doc).get(id);
+    if (!m || m.get("type") !== "connector") return;
+    if (s.color != null) m.set("color", s.color);
+    if (s.width != null) m.set("width", s.width);
+    if (s.style != null) m.set("style", s.style);
+    if (s.startCap != null) m.set("startCap", s.startCap);
+    if (s.endCap != null) m.set("endCap", s.endCap);
+    if (s.label != null) m.set("label", s.label);
+  });
+}
+
+/** Re-point a connector's ends (re-bind to a shape side / move a free end). Omitted ends unchanged. */
+export function setConnectorEnds(
+  doc: Y.Doc,
+  id: string,
+  ends: { from?: ConnectorEnd; to?: ConnectorEnd },
+): void {
+  doc.transact(() => {
+    const m = objectsMap(doc).get(id);
+    if (!m || m.get("type") !== "connector") return;
+    if (ends.from) m.set("from", connectorEndToPlain(ends.from));
+    if (ends.to) m.set("to", connectorEndToPlain(ends.to));
   });
 }
 
@@ -199,7 +411,14 @@ export function setTextGeometry(
 export function setTextStyle(
   doc: Y.Doc,
   id: string,
-  style: { fontFamily?: string; fontSize?: number; align?: TextAlign; bg?: string },
+  style: {
+    fontFamily?: string;
+    fontSize?: number;
+    align?: TextAlign;
+    bg?: string;
+    borderColor?: string;
+    borderStyle?: BorderStyle;
+  },
 ): void {
   doc.transact(() => {
     const m = objectsMap(doc).get(id);
@@ -208,6 +427,8 @@ export function setTextStyle(
     if (style.fontSize != null) m.set("fontSize", style.fontSize);
     if (style.align != null) m.set("align", style.align);
     if (style.bg != null) m.set("bg", style.bg);
+    if (style.borderColor != null) m.set("borderColor", style.borderColor);
+    if (style.borderStyle != null) m.set("borderStyle", style.borderStyle);
   });
 }
 
@@ -241,6 +462,13 @@ export function translateObjects(doc: Y.Doc, ids: Iterable<string>, dx: number, 
     for (const id of ids) {
       const m = objs.get(id);
       if (!m) continue;
+      if (m.get("type") === "connector") {
+        // Shift both endpoints' stored points. Bound ends re-resolve to their shape at render, so a
+        // fully-bound connector won't visibly move (you'd move the shapes); free ends follow.
+        m.set("from", offsetConnectorEnd(m.get("from"), dx, dy));
+        m.set("to", offsetConnectorEnd(m.get("to"), dx, dy));
+        continue;
+      }
       const pts = m.get("points");
       if (Array.isArray(pts)) {
         m.set(
@@ -276,6 +504,7 @@ export function setObjectsPoints(
 export function readObject(m: Y.Map<unknown>): BoardObject | null {
   const type = m.get("type");
   if (type === "text") return readText(m);
+  if (type === "connector") return readConnector(m);
   if (type !== "stroke") return null;
   // CRDT/peer data is untrusted: points must be a flat [x0,y0,x1,y1,…] array of finite
   // numbers. Reject anything malformed rather than fabricating a default (which would
@@ -299,6 +528,70 @@ export function readObject(m: Y.Map<unknown>): BoardObject | null {
     opacity: typeof opacity === "number" && Number.isFinite(opacity) ? opacity : 1,
     authorId: String(m.get("authorId") ?? ""),
   };
+}
+
+/** Validate an untrusted connector end. Returns null when x/y aren't finite; only keeps a binding
+ *  when BOTH shapeId and a valid side are present. */
+function readConnectorEnd(raw: unknown): ConnectorEnd | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const x = r.x;
+  const y = r.y;
+  if (typeof x !== "number" || !Number.isFinite(x)) return null;
+  if (typeof y !== "number" || !Number.isFinite(y)) return null;
+  const end: ConnectorEnd = { x, y };
+  const side = r.side;
+  if (
+    typeof r.shapeId === "string" &&
+    r.shapeId &&
+    (side === "top" || side === "right" || side === "bottom" || side === "left")
+  ) {
+    end.shapeId = r.shapeId;
+    end.side = side;
+  }
+  return end;
+}
+
+/** Offset a connector end's stored point by (dx, dy), preserving any binding. */
+function offsetConnectorEnd(raw: unknown, dx: number, dy: number): Record<string, unknown> {
+  const e = readConnectorEnd(raw) ?? { x: 0, y: 0 };
+  return connectorEndToPlain({ ...e, x: e.x + dx, y: e.y + dy });
+}
+
+/** Validate + normalize an untrusted connector's Y.Map (peer/CRDT data is never trusted). */
+function readConnector(m: Y.Map<unknown>): ConnectorObject | null {
+  const from = readConnectorEnd(m.get("from"));
+  const to = readConnectorEnd(m.get("to"));
+  if (!from || !to) return null;
+  const kind = m.get("kind");
+  const width = m.get("width");
+  const style = m.get("style");
+  const cap = (v: unknown, fallback: ConnectorCap): ConnectorCap =>
+    typeof v === "string" && CONNECTOR_CAPS.includes(v as ConnectorCap)
+      ? (v as ConnectorCap)
+      : fallback;
+  const label = m.get("label");
+  const conn: ConnectorObject = {
+    id: String(m.get("id")),
+    type: "connector",
+    kind:
+      typeof kind === "string" && CONNECTOR_KINDS.includes(kind)
+        ? (kind as ConnectorKind)
+        : "arrow",
+    from,
+    to,
+    color: String(m.get("color") ?? DEFAULT_CONNECTOR_COLOR),
+    width:
+      typeof width === "number" && Number.isFinite(width) && width > 0
+        ? width
+        : DEFAULT_CONNECTOR_WIDTH,
+    style: style === "dashed" ? "dashed" : "solid",
+    startCap: cap(m.get("startCap"), "none"),
+    endCap: cap(m.get("endCap"), "arrow"),
+    authorId: String(m.get("authorId") ?? ""),
+  };
+  if (typeof label === "string" && label) conn.label = label;
+  return conn;
 }
 
 const TEXT_ALIGNS: readonly string[] = ["left", "center", "right"];
@@ -354,6 +647,11 @@ function readText(m: Y.Map<unknown>): TextObject | null {
   if (typeof bg === "string" && bg) text.bg = bg;
   const shape = m.get("shape");
   if (typeof shape === "string" && SHAPE_KINDS.includes(shape)) text.shape = shape as ShapeKind;
+  const borderColor = m.get("borderColor");
+  if (typeof borderColor === "string" && borderColor) text.borderColor = borderColor;
+  const borderStyle = m.get("borderStyle");
+  if (borderStyle === "solid" || borderStyle === "dashed" || borderStyle === "none")
+    text.borderStyle = borderStyle;
   return text;
 }
 

@@ -4,7 +4,7 @@
 // main.ts → canvas). Light DOM; reuses the global `.swatches`/`.seg`/range styles +
 // <co-color-picker>. See docs/adr/0005.
 
-import { icon, iconFilled } from "./icons";
+import { icon, iconFilled, lineWeightIcon } from "./icons";
 import type { StrokeStyle } from "@coboard/shared";
 import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
@@ -36,7 +36,7 @@ type Dash = "solid" | "dotted";
 export class CoDrawBar extends HTMLElement {
   #swatches: string[] = [];
   #color = "#0e1116";
-  #width = 14;
+  #width = 8;
   #brush: Brush = "pen";
   #dash: Dash = "solid";
   #open: string | null = null;
@@ -79,7 +79,7 @@ export class CoDrawBar extends HTMLElement {
       `<button class="db-btn" type="button" data-brush="highlighter" aria-label="Highlighter">${icon("highlighter")}<span class="db-tip">Highlighter</span></button>` +
       `<button class="db-btn" type="button" data-pop="style" aria-label="Line style"><span class="db-ico-slot">${icon(this.#styleIconName())}</span><span class="db-tip">Line style</span></button>` +
       `<button class="db-btn db-color" type="button" data-pop="color" aria-label="Colour"><span class="db-dot"></span><span class="db-tip">Color</span></button>` +
-      `<button class="db-btn" type="button" data-pop="width" aria-label="Stroke width">${icon("weight")}<span class="db-tip">Stroke width</span></button>` +
+      `<button class="db-btn" type="button" data-pop="width" aria-label="Stroke width">${lineWeightIcon()}<span class="db-tip">Stroke width</span></button>` +
       "</div>";
     this.#syncBrush();
     this.#syncColorDot();

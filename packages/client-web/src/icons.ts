@@ -48,3 +48,11 @@ export const FILLED_ICONS: Record<string, string> = {
 export function iconFilled(name: string, cls = "ico"): string {
   return `<svg class="${cls}" viewBox="0 0 24 24" fill="currentColor">${FILLED_ICONS[name] ?? ""}</svg>`;
 }
+
+// Line-weight icon (three stacked bars of increasing thickness) — used for the draw stroke width
+// AND the shape border-style control. Filled, native 128 viewBox (source: src/assets/line.svg).
+const LINE_WEIGHT_PATH =
+  "M16.94 25.09c0-1.55 1.25-2.8 2.8-2.8h90.4c1.55 0 2.8 1.25 2.8 2.8v4.4c0 1.55-1.25 2.8-2.8 2.8H19.74c-1.55 0-2.8-1.25-2.8-2.8v-4.4ZM16.94 50.55c0-1.55 1.25-2.8 2.8-2.8h90.4c1.55 0 2.8 1.25 2.8 2.8v10.4c0 1.55-1.25 2.8-2.8 2.8H19.74c-1.55 0-2.8-1.25-2.8-2.8v-10.4ZM16.94 82.02c0-1.55 1.25-2.8 2.8-2.8h90.4c1.55 0 2.8 1.25 2.8 2.8v22.4c0 1.55-1.25 2.8-2.8 2.8H19.74c-1.55 0-2.8-1.25-2.8-2.8v-22.4Z";
+export function lineWeightIcon(cls = "ico"): string {
+  return `<svg class="${cls}" viewBox="0 0 128 128" fill="currentColor"><path fill-rule="evenodd" d="${LINE_WEIGHT_PATH}"/></svg>`;
+}

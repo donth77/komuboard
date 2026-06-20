@@ -29,17 +29,23 @@ import {
   setTextRuns,
   setTextStyle,
   translateObjects,
+  type BorderStyle,
+  type ConnectorSide,
   type ShapeKind,
   type TextAlign,
   type TextObject,
   type TextRun,
 } from "@coboard/shared";
 import {
+  allRunsHaveMark,
+  type BoolMark,
   elementToRuns,
   runsAreBulleted,
   runsToHtml,
   runsToText,
   safeHref,
+  setMarkAllRuns,
+  toggleBoolMarkAllRuns,
   toggleBulletRuns,
 } from "./text-runs";
 import { TextBar, type TextBarState } from "./text-bar";
@@ -62,14 +68,24 @@ export interface TextLayerOptions {
   camera: () => Camera;
   /** Notified whenever the text selection changes (lets the canvas fold it into its count). */
   onSelectionChange?: () => void;
-  /** Notified after an editor commits (writes/deletes the box) — lets the canvas revert the tool. */
-  onCommitted?: () => void;
+  /** Notified after an editor commits (writes/deletes the box) — lets the canvas revert the tool.
+   *  `keepTool` is true when the commit was triggered by focus moving into a tool picker (the shape
+   *  menu / place bars): the box still bakes, but the tool must NOT revert to select (the user is
+   *  picking what to draw next). */
+  onCommitted?: (keepTool?: boolean) => void;
+  /** Fired each frame a shape's geometry changes visually (local drag/resize, peer glide) so the
+   *  canvas can re-route connectors bound to it live (not just on the doc commit). */
+  onShapesMoved?: () => void;
 }
 
 /** A live editing session: a contenteditable box for a new (id === null) or existing text object. */
 interface EditSession {
   id: string | null;
+  /** The positioned box element (geometry, shape outline, fill). */
   el: HTMLDivElement;
+  /** The contenteditable that actually holds the text. For shapes this is an INNER element (so its
+   *  empty caret centres within the box); for plain text/sticky it's `el` itself. */
+  editable: HTMLElement;
   // World-space geometry + style of the box being edited (a new box inherits the defaults).
   x: number;
   y: number;
@@ -82,6 +98,9 @@ interface EditSession {
   /** Shape outline + fixed box height, when this box is a shape. */
   shape?: ShapeKind;
   height?: number;
+  /** Shape border colour + style (solid/dashed/none). */
+  borderColor?: string;
+  borderStyle?: BorderStyle;
 }
 
 /** A peer's in-progress edit, streamed over awareness (geometry travels too so a brand-new box —
@@ -98,6 +117,8 @@ interface TextEditState {
   bg?: string;
   shape?: ShapeKind;
   height?: number;
+  borderColor?: string;
+  borderStyle?: BorderStyle;
   runs: TextRun[];
 }
 
@@ -111,21 +132,24 @@ type Geom = {
   bg?: string;
   shape?: ShapeKind;
   height?: number;
+  borderColor?: string;
+  borderStyle?: BorderStyle;
 };
 
 const INK = "#0e1116"; // default text ink (matches the pen default)
 const SHAPE_STROKE = "#1f2933"; // shape outline colour (matches the CSS border)
-// Polygon shapes drawn as an SVG-outline background (rectangle/ellipse/divider use a CSS border).
+// Polygon shapes drawn as an SVG-outline background (rectangle/ellipse use a CSS border).
 // Points are in a 0..100 viewBox, inset slightly so the stroke isn't clipped at the edges.
 const SHAPE_POLYGONS: Record<string, string> = {
   triangle: "50,4 96,96 4,96",
   rhombus: "50,4 96,50 50,96 4,50",
 };
 /** A polygon outline + fill as an SVG data URI, stretched to the box via preserveAspectRatio=none. */
-function shapeSvg(points: string, fill: string): string {
+function shapeSvg(points: string, fill: string, stroke: string, dashed: boolean): string {
+  const dash = dashed ? ` stroke-dasharray='6 5'` : "";
   const svg =
     `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'>` +
-    `<polygon points='${points}' fill='${fill}' stroke='${SHAPE_STROKE}' stroke-width='2' stroke-linejoin='round'/></svg>`;
+    `<polygon points='${points}' fill='${fill}' stroke='${stroke}' stroke-width='2'${dash} stroke-linejoin='round'/></svg>`;
   return "data:image/svg+xml," + encodeURIComponent(svg);
 }
 /** A click that moves less than this (screen px) is a tap-to-place, not a drag-to-size box. */
@@ -204,8 +228,11 @@ export class TextLayer {
     this.renderRemoteEdits();
     this.renderRemoteSelDrag();
   };
-  /** The floating rich-text toolbar (created once; shown only while an editor is open). */
+  /** The floating rich-text toolbar (created once; shown while editing OR while a single box is
+   *  selected — in the latter "selection mode" its controls apply to the whole box via the doc). */
   private readonly bar: TextBar;
+  /** The box the toolbar is showing for in selection mode (no active editor), or null. */
+  private barSelId: string | null = null;
   /** Reflect the toolbar's active states whenever the editor selection changes. */
   private readonly onSelChange = (): void => {
     if (this.edit) this.reflectBar();
@@ -225,6 +252,14 @@ export class TextLayer {
   private lastResizeSent = 0;
   /** Handle box for a single text selection (created lazily), + the in-progress resize. */
   private resizeEl: HTMLDivElement | null = null;
+  /** Container for connector "dots" (the 4 side attach points) drawn on shapes; created lazily. */
+  private dotsEl: HTMLDivElement | null = null;
+  /** True while the connector (line/arrow) tool is active → show every shape's dots, not just the
+   *  selected one's. */
+  private connectorMode = false;
+  /** The shape point a connector being drawn is currently snapped to — its dots collapse to just
+   *  this locked point (the snap feedback). */
+  private snapTarget: { shapeId: string; side: ConnectorSide } | null = null;
   private resizePreview: {
     id: string;
     x: number;
@@ -245,6 +280,9 @@ export class TextLayer {
     ofs: number;
     baseW: number;
     isShape: boolean;
+    /** Aspect ratio frozen the instant Shift goes down mid-resize (so the lock starts from the
+     *  current in-progress shape, not the box's original proportions). Cleared when Shift lifts. */
+    lock?: { w: number; h: number };
   } | null = null;
 
   // --- selection + move (driven by the canvas's select tool; text keeps its own chrome) ---
@@ -271,16 +309,23 @@ export class TextLayer {
     this.objects.observeDeep(this.observer);
     this.opts.awareness.on("change", this.onAwareness);
     this.bar = new TextBar({
-      setFontFamily: (css) => this.setEditBlock({ fontFamily: css }),
-      setFontSize: (size) => this.setEditBlock({ fontSize: size }),
-      toggleBullets: () => this.toggleBullets(),
+      setFontFamily: (css) => this.applyBlock({ fontFamily: css }),
+      setFontSize: (size) => this.applyBlock({ fontSize: size }),
+      toggleBullets: () => this.applyBullets(),
       onFormat: () => {
         this.scheduleEditBroadcast(); // peers see the mark live
         this.reflectBar();
       },
-      setShapeKind: (kind) => this.setEditShape(kind),
-      setFill: (color) => this.setEditFill(color),
-      setAlign: (align) => this.setEditBlock({ align }),
+      setShapeKind: (kind) => this.applyShapeKind(kind),
+      setFill: (color) => this.applyFill(color),
+      setBorder: (p) => this.applyBorder(p),
+      setAlign: (align) => this.applyBlock({ align }),
+      // Selection-mode marks (no editor) — applied to the whole selected box via the doc.
+      applyMark: (mark) => this.applyBoxMark(mark),
+      setColor: (hex) => this.applyBoxRunMark("color", hex),
+      setHighlight: (hex) => this.applyBoxRunMark("highlight", hex),
+      setLink: (url) => this.applyBoxRunMark("link", url),
+      linkSelection: () => this.linkSelectionForBar(),
     });
     this.render();
   }
@@ -330,9 +375,13 @@ export class TextLayer {
 
   /** Render a text object's runs into its display element. */
   private paint(el: HTMLElement, obj: TextObject): void {
-    el.innerHTML = runsToHtml(obj.runs);
+    // A shape wraps its label in an inner `.co-text-body` (matching the editor) so the centred
+    // empty-state placeholder lines up with where the caret/text sits when you edit it.
+    el.innerHTML = obj.shape
+      ? `<div class="co-text-body">${runsToHtml(obj.runs)}</div>`
+      : runsToHtml(obj.runs);
     el.style.color = INK; // default ink; per-run colours override via the rendered spans
-    if (obj.shape) this.applyShape(el, obj.shape, obj.bg);
+    if (obj.shape) this.applyShape(el, obj.shape, obj.bg, obj.borderColor, obj.borderStyle);
     else this.applySticky(el, obj.bg);
   }
 
@@ -349,24 +398,38 @@ export class TextLayer {
   }
 
   /** Toggle the shape look (outline + fill + centred "Add text" label) on a box element. Rectangle/
-   *  ellipse/divider are drawn with a crisp CSS border (their `shape-<kind>` class); polygon shapes
-   *  (triangle/rhombus) use an SVG-outline background so they actually look like the shape. */
-  private applyShape(el: HTMLElement, kind: string | undefined, fill: string | undefined): void {
+   *  ellipse are drawn with a crisp CSS border (their `shape-<kind>` class); polygon shapes
+   *  (triangle/rhombus) use an SVG-outline background so they actually look like the shape. The
+   *  border colour/style override the defaults (`none` removes the outline entirely). */
+  private applyShape(
+    el: HTMLElement,
+    kind: string | undefined,
+    fill: string | undefined,
+    borderColor?: string,
+    borderStyle?: BorderStyle,
+  ): void {
     for (const c of [...el.classList]) if (c.startsWith("shape")) el.classList.remove(c);
     el.style.backgroundImage = "";
+    el.style.removeProperty("border-color");
+    el.style.removeProperty("border-style");
     if (!kind) {
       el.style.removeProperty("height");
       return;
     }
     el.classList.add("shape", `shape-${kind}`);
     const f = fill || "#ffffff";
+    const bColor = borderColor || SHAPE_STROKE;
+    const bStyle = borderStyle ?? "solid";
     const poly = SHAPE_POLYGONS[kind];
     if (poly) {
       // SVG polygon outline + fill, stretched to the box (preserveAspectRatio none).
       el.style.background = "transparent";
-      el.style.backgroundImage = `url("${shapeSvg(poly, f)}")`;
+      const stroke = bStyle === "none" ? "transparent" : bColor;
+      el.style.backgroundImage = `url("${shapeSvg(poly, f, stroke, bStyle === "dashed")}")`;
     } else {
-      el.style.background = f; // rectangle / ellipse / divider use the CSS border
+      el.style.background = f; // rectangle / ellipse use the CSS border
+      el.style.borderColor = bColor;
+      el.style.borderStyle = bStyle; // solid / dashed / none
     }
   }
 
@@ -453,8 +516,8 @@ export class TextLayer {
     if (this.edit) {
       const e = this.edit;
       this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align, e.height);
-      this.positionBar();
     }
+    this.positionBar(); // follows the editor OR the selection-mode box as the camera moves
     for (const [cid, el] of this.remoteEdits) {
       const g = this.remoteGeom.get(cid);
       if (g) this.layout(el, g.x, g.y, g.width, g.fontSize, g.fontFamily, g.align, g.height);
@@ -569,7 +632,7 @@ export class TextLayer {
     g.textContent = "";
     this.applyShape(g, kind, fill);
     const w = DEFAULT_SHAPE_W;
-    const h = kind === "divider" ? 8 : DEFAULT_SHAPE_H;
+    const h = DEFAULT_SHAPE_H;
     this.layout(
       g,
       world.x - w / 2,
@@ -590,7 +653,7 @@ export class TextLayer {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
     if (obj?.type !== "text") return;
-    const session: Omit<EditSession, "el"> = {
+    const session: Omit<EditSession, "el" | "editable"> = {
       id,
       x: obj.x,
       y: obj.y,
@@ -602,6 +665,8 @@ export class TextLayer {
     if (obj.height != null) session.height = obj.height;
     if (obj.bg != null) session.bg = obj.bg;
     if (obj.shape != null) session.shape = obj.shape;
+    if (obj.borderColor != null) session.borderColor = obj.borderColor;
+    if (obj.borderStyle != null) session.borderStyle = obj.borderStyle;
     this.openEditor(session, runsToHtml(obj.runs), selectAll, caretAt);
   }
 
@@ -637,7 +702,7 @@ export class TextLayer {
       return;
     }
     const w = DEFAULT_SHAPE_W;
-    const h = kind === "divider" ? 8 : DEFAULT_SHAPE_H;
+    const h = DEFAULT_SHAPE_H;
     this.openEditor({
       id: null,
       x: world.x - w / 2,
@@ -653,23 +718,39 @@ export class TextLayer {
   }
 
   private openEditor(
-    session: Omit<EditSession, "el">,
+    session: Omit<EditSession, "el" | "editable">,
     seedHtml = "",
     selectAll = false,
     caretAt?: { x: number; y: number },
   ): void {
     const el = document.createElement("div");
     el.className = "co-text co-text-editor";
-    el.contentEditable = "true";
-    el.spellcheck = false;
-    el.innerHTML = seedHtml;
     el.style.color = INK;
-    // Shape (outline + fixed height) or sticky (coloured square) styling on the editor itself.
-    if (session.shape) this.applyShape(el, session.shape, session.bg);
+    // Shape (outline + fixed height) or sticky (coloured square) styling on the box itself.
+    if (session.shape)
+      this.applyShape(el, session.shape, session.bg, session.borderColor, session.borderStyle);
     else this.applySticky(el, session.bg);
+    // A shape's text lives in an INNER contenteditable so its empty caret centres within the box
+    // (the box is full-height, so an editable === box would strand the caret at the top). Plain
+    // text/sticky put contenteditable on the box itself.
+    let editable: HTMLElement;
+    if (session.shape) {
+      el.contentEditable = "false";
+      editable = document.createElement("div");
+      editable.className = "co-text-body";
+      editable.contentEditable = "true";
+      editable.spellcheck = false;
+      editable.innerHTML = seedHtml;
+      el.appendChild(editable);
+    } else {
+      el.contentEditable = "true";
+      el.spellcheck = false;
+      el.innerHTML = seedHtml;
+      editable = el;
+    }
     this.hideStickyGhost(); // the real note replaces the placement preview
     this.root.appendChild(el);
-    this.edit = { ...session, el };
+    this.edit = { ...session, el, editable };
     this.updateDisplayVisibility(); // hide the existing box's display copy while the editor stands in
     this.updateResizeChrome(); // hide the resize handles while editing
     this.layout(
@@ -684,8 +765,8 @@ export class TextLayer {
     );
 
     el.addEventListener("pointerdown", (e) => e.stopPropagation()); // don't reach Konva (marquee/draw)
-    el.addEventListener("input", () => this.scheduleEditBroadcast());
-    el.addEventListener("keydown", (e) => {
+    editable.addEventListener("input", () => this.scheduleEditBroadcast());
+    editable.addEventListener("keydown", (e) => {
       // Esc or ⌘/Ctrl+Enter commits.
       if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
         e.preventDefault();
@@ -693,25 +774,31 @@ export class TextLayer {
         return;
       }
       // In a bulleted box, a plain Enter continues the list — start the new line with a bullet.
-      if (e.key === "Enter" && !e.shiftKey && runsAreBulleted(elementToRuns(el))) {
+      if (e.key === "Enter" && !e.shiftKey && runsAreBulleted(elementToRuns(editable))) {
         e.preventDefault();
         document.execCommand("insertHTML", false, "<br>• ");
         this.scheduleEditBroadcast();
       }
     });
-    el.addEventListener("blur", (e) => {
+    editable.addEventListener("blur", (e) => {
       // Focus moving into the toolbar / a popover (e.g. the size input) must not commit the box.
       const next = (e as FocusEvent).relatedTarget as HTMLElement | null;
       if (next?.closest(".co-text-bar, .ctb-pop, co-color-picker")) return;
-      this.commit();
+      // Focus moving into a tool picker (shape menu / place bars) DOES commit the box, but must not
+      // also revert the tool to select: the revert would synchronously hide the menu before the
+      // picked item's click registers, so e.g. picking the arrow after placing a shape silently
+      // dropped you on the select tool. Commit with keepTool so the menu stays and the pick lands.
+      const keepTool = !!next?.closest("co-shape-menu, co-sticky-bar, co-draw-bar");
+      this.commit(keepTool);
     });
 
-    el.focus();
-    if (caretAt) this.caretToPoint(el, caretAt.x, caretAt.y);
-    else if (selectAll) this.selectAllEditor(el);
-    else this.caretToEnd(el);
+    editable.focus();
+    if (caretAt) this.caretToPoint(editable, caretAt.x, caretAt.y);
+    else if (selectAll) this.selectAllEditor(editable);
+    else this.caretToEnd(editable);
     document.execCommand("styleWithCSS", false, "true"); // marks emit inline-style spans (serialisable)
-    this.bar.show(el, this.barState());
+    this.barSelId = null; // editing takes over the bar from any selection-mode display
+    this.bar.show(editable, this.barState());
     this.positionBar();
     document.addEventListener("selectionchange", this.onSelChange);
     this.broadcastEdit(); // announce the session so peers hide the stale copy / show it live
@@ -750,7 +837,7 @@ export class TextLayer {
     }
   }
 
-  /** Select all the editor's text — double-click-to-edit replaces on type (FigJam-style). */
+  /** Select all the editor's text — double-click-to-edit replaces on type. */
   private selectAllEditor(el: HTMLElement): void {
     const sel = window.getSelection();
     if (!sel) return;
@@ -885,8 +972,7 @@ export class TextLayer {
     const e = this.edit;
     if (!e || e.shape == null) return;
     e.shape = kind;
-    if (kind === "divider" && (e.height ?? 0) > 16) e.height = 8; // a divider is a thin rule
-    this.applyShape(e.el, kind, e.bg);
+    this.applyShape(e.el, kind, e.bg, e.borderColor, e.borderStyle);
     this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align, e.height);
     this.positionBar();
     this.scheduleEditBroadcast();
@@ -898,7 +984,18 @@ export class TextLayer {
     const e = this.edit;
     if (!e || e.shape == null) return;
     e.bg = color;
-    this.applyShape(e.el, e.shape, color);
+    this.applyShape(e.el, e.shape, color, e.borderColor, e.borderStyle);
+    this.scheduleEditBroadcast();
+    this.reflectBar();
+  }
+
+  /** Shape mode: change the border colour and/or style of the shape being edited. */
+  private setEditBorder(p: { color?: string; style?: BorderStyle }): void {
+    const e = this.edit;
+    if (!e || e.shape == null) return;
+    if (p.color != null) e.borderColor = p.color;
+    if (p.style != null) e.borderStyle = p.style;
+    this.applyShape(e.el, e.shape, e.bg, e.borderColor, e.borderStyle);
     this.scheduleEditBroadcast();
     this.reflectBar();
   }
@@ -907,18 +1004,126 @@ export class TextLayer {
   private toggleBullets(): void {
     const e = this.edit;
     if (!e) return;
-    const runs = toggleBulletRuns(elementToRuns(e.el));
-    e.el.innerHTML = runsToHtml(runs);
-    this.caretToEnd(e.el);
+    const runs = toggleBulletRuns(elementToRuns(e.editable));
+    e.editable.innerHTML = runsToHtml(runs);
+    this.caretToEnd(e.editable);
     this.scheduleEditBroadcast();
     this.reflectBar();
   }
 
+  // ---- toolbar dispatch: edit-mode acts on the live editor; selection-mode writes to the doc ----
+  private boxObj(id: string): TextObject | null {
+    const m = this.objects.get(id);
+    const o = m ? readObject(m) : null;
+    return o?.type === "text" ? o : null;
+  }
+  private applyBlock(p: { fontFamily?: string; fontSize?: number; align?: TextAlign }): void {
+    if (this.edit) return this.setEditBlock(p);
+    if (this.barSelId) setTextStyle(this.opts.doc, this.barSelId, p); // observer re-reflects the bar
+  }
+  private applyShapeKind(kind: ShapeKind): void {
+    if (this.edit) return this.setEditShape(kind);
+    const id = this.barSelId;
+    if (!id) return;
+    this.opts.doc.transact(() => {
+      const m = this.objects.get(id);
+      if (!m || m.get("type") !== "text") return;
+      m.set("shape", kind);
+    });
+  }
+  private applyFill(color: string): void {
+    if (this.edit) return this.setEditFill(color);
+    if (this.barSelId) setTextStyle(this.opts.doc, this.barSelId, { bg: color });
+  }
+  private applyBorder(p: { color?: string; style?: BorderStyle }): void {
+    if (this.edit) return this.setEditBorder(p);
+    if (this.barSelId) {
+      const patch: { borderColor?: string; borderStyle?: BorderStyle } = {};
+      if (p.color != null) patch.borderColor = p.color;
+      if (p.style != null) patch.borderStyle = p.style;
+      setTextStyle(this.opts.doc, this.barSelId, patch);
+    }
+  }
+  private applyBullets(): void {
+    if (this.edit) return this.toggleBullets();
+    const obj = this.barSelId ? this.boxObj(this.barSelId) : null;
+    if (obj && this.barSelId) setTextRuns(this.opts.doc, this.barSelId, toggleBulletRuns(obj.runs));
+  }
+  /** Toggle a boolean mark (bold/italic/…) across the whole selected box (selection mode only). */
+  private applyBoxMark(mark: string): void {
+    const obj = this.barSelId ? this.boxObj(this.barSelId) : null;
+    if (obj && this.barSelId)
+      setTextRuns(this.opts.doc, this.barSelId, toggleBoolMarkAllRuns(obj.runs, mark as BoolMark));
+  }
+  /** Set a colour/highlight/link across the whole selected box (selection mode only). */
+  private applyBoxRunMark(key: "color" | "highlight" | "link", value: string): void {
+    const obj = this.barSelId ? this.boxObj(this.barSelId) : null;
+    if (obj && this.barSelId)
+      setTextRuns(this.opts.doc, this.barSelId, setMarkAllRuns(obj.runs, key, value));
+  }
+  /** Selection-mode Link click: open the selected box's text editor with all text selected, then
+   *  bring up the link input (now editing) so the URL links the whole label. From there the user can
+   *  reselect a span to link only part of it — same as any text node. */
+  private linkSelectionForBar(): void {
+    const id = this.barSelId;
+    if (!id || this.remoteEditIds.has(id)) return;
+    this.beginEdit(id, true); // edit + select-all → bar.show() flips the bar into edit mode
+    this.bar.openLink();
+  }
+
   private positionBar(): void {
     if (this.edit) this.bar.positionOver(this.edit.el.getBoundingClientRect());
+    else if (this.barSelId) {
+      const el = this.els.get(this.barSelId);
+      if (el) this.bar.positionOver(el.getBoundingClientRect());
+    }
   }
   private reflectBar(): void {
     this.bar.reflect(this.barState());
+  }
+
+  /** Show/hide the toolbar in *selection mode* — when exactly one committed box is selected and we
+   *  aren't editing/moving/resizing, the bar floats over it and its controls apply to the whole box. */
+  private updateSelectionBar(): void {
+    if (this.edit) return; // an open editor owns the bar
+    const ids = [...this.selected];
+    const id = ids.length === 1 ? ids[0]! : null;
+    const obj = id ? this.boxObj(id) : null;
+    const show =
+      !!obj && !this.moveState && !this.resizing && id != null && !this.remoteEditIds.has(id);
+    if (!show) {
+      if (this.barSelId !== null) {
+        this.barSelId = null;
+        this.bar.hide();
+      }
+      return;
+    }
+    this.barSelId = id;
+    this.bar.showForSelection(this.barStateForObject(obj));
+    this.positionBar();
+  }
+
+  /** Toolbar state derived from a committed box (selection mode) rather than the editor's selection. */
+  private barStateForObject(obj: TextObject): TextBarState {
+    const colors = new Set(obj.runs.filter((r) => r.text).map((r) => r.color ?? ""));
+    const state: TextBarState = {
+      bold: allRunsHaveMark(obj.runs, "bold"),
+      italic: allRunsHaveMark(obj.runs, "italic"),
+      underline: allRunsHaveMark(obj.runs, "underline"),
+      strike: allRunsHaveMark(obj.runs, "strike"),
+      bullet: runsAreBulleted(obj.runs),
+      fontFamily: obj.fontFamily,
+      fontSize: obj.fontSize,
+      color: (colors.size === 1 ? [...colors][0] : "") || INK,
+    };
+    if (obj.shape != null) {
+      state.shape = obj.shape;
+      state.fill = obj.bg ?? "#ffffff";
+      state.borderColor = obj.borderColor ?? SHAPE_STROKE;
+      state.borderStyle = obj.borderStyle ?? "solid";
+      state.align = obj.align;
+    }
+    return state;
   }
   private barState(): TextBarState {
     const e = this.edit;
@@ -927,15 +1132,17 @@ export class TextLayer {
       italic: document.queryCommandState("italic"),
       underline: document.queryCommandState("underline"),
       strike: document.queryCommandState("strikeThrough"),
-      bullet: e ? runsAreBulleted(elementToRuns(e.el)) : false,
+      bullet: e ? runsAreBulleted(elementToRuns(e.editable)) : false,
       fontFamily: e?.fontFamily ?? DEFAULT_TEXT_FONT,
       fontSize: e?.fontSize ?? DEFAULT_TEXT_SIZE,
       color: document.queryCommandValue("foreColor") || INK,
     };
-    // Shape mode adds the shape kind / fill / alignment so the bar can show its extra controls.
+    // Shape mode adds the shape kind / fill / border / alignment so the bar can show its extra controls.
     if (e?.shape != null) {
       state.shape = e.shape;
       state.fill = e.bg ?? "#ffffff";
+      state.borderColor = e.borderColor ?? SHAPE_STROKE;
+      state.borderStyle = e.borderStyle ?? "solid";
       state.align = e.align;
     }
     return state;
@@ -1021,12 +1228,14 @@ export class TextLayer {
       }
     }
     this.updateResizeChrome();
+    this.updateSelectionBar(); // show/hide the floating toolbar for a single selection
   }
 
   /** Begin dragging the current text selection from a world point. */
   beginMove(world: { x: number; y: number }): void {
     if (!this.selected.size) return;
     this.moveState = { startX: world.x, startY: world.y, dx: 0, dy: 0 };
+    this.updateSelectionBar(); // hide the floating toolbar while dragging (re-shows on release)
   }
   /** Live drag: offset the selected boxes in the overlay (committed to the doc on release). */
   moveTo(world: { x: number; y: number }): void {
@@ -1051,6 +1260,7 @@ export class TextLayer {
       );
     }
     this.updateResizeChrome(); // keep the handles glued to the box while it moves
+    this.opts.onShapesMoved?.(); // re-route connectors bound to the moving shapes (live)
     // Stream the live drag to peers (throttled) — ephemeral, the doc commits on release.
     const now = Date.now();
     if (now - this.lastTextDragSent >= EDIT_BROADCAST_MS) {
@@ -1070,6 +1280,7 @@ export class TextLayer {
       translateObjects(this.opts.doc, [...this.selected], mv.dx, mv.dy); // observer re-lays-out at baked coords
     }
     this.opts.awareness.setLocalStateField("drag", null);
+    this.updateSelectionBar(); // moveState cleared → re-show the toolbar for the (still-selected) box
   }
 
   /** Apply the effective drag offset to a box during render/sync — the local drag if I'm moving
@@ -1123,6 +1334,28 @@ export class TextLayer {
     };
   }
 
+  /** The ids of every shape box (a TextObject with `shape` set) — connector snap targets. */
+  shapeIds(): string[] {
+    const out: string[] = [];
+    this.objects.forEach((m, id) => {
+      if (m.get("type") === "text" && m.get("shape") != null) out.push(id);
+    });
+    return out;
+  }
+
+  /** A shape's CURRENT live world rect (accounts for an in-progress local/peer drag or resize), or
+   *  null if `id` isn't a shape. Connectors resolve their bound ends against this. */
+  shapeWorldRect(id: string): { x: number; y: number; width: number; height: number } | null {
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    if (obj?.type !== "text" || obj.shape == null) return null;
+    const g = this.effectiveGeom(id, obj);
+    const sz = this.sizes.get(id);
+    const width = g.width ?? obj.width ?? sz?.w ?? 0;
+    const height = g.height ?? obj.height ?? sz?.h ?? 0;
+    return { x: g.x, y: g.y, width, height };
+  }
+
   // ---- resize (a handle box around a single selected box — text isn't a Konva node, so the
   //      Konva transformer can't bound it; side handles change width, corners scale the font) ----
 
@@ -1149,17 +1382,86 @@ export class TextLayer {
     const el = id ? this.els.get(id) : undefined;
     if (!id || !el || this.edit || this.remoteEditIds.has(id)) {
       if (this.resizeEl) this.resizeEl.style.display = "none";
+    } else {
+      const box = this.ensureResizeEl();
+      box.style.display = "";
+      box.dataset.id = id;
+      box.style.left = el.style.left;
+      box.style.top = el.style.top;
+      box.style.width = `${el.offsetWidth}px`;
+      box.style.height = `${el.offsetHeight}px`;
+      // A shape has free width×height → show the n/s (vertical) handles; text/sticky don't.
+      box.classList.toggle("co-text-resize-shape", el.classList.contains("shape"));
+    }
+    this.updateConnectorDots(); // dots also show in connector mode with no/multi selection
+  }
+
+  /** Show every shape's connector dots while the line/arrow tool is active (not just the selected
+   *  one's), so any shape is a visible snap target. */
+  setConnectorMode(on: boolean): void {
+    if (this.connectorMode === on) return;
+    this.connectorMode = on;
+    if (!on) this.snapTarget = null;
+    this.updateConnectorDots();
+  }
+
+  /** While drawing a connector, mark the shape point its end is snapped to (or null). The snapped
+   *  shape then shows only that one (highlighted) dot — the lock indicator. */
+  setSnapTarget(t: { shapeId: string; side: ConnectorSide } | null): void {
+    const same = this.snapTarget?.shapeId === t?.shapeId && this.snapTarget?.side === t?.side;
+    if (same) return;
+    this.snapTarget = t;
+    this.updateConnectorDots();
+  }
+
+  /** Draw the 4 connector dots (side mid-edges, nudged a little outside the box) on the shapes that
+   *  should show them: the selected shape, plus every shape while the connector tool is active. */
+  private updateConnectorDots(): void {
+    const ids = new Set<string>();
+    if (this.connectorMode) for (const id of this.shapeIds()) ids.add(id);
+    for (const id of this.selected) {
+      const m = this.objects.get(id);
+      if (m?.get("type") === "text" && m.get("shape") != null) ids.add(id);
+    }
+    if (this.edit?.id) ids.delete(this.edit.id); // not while editing the box's text
+    if (!this.dotsEl) {
+      this.dotsEl = document.createElement("div");
+      this.dotsEl.className = "co-connector-dots";
+      this.root.appendChild(this.dotsEl);
+    }
+    if (!ids.size) {
+      this.dotsEl.replaceChildren();
       return;
     }
-    const box = this.ensureResizeEl();
-    box.style.display = "";
-    box.dataset.id = id;
-    box.style.left = el.style.left;
-    box.style.top = el.style.top;
-    box.style.width = `${el.offsetWidth}px`;
-    box.style.height = `${el.offsetHeight}px`;
-    // A shape has free width×height → show the n/s (vertical) handles; text/sticky don't.
-    box.classList.toggle("co-text-resize-shape", el.classList.contains("shape"));
+    const cam = this.opts.camera();
+    const GAP = 16; // screen px outside the edge (matches the reference's floating dots)
+    const SIDES: ConnectorSide[] = ["top", "right", "bottom", "left"];
+    const dots: HTMLElement[] = [];
+    for (const id of ids) {
+      const rect = this.shapeWorldRect(id);
+      if (!rect) continue;
+      const sx = rect.x * cam.scale + cam.x;
+      const sy = rect.y * cam.scale + cam.y;
+      const sw = rect.width * cam.scale;
+      const sh = rect.height * cam.scale;
+      const at: Record<ConnectorSide, [number, number]> = {
+        top: [sx + sw / 2, sy - GAP],
+        bottom: [sx + sw / 2, sy + sh + GAP],
+        left: [sx - GAP, sy + sh / 2],
+        right: [sx + sw + GAP, sy + sh / 2],
+      };
+      // When a connector is snapped to this shape, collapse to just the locked dot (highlighted).
+      const locked = this.snapTarget?.shapeId === id ? this.snapTarget.side : null;
+      for (const side of SIDES) {
+        if (locked && side !== locked) continue;
+        const dot = document.createElement("div");
+        dot.className = locked ? "co-connector-dot is-snapped" : "co-connector-dot";
+        dot.style.left = `${at[side][0]}px`;
+        dot.style.top = `${at[side][1]}px`;
+        dots.push(dot);
+      }
+    }
+    this.dotsEl.replaceChildren(...dots);
   }
 
   private beginResize(e: PointerEvent, handle: string): void {
@@ -1184,6 +1486,7 @@ export class TextLayer {
       baseW: obj.width ?? size.w, // auto-width boxes scale from their measured width
       isShape: obj.shape != null,
     };
+    this.updateSelectionBar(); // hide the floating toolbar while resizing (re-shows on release)
     window.addEventListener("pointermove", this.onResizeMove);
     window.addEventListener("pointerup", this.onResizeUp);
   }
@@ -1226,13 +1529,18 @@ export class TextLayer {
         nh = Math.max(MIN_TEXT_W, oh - wdy);
         ny = rs.oy + (oh - nh); // anchor the bottom edge
       }
-      if (e.shiftKey && oh > 0) {
-        const ratio = ow / oh;
+      if (e.shiftKey && nh > 0 && nw > 0) {
+        // Freeze the aspect ratio at the instant Shift goes down — using the CURRENT (in-progress)
+        // dimensions, not the box's original ones — so the shape doesn't jump when you grab Shift.
+        if (!rs.lock) rs.lock = { w: nw, h: nh };
+        const lw = rs.lock.w;
+        const lh = rs.lock.h;
+        const ratio = lw / lh;
         if (h.length === 2) {
-          // corner → scale both dimensions uniformly (grow to contain the cursor), anchor opposite corner
-          const s = Math.max(nw / ow, nh / oh);
-          nw = Math.max(MIN_TEXT_W, ow * s);
-          nh = Math.max(MIN_TEXT_W, oh * s);
+          // corner → scale the frozen box uniformly to follow the drag, anchoring the opposite corner
+          const s = Math.max(nw / lw, nh / lh);
+          nw = Math.max(MIN_TEXT_W, lw * s);
+          nh = Math.max(MIN_TEXT_W, lh * s);
           nx = h.includes("w") ? rs.ox + (ow - nw) : rs.ox;
           ny = h.includes("n") ? rs.oy + (oh - nh) : rs.oy;
         } else if (h === "e" || h === "w") {
@@ -1242,6 +1550,8 @@ export class TextLayer {
           nw = Math.max(MIN_TEXT_W, nh * ratio); // height drives; width follows, centred horizontally
           nx = rs.ox + (ow - nw) / 2;
         }
+      } else if (rs.lock) {
+        rs.lock = undefined; // Shift released → resume free resize; a re-press freezes a fresh ratio
       }
       x = nx;
       y = ny;
@@ -1284,6 +1594,7 @@ export class TextLayer {
       rs.isShape ? height : undefined,
     );
     this.updateResizeChrome();
+    this.opts.onShapesMoved?.(); // re-route connectors bound to the resizing shape (live)
     // Stream the live resize to peers (throttled) — ephemeral; the doc commits on release.
     const now = Date.now();
     if (now - this.lastResizeSent >= EDIT_BROADCAST_MS) {
@@ -1329,6 +1640,7 @@ export class TextLayer {
     }
     // Stop the live preview last, so the committed render overlaps the cleared preview on peers.
     this.opts.awareness.setLocalStateField("textresize", null);
+    this.updateSelectionBar(); // resizing cleared → re-show the toolbar for the selected box
   };
 
   // ---- remote selection + drag (peers' presence on committed text boxes) ----
@@ -1418,8 +1730,12 @@ export class TextLayer {
       const obj = m ? readObject(m) : null;
       if (obj?.type !== "text") continue;
       const g = this.effectiveGeom(id, obj);
-      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align);
+      // g.height must be passed, else a shape collapses to its text bounds during a peer's
+      // drag/resize glide (the box loses its fixed height on the other user's screen).
+      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
     }
+    this.updateConnectorDots(); // dots follow a peer's dragged/resized shape
+    this.opts.onShapesMoved?.(); // re-route connectors during a peer's drag/resize glide
   }
 
   private ensureGlide(): void {
@@ -1539,12 +1855,14 @@ export class TextLayer {
       fontSize: e.fontSize,
       fontFamily: e.fontFamily,
       align: e.align,
-      runs: elementToRuns(e.el),
+      runs: elementToRuns(e.editable),
     };
     if (e.width != null) state.width = e.width;
     if (e.bg != null) state.bg = e.bg;
     if (e.shape != null) state.shape = e.shape;
     if (e.height != null) state.height = e.height;
+    if (e.borderColor != null) state.borderColor = e.borderColor;
+    if (e.borderStyle != null) state.borderStyle = e.borderStyle;
     this.opts.awareness.setLocalStateField("textedit", state);
   }
 
@@ -1579,6 +1897,9 @@ export class TextLayer {
       if (typeof te.height === "number" && isFinite(te.height)) g.height = te.height;
       if (typeof te.bg === "string" && te.bg) g.bg = te.bg;
       if (typeof te.shape === "string") g.shape = te.shape;
+      if (typeof te.borderColor === "string" && te.borderColor) g.borderColor = te.borderColor;
+      if (te.borderStyle === "solid" || te.borderStyle === "dashed" || te.borderStyle === "none")
+        g.borderStyle = te.borderStyle;
       let el = this.remoteEdits.get(cid);
       if (!el) {
         el = document.createElement("div");
@@ -1590,7 +1911,7 @@ export class TextLayer {
       el.style.color = INK;
       el.style.setProperty("--remote", typeof st.color === "string" ? st.color : "#4a9eff");
       // a peer's live shape/sticky shows its outline + fill (or paper colour + square)
-      if (g.shape) this.applyShape(el, g.shape, g.bg);
+      if (g.shape) this.applyShape(el, g.shape, g.bg, g.borderColor, g.borderStyle);
       else this.applySticky(el, g.bg);
       this.remoteGeom.set(cid, g);
       this.layout(el, g.x, g.y, g.width, g.fontSize, g.fontFamily, g.align, g.height);
@@ -1610,7 +1931,7 @@ export class TextLayer {
   }
 
   /** Serialize the editor to runs and write it back to the doc (or discard/delete if empty). */
-  commit(): void {
+  commit(keepTool = false): void {
     const e = this.edit;
     if (!e) return;
     this.edit = null;
@@ -1620,7 +1941,7 @@ export class TextLayer {
       clearTimeout(this.editTimer);
       this.editTimer = null;
     }
-    const runs = elementToRuns(e.el); // read the DOM before detaching it
+    const runs = elementToRuns(e.editable); // read the DOM before detaching it
     const hasText = runsToText(runs).trim().length > 0;
     const keep = hasText || e.bg != null || e.shape != null; // a sticky/shape persists when empty
     if (e.id) {
@@ -1640,6 +1961,8 @@ export class TextLayer {
             fontSize: e.fontSize,
             align: e.align,
             ...(e.bg != null ? { bg: e.bg } : {}),
+            ...(e.borderColor != null ? { borderColor: e.borderColor } : {}),
+            ...(e.borderStyle != null ? { borderStyle: e.borderStyle } : {}),
           });
           if (e.height != null) setTextGeometry(this.opts.doc, id, { height: e.height });
         });
@@ -1662,6 +1985,8 @@ export class TextLayer {
       if (e.height != null) obj.height = e.height;
       if (e.bg != null) obj.bg = e.bg;
       if (e.shape != null) obj.shape = e.shape;
+      if (e.borderColor != null) obj.borderColor = e.borderColor;
+      if (e.borderStyle != null) obj.borderStyle = e.borderStyle;
       addText(this.opts.doc, obj);
     }
     // Stop the live broadcast last, so peers' ephemeral copy overlaps the freshly-committed doc
@@ -1673,7 +1998,7 @@ export class TextLayer {
     this.updateResizeChrome(); // edit ended → restore handles if the box is still selected
     this.refreshSelectionChrome();
     // The doc observer fires render(), which (re)paints / removes the display element.
-    this.opts.onCommitted?.(); // let the canvas revert the text/sticky tool to select
+    this.opts.onCommitted?.(keepTool); // let the canvas revert the text/sticky tool to select
   }
 
   destroy(): void {

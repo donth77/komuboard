@@ -117,6 +117,37 @@ export function toggleBulletRuns(runs: TextRun[]): TextRun[] {
   return out;
 }
 
+/** Boolean marks that can be toggled across a whole box (the selection-toolbar use). */
+export type BoolMark = "bold" | "italic" | "underline" | "strike";
+/** True when every non-empty run carries the boolean mark (so the toolbar shows it "on"). */
+export function allRunsHaveMark(runs: TextRun[], mark: BoolMark): boolean {
+  const real = runs.filter((r) => r.text.length > 0);
+  return real.length > 0 && real.every((r) => !!r[mark]);
+}
+/** Toggle a boolean mark across every run (whole-box): if all have it, clear it; else set it. */
+export function toggleBoolMarkAllRuns(runs: TextRun[], mark: BoolMark): TextRun[] {
+  const turnOff = allRunsHaveMark(runs, mark);
+  return runs.map((r) => {
+    const next = { ...r };
+    if (turnOff) delete next[mark];
+    else next[mark] = true;
+    return next;
+  });
+}
+/** Set (or clear, when value is "") a colour/highlight/link mark across every run (whole-box). */
+export function setMarkAllRuns(
+  runs: TextRun[],
+  key: "color" | "highlight" | "link",
+  value: string,
+): TextRun[] {
+  return runs.map((r) => {
+    const next = { ...r };
+    if (value) next[key] = value;
+    else delete next[key];
+    return next;
+  });
+}
+
 function sameMarks(a: Marks, b: Marks): boolean {
   return (
     !!a.bold === !!b.bold &&

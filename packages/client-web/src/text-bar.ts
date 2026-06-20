@@ -1,4 +1,4 @@
-// src/text-bar.ts — the floating rich-text toolbar shown above the active text editor (FigJam-style).
+// src/text-bar.ts — the floating rich-text toolbar shown above the active text editor.
 //
 // TextLayer owns its lifecycle: show(editor, state) when an editor opens, positionOver() as the
 // camera/box moves, reflect(state) on selection change, hide() on commit. The bar lives in
@@ -12,8 +12,9 @@
 import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
 import { COLOR_NAMES } from "./draw-bar";
+import { lineWeightIcon } from "./icons";
 import { SWATCHES } from "./palette";
-import type { ShapeKind, TextAlign } from "@coboard/shared";
+import type { BorderStyle, ShapeKind, TextAlign } from "@coboard/shared";
 
 export interface TextBarHost {
   setFontFamily(css: string): void;
@@ -24,7 +25,18 @@ export interface TextBarHost {
   /** Shape-mode controls (only used when the box being edited is a shape). */
   setShapeKind(kind: ShapeKind): void;
   setFill(color: string): void;
+  /** Set the shape's border colour and/or style (omit a field to leave it unchanged). */
+  setBorder(p: { color?: string; style?: BorderStyle }): void;
   setAlign(align: TextAlign): void;
+  /** Selection-mode marks — applied to the whole selected box (no live editor). `setLink("")`
+   *  removes the link; a `""` colour/highlight clears it. */
+  applyMark(mark: string): void;
+  setColor(hex: string): void;
+  setHighlight(hex: string): void;
+  setLink(url: string): void;
+  /** Selection-mode Link click: enter the box's text edit mode with all text selected, so the link
+   *  input can link the whole label (and the user can then refine to a specific selection). */
+  linkSelection(): void;
 }
 
 export interface TextBarState {
@@ -36,15 +48,17 @@ export interface TextBarState {
   fontFamily: string;
   fontSize: number;
   color: string;
-  /** When set, the bar enters shape mode (adds shape-select / fill / align controls). */
+  /** When set, the bar enters shape mode (adds shape-select / fill / border / align controls). */
   shape?: ShapeKind;
-  /** Current shape fill + text alignment (shape mode). */
+  /** Current shape fill + border + text alignment (shape mode). */
   fill?: string;
+  borderColor?: string;
+  borderStyle?: BorderStyle;
   align?: TextAlign;
 }
 
-/** Which colour a colour popover/picker drives: text fore-colour, highlight, or a shape's fill. */
-type ColorKind = "fore" | "hilite" | "fill";
+/** Which colour a colour popover/picker drives: text fore-colour, highlight, shape fill, or border. */
+type ColorKind = "fore" | "hilite" | "fill" | "border";
 
 interface FontOption {
   label: string;
@@ -56,7 +70,7 @@ export const TEXT_FONTS: FontOption[] = [
   { label: "Mono", css: "'SF Mono', ui-monospace, Menlo, monospace" },
   { label: "Handwriting", css: "'Caveat', 'Comic Sans MS', cursive" },
 ];
-// Named size presets (FigJam-style) + a numeric input for an exact value.
+// Named size presets + a numeric input for an exact value.
 const SIZE_PRESETS: { label: string; size: number }[] = [
   { label: "Small", size: 16 },
   { label: "Medium", size: 24 },
@@ -88,6 +102,16 @@ const HIGHLIGHT_NAMES: Record<string, string> = {
   "#99E9F2": "Cyan",
   "#B2F2BB": "Green",
 };
+// Shape fill reuses the shared swatches minus pink (per request) — a separate list so the draw
+// tool / text colour keep the full SWATCHES set.
+const SHAPE_FILLS = SWATCHES.filter((c) => c !== "#ec4899");
+// Shape border colours — a smaller set than the fill palette. Leads with the default outline ink.
+const BORDER_COLORS = ["#1f2933", "#dc2626", "#f59e0b", "#16a34a", "#2563eb", "#7c3aed", "#ffffff"];
+const BORDER_STYLES: { style: BorderStyle; label: string; svg: string }[] = [
+  { style: "solid", label: "Solid", svg: '<path d="M3 10h14"/>' },
+  { style: "dashed", label: "Dashed", svg: '<path d="M3 10h14" stroke-dasharray="3.2 2.6"/>' },
+  { style: "none", label: "No border", svg: '<path d="M4 16 16 4" stroke="#e8554e"/>' },
+];
 
 const SVG = {
   link: '<path d="M9 11a3.5 3.5 0 0 0 5 .4l2-2a3.5 3.5 0 0 0-5-5l-1 1"/><path d="M11 9a3.5 3.5 0 0 0-5-.4l-2 2a3.5 3.5 0 0 0 5 5l1-1"/>',
@@ -101,16 +125,14 @@ const SHAPE_SVG: Record<ShapeKind, string> = {
   ellipse: '<ellipse cx="10" cy="10" rx="7" ry="5.5"/>',
   rhombus: '<path d="M10 3 17 10 10 17 3 10z"/>',
   triangle: '<path d="M10 4 17 16H3z"/>',
-  divider: '<path d="M3 10h14"/>',
 };
 const SHAPE_NAMES: Record<ShapeKind, string> = {
   rectangle: "Rectangle",
   ellipse: "Oval",
   rhombus: "Rhombus",
   triangle: "Triangle",
-  divider: "Divider",
 };
-const SHAPE_ORDER: ShapeKind[] = ["rectangle", "ellipse", "rhombus", "triangle", "divider"];
+const SHAPE_ORDER: ShapeKind[] = ["rectangle", "ellipse", "rhombus", "triangle"];
 // Text-alignment glyphs (left / center / right).
 const ALIGN_SVG: Record<TextAlign, string> = {
   left: '<path d="M4 5.5h12M4 10h8M4 14.5h11"/>',
@@ -134,6 +156,8 @@ function sizeLabelFor(size: number): string {
 export class TextBar {
   readonly root: HTMLDivElement;
   private editor: HTMLElement | null = null;
+  /** True when shown over a *selected* (not editing) box — controls apply to the whole box. */
+  private selectionMode = false;
   private pop: HTMLDivElement | null = null;
   private readonly fontLabel: HTMLElement;
   private readonly sizeLabel: HTMLElement;
@@ -162,9 +186,10 @@ export class TextBar {
       // Shape-only leading controls: shape-select + fill colour (shown only in shape mode).
       `<button class="ctb-btn ctb-shape-only ctb-shape-kind" data-act="shape-kind" data-tip="Shape"><span class="ctb-shape-ico">${ico(SHAPE_SVG.rectangle)}</span><span class="ctb-caret">▾</span></button>` +
       `<button class="ctb-btn ctb-shape-only ctb-fill" data-act="fill" data-tip="Fill color"><span class="ctb-fill-dot" data-fill></span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-btn ctb-shape-only ctb-border" data-act="border" data-tip="Border"><span class="ctb-border-ico">${lineWeightIcon("ctb-ico")}</span><span class="ctb-caret">▾</span></button>` +
       `<span class="ctb-sep ctb-shape-only"></span>` +
       `<button class="ctb-text" data-act="font" data-tip="Font"><span class="ctb-font-label">Sans</span><span class="ctb-caret">▾</span></button>` +
-      `<button class="ctb-text" data-act="size" data-tip="Font size"><span class="ctb-size-label">Large</span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-text" data-act="size" data-tip="Font size"><span class="ctb-size-label">Medium</span><span class="ctb-caret">▾</span></button>` +
       `<span class="ctb-sep"></span>` +
       // B/I/U/S — inline on desktop; on mobile they collapse behind one toggle that expands a
       // vertical flyout (saves the width that was making the toolbar overflow on phones).
@@ -212,6 +237,9 @@ export class TextBar {
         case "bullet":
           return this.host.toggleBullets();
         case "link":
+          // Selection mode: hand off to the host, which enters edit mode + selects all the text,
+          // then re-opens the link input (now editing) via openLink().
+          if (this.selectionMode) return this.host.linkSelection();
           return this.openLinkPop(btn);
         case "color":
           return this.openColorPop(btn, "fore");
@@ -221,6 +249,8 @@ export class TextBar {
           return this.openShapePop(btn);
         case "fill":
           return this.openColorPop(btn, "fill");
+        case "border":
+          return this.openBorderPop(btn);
         case "align":
           return this.openAlignPop(btn);
       }
@@ -237,6 +267,7 @@ export class TextBar {
 
   private applyMark(mark: string): void {
     this.closePop();
+    if (this.selectionMode) return this.host.applyMark(mark); // whole-box (no live editor)
     this.editor?.focus();
     document.execCommand(mark === "strike" ? "strikeThrough" : mark, false);
     this.host.onFormat();
@@ -245,7 +276,21 @@ export class TextBar {
   private applyColor(kind: ColorKind, hex: string, savedRange?: Range): void {
     if (kind === "fill") {
       // Shape fill is a block prop (no execCommand / selection) — route straight to the host.
-      this.host.setFill(hex || "#ffffff");
+      // The "No fill" swatch passes "" → a transparent fill.
+      this.host.setFill(hex || "transparent");
+      return;
+    }
+    if (kind === "border") {
+      // Border colour is a block prop too; choosing one re-enables the outline if it was off.
+      const patch: { color: string; style?: BorderStyle } = { color: hex || "#1f2933" };
+      if (this.state?.borderStyle === "none") patch.style = "solid";
+      this.host.setBorder(patch);
+      return;
+    }
+    if (this.selectionMode) {
+      // Whole-box colour/highlight (no live editor).
+      if (kind === "fore") this.host.setColor(hex);
+      else this.host.setHighlight(hex);
       return;
     }
     this.editor?.focus();
@@ -268,24 +313,24 @@ export class TextBar {
       return;
     }
     this.closePop();
-    const colors = kind === "hilite" ? HIGHLIGHTS : SWATCHES; // fore + fill share the full palette
+    // hilite + fill offer a "none" swatch (the "" entry, rendered as the red-slash sw-none); fore
+    // doesn't. Fill's none = transparent.
+    const colors =
+      kind === "hilite" ? HIGHLIGHTS : kind === "fill" ? ["", ...SHAPE_FILLS] : SWATCHES;
     const names = kind === "hilite" ? HIGHLIGHT_NAMES : COLOR_NAMES;
+    const noneTip = kind === "fill" ? "No fill" : "None";
     // Ring the active swatch. Foreground tracks `color`; fill tracks `fill`; highlight none.
-    const cur =
-      (kind === "fore"
-        ? this.state?.color
-        : kind === "fill"
-          ? this.state?.fill
-          : ""
-      )?.toLowerCase() ?? "";
+    const curRaw = kind === "fore" ? this.state?.color : kind === "fill" ? this.state?.fill : "";
+    const cur = (curRaw ?? "").toLowerCase();
+    const noneActive = kind === "fill" && (cur === "" || cur === "transparent");
     const sw = colors
       .map((c) =>
         c
           ? `<button class="sw${c.toLowerCase() === cur ? " on" : ""}" type="button" data-color="${c}" data-tip="${names[c.toUpperCase()] ?? c}" style="--sw:${c}"></button>`
-          : `<button class="sw sw-none" type="button" data-color="" data-tip="None"></button>`,
+          : `<button class="sw sw-none${noneActive ? " on" : ""}" type="button" data-color="" data-tip="${noneTip}"></button>`,
       )
       .join("");
-    const customOn = !!cur && !colors.some((c) => c.toLowerCase() === cur);
+    const customOn = !noneActive && !!cur && !colors.some((c) => c.toLowerCase() === cur);
     const pop = document.createElement("div");
     pop.className = "ctb-pop ctb-color-pop";
     pop.dataset.for = id;
@@ -300,10 +345,57 @@ export class TextBar {
       this.closePop();
     });
     document.body.appendChild(pop);
-    const ar = anchor.getBoundingClientRect();
-    const pw = pop.offsetWidth || 220;
-    pop.style.left = `${Math.max(8, Math.min(ar.left + ar.width / 2 - pw / 2, window.innerWidth - pw - 8))}px`;
-    pop.style.top = `${ar.bottom + 6}px`;
+    this.placePop(pop, anchor, true);
+    this.pop = pop;
+  }
+
+  /** Border popover (shape mode): a row of styles (solid / dashed / none) + a row of border colours. */
+  private openBorderPop(anchor: HTMLElement): void {
+    if (this.pop?.dataset.for === "border") {
+      this.closePop();
+      return;
+    }
+    this.closePop();
+    const curStyle = this.state?.borderStyle ?? "solid";
+    const curColor = (this.state?.borderColor ?? BORDER_COLORS[0]!).toLowerCase();
+    const customOn = !!curColor && !BORDER_COLORS.some((c) => c.toLowerCase() === curColor);
+    const styleRow = BORDER_STYLES.map(
+      (b) =>
+        `<button class="ctb-border-style${b.style === curStyle ? " on" : ""}" type="button" data-style="${b.style}" data-tip="${b.label}"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${b.svg}</svg></button>`,
+    ).join("");
+    const colorRow = BORDER_COLORS.map(
+      (c) =>
+        `<button class="sw${c.toLowerCase() === curColor ? " on" : ""}" type="button" data-bcolor="${c}" data-tip="${COLOR_NAMES[c.toUpperCase()] ?? c}" style="--sw:${c}"></button>`,
+    ).join("");
+    const pop = document.createElement("div");
+    pop.className = "ctb-pop ctb-border-pop";
+    pop.dataset.for = "border";
+    pop.addEventListener("mousedown", (e) => e.preventDefault());
+    pop.innerHTML =
+      `<div class="ctb-border-styles">${styleRow}</div>` +
+      `<div class="swatches">${colorRow}<button class="sw sw-custom${customOn ? " on" : ""}" type="button" data-custom data-tip="Custom"></button></div>`;
+    pop.addEventListener("click", (e) => {
+      const t = e.target as HTMLElement;
+      const sBtn = t.closest<HTMLElement>("[data-style]");
+      if (sBtn) {
+        this.host.setBorder({ style: sBtn.getAttribute("data-style") as BorderStyle });
+        this.closePop();
+        return;
+      }
+      if (t.closest("[data-custom]")) return this.openPicker("border", anchor);
+      const cBtn = t.closest<HTMLElement>("[data-bcolor]");
+      if (cBtn) {
+        // Choosing a colour also re-enables the outline if it was "none".
+        const patch: { color: string; style?: BorderStyle } = {
+          color: cBtn.getAttribute("data-bcolor") ?? BORDER_COLORS[0]!,
+        };
+        if (curStyle === "none") patch.style = "solid";
+        this.host.setBorder(patch);
+        this.closePop();
+      }
+    });
+    document.body.appendChild(pop);
+    this.placePop(pop, anchor, true);
     this.pop = pop;
   }
 
@@ -330,10 +422,7 @@ export class TextBar {
       this.closePop();
     });
     document.body.appendChild(pop);
-    const ar = anchor.getBoundingClientRect();
-    const pw = pop.offsetWidth || 200;
-    pop.style.left = `${Math.max(8, Math.min(ar.left, window.innerWidth - pw - 8))}px`;
-    pop.style.top = `${ar.bottom + 6}px`;
+    this.placePop(pop, anchor);
     this.pop = pop;
   }
 
@@ -363,10 +452,7 @@ export class TextBar {
       this.closePop();
     });
     document.body.appendChild(pop);
-    const ar = anchor.getBoundingClientRect();
-    const pw = pop.offsetWidth || 130;
-    pop.style.left = `${Math.max(8, Math.min(ar.left + ar.width / 2 - pw / 2, window.innerWidth - pw - 8))}px`;
-    pop.style.top = `${ar.bottom + 6}px`;
+    this.placePop(pop, anchor, true);
     this.pop = pop;
   }
 
@@ -387,12 +473,13 @@ export class TextBar {
       });
     }
     this.picker.value =
-      (this.pickerKind === "fill" ? this.state?.fill : this.state?.color) || "#0e1116";
+      (this.pickerKind === "fill"
+        ? this.state?.fill
+        : this.pickerKind === "border"
+          ? this.state?.borderColor
+          : this.state?.color) || "#0e1116";
     this.picker.classList.remove("hidden");
-    const r = anchor.getBoundingClientRect();
-    const pw = this.picker.offsetWidth || 232;
-    this.picker.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - pw - 8))}px`;
-    this.picker.style.top = `${r.bottom + 6}px`;
+    this.placePop(this.picker, anchor);
     document.addEventListener("pointerdown", this.onDocDown);
   }
 
@@ -445,9 +532,15 @@ export class TextBar {
    *  (which unlinks the text) sits beside it. */
   private openLinkInput(anchor: HTMLElement, prefill: string, editLink?: HTMLAnchorElement): void {
     this.closePop();
+    // Measure the toolbar + anchor BEFORE hiding the toolbar — otherwise, in selection mode (no live
+    // editor), the anchor lives inside the now-hidden bar and collapses to 0,0 (link input jumped to
+    // the top-left corner). The bar sits just above the node, so it's a reliable "above the box" ref.
+    const barRect = this.root.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
     this.root.style.display = "none"; // hide the toolbar so the link input doesn't overlap it
     const sel = window.getSelection();
     const saved = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null; // the text to link
+    this.setLinkHighlight(saved); // keep the linked text visibly highlighted while the input is focused
     const pop = document.createElement("div");
     pop.className = "ctb-pop ctb-link-pop";
     pop.dataset.for = "link";
@@ -464,12 +557,23 @@ export class TextBar {
       this.root.style.display = ""; // bring the toolbar back
       const url = input.value.trim();
       this.closePop();
+      // Selection mode: link the whole box via the host (no live editor / selection to restore).
+      if (this.selectionMode) {
+        if (remove) this.host.setLink("");
+        else if (apply && url) this.host.setLink(url);
+        return;
+      }
       this.editor?.focus();
       if (editLink && editLink.isConnected) this.selectLinkContents(editLink);
       else if (saved) {
         const s = window.getSelection();
         s?.removeAllRanges();
         s?.addRange(saved);
+        // Reading the range back forces the selection to commit synchronously. Without it, a
+        // focus()+addRange race on the nested shape editor (an inner contenteditable inside a
+        // contenteditable=false box) leaves execCommand acting on a collapsed caret → it inserts
+        // the URL as text instead of linking the restored selection.
+        if (s?.rangeCount) s.getRangeAt(0);
       }
       if (remove) {
         document.execCommand("unlink", false);
@@ -497,7 +601,7 @@ export class TextBar {
     input.addEventListener("blur", () => finish(false));
     pop.appendChild(input);
     if (editLink) {
-      // Editing an existing link → a remove-link (unlink) icon strips the link, FigJam-style.
+      // Editing an existing link → a remove-link (unlink) icon strips the link.
       const sep = document.createElement("span");
       sep.className = "ctb-link-sep";
       const rm = document.createElement("button");
@@ -510,16 +614,15 @@ export class TextBar {
       pop.append(sep, rm);
     }
     document.body.appendChild(pop);
-    const er = this.editor?.getBoundingClientRect();
     const pw = pop.offsetWidth || 300;
-    if (er) {
-      pop.style.left = `${Math.max(8, er.left + er.width / 2 - pw / 2)}px`;
-      pop.style.top = `${Math.max(8, er.top - pop.offsetHeight - 12)}px`;
-    } else {
-      const ar = anchor.getBoundingClientRect();
-      pop.style.left = `${ar.left}px`;
-      pop.style.top = `${ar.bottom + 4}px`;
-    }
+    // Anchor the field above the node's box. When editing, climb from the editor to its `.co-text`
+    // box (for shapes the editor is the inner body, so use the box rect — same placement a text node
+    // gets). In selection mode there's no editor, so fall back to the toolbar's pre-hide position.
+    const editBox = this.editor?.closest<HTMLElement>(".co-text") ?? null;
+    const er = editBox?.getBoundingClientRect();
+    const ref = er && er.width ? er : barRect.width ? barRect : anchorRect;
+    pop.style.left = `${Math.max(8, Math.min(ref.left + ref.width / 2 - pw / 2, window.innerWidth - pw - 8))}px`;
+    pop.style.top = `${Math.max(8, ref.top - pop.offsetHeight - 12)}px`;
     this.pop = pop;
     input.focus();
     if (prefill) input.select();
@@ -530,6 +633,12 @@ export class TextBar {
   editLink(link: HTMLAnchorElement): void {
     this.selectLinkContents(link);
     this.openLinkInput(this.linkBtn(), link.getAttribute("href") ?? "", link);
+  }
+
+  /** Open the link input for the active editor's current selection — used after the host enters edit
+   *  mode (selection-mode Link click) so the URL applies to the just-selected text. */
+  openLink(): void {
+    this.openLinkPop(this.linkBtn());
   }
 
   // ---- popovers ----
@@ -556,22 +665,44 @@ export class TextBar {
       pop.appendChild(b);
     }
     document.body.appendChild(pop);
-    const ar = anchor.getBoundingClientRect();
-    pop.style.left = `${ar.left}px`;
-    pop.style.top = `${ar.bottom + 4}px`;
+    this.placePop(pop, anchor);
     this.pop = pop;
+  }
+  /** Position a popover relative to its anchor: downward by default (like a normal dropdown),
+   *  flipping up only if it would clip the bottom of the viewport. `center` horizontally centres it
+   *  over the anchor (else left-aligns). */
+  private placePop(pop: HTMLElement, anchor: HTMLElement, center = false): void {
+    const ar = anchor.getBoundingClientRect();
+    const pw = pop.offsetWidth || 220;
+    const ph = pop.offsetHeight || 44;
+    const rawLeft = center ? ar.left + ar.width / 2 - pw / 2 : ar.left;
+    pop.style.left = `${Math.max(8, Math.min(rawLeft, window.innerWidth - pw - 8))}px`;
+    let top = ar.bottom + 6; // open downward
+    if (top + ph > window.innerHeight - 8) top = ar.top - ph - 6; // flip up if it'd run off the bottom
+    pop.style.top = `${Math.max(8, top)}px`;
   }
   private closePop(): void {
     this.pop?.remove();
     this.pop = null;
     this.hidePicker();
+    this.setLinkHighlight(null);
   }
   private hidePicker(): void {
     this.picker?.classList.add("hidden");
     document.removeEventListener("pointerdown", this.onDocDown);
   }
+  /** Paint a persistent highlight over the text being linked while the URL input is focused. The
+   *  native selection can't be used — once focus moves to the input the editor has no selection to
+   *  render — so we use the CSS Custom Highlight API (`::highlight(co-link-target)`), which paints a
+   *  range regardless of focus and without touching the DOM. Pass null to clear it. */
+  private setLinkHighlight(range: Range | null): void {
+    const reg = (CSS as unknown as { highlights?: Map<string, unknown> }).highlights;
+    if (!reg || typeof Highlight === "undefined") return;
+    if (range && !range.collapsed) reg.set("co-link-target", new Highlight(range.cloneRange()));
+    else reg.delete("co-link-target");
+  }
 
-  /** Font menu — a checkmark on the active family (FigJam-style). */
+  /** Font menu — a checkmark on the active family. */
   private openFontPop(anchor: HTMLElement): void {
     const cur = this.state?.fontFamily;
     this.openPop(
@@ -631,20 +762,27 @@ export class TextBar {
     input.addEventListener("blur", () => setSize(parseInt(input.value, 10)));
     pop.appendChild(input);
     document.body.appendChild(pop);
-    const ar = anchor.getBoundingClientRect();
-    pop.style.left = `${ar.left}px`;
-    pop.style.top = `${ar.bottom + 4}px`;
+    this.placePop(pop, anchor);
     this.pop = pop;
   }
 
   // ---- lifecycle (driven by TextLayer) ----
   show(editor: HTMLElement, state: TextBarState): void {
     this.editor = editor;
+    this.selectionMode = false;
+    this.root.style.display = "";
+    this.reflect(state);
+  }
+  /** Show over a *selected* (not editing) box — controls apply to the whole box via the host. */
+  showForSelection(state: TextBarState): void {
+    this.editor = null;
+    this.selectionMode = true;
     this.root.style.display = "";
     this.reflect(state);
   }
   hide(): void {
     this.editor = null;
+    this.selectionMode = false;
     this.closePop();
     this.closeMarks();
     this.root.style.display = "none";
@@ -683,7 +821,18 @@ export class TextBar {
       const ico2 = this.root.querySelector<HTMLElement>(".ctb-shape-ico");
       if (ico2 && s.shape) ico2.innerHTML = ico(SHAPE_SVG[s.shape]);
       const dot = this.root.querySelector<HTMLElement>("[data-fill]");
-      if (dot) dot.style.background = s.fill || "#ffffff";
+      if (dot) {
+        const noFill = !s.fill || s.fill === "transparent";
+        dot.classList.toggle("is-none", noFill); // red-slash when the shape has no fill
+        dot.style.background = noFill ? "" : (s.fill ?? "");
+      }
+      // Tint the border icon to its colour (dimmed when the outline is off).
+      const bico = this.root.querySelector<HTMLElement>(".ctb-border-ico");
+      if (bico) {
+        const off = s.borderStyle === "none";
+        bico.style.color = off ? "" : (s.borderColor ?? "#1f2933");
+        bico.classList.toggle("is-none", off);
+      }
       const aico = this.root.querySelector<HTMLElement>(".ctb-align-ico");
       if (aico) aico.innerHTML = ico(ALIGN_SVG[s.align ?? "center"]);
     }

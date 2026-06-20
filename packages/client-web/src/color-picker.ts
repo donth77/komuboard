@@ -1,4 +1,4 @@
-// <co-color-picker> — a FigJam-style custom colour picker (light-DOM Web Component).
+// <co-color-picker> — a custom colour picker (light-DOM Web Component).
 //
 // Saturation/value square + hue slider + hex field + (where supported) an
 // eyedropper. Driven by the `value` property (a hex string); reports live edits
