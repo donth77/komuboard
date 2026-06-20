@@ -1959,10 +1959,22 @@ input[type="range"] {
   justify-content: flex-end;
   padding-bottom: 0.9em;
 }
-/* "Add text" placeholder while a shape is empty (display copy or the editor before you type). */
+/* "Add text" placeholder while a shape is empty (display copy or the editor before you type).
+   It's an ABSOLUTE overlay (out of the flex flow) so it doesn't consume the box's centred flex
+   line — that line stays available for the empty editor's caret, which then sits where the text
+   will go (centred) instead of being stranded at the top-left. */
 .co-text.shape:empty::before {
   content: "Add text";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* vertical centre; horizontal follows the inherited text-align */
   color: #98a2b3;
+  pointer-events: none;
+}
+.co-text.shape-triangle:empty::before {
+  justify-content: flex-end; /* match the triangle's lower-sitting label */
 }
 .co-text.shape.selected {
   box-shadow: 0 0 0 1.5px #4a9eff;
