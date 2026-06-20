@@ -20,3 +20,37 @@ export function safePhotoUrl(url: string | undefined | null): string | null {
   if (!(url.startsWith("data:image/") || url.startsWith("https://"))) return null;
   return /["')\\\s]/.test(url) ? null : url;
 }
+
+/**
+ * Paint `el` as a circular avatar for a person: their photo (if it passes safePhotoUrl) as a
+ * cover background, else their colour (--av) + initials. The circle shape/size comes from CSS
+ * (e.g. `.menu-avatar`, `.po-av`). Used wherever we show "you" outside the presence row.
+ */
+export function paintAvatar(
+  el: HTMLElement,
+  p: { name: string; color: string; photo?: string },
+): void {
+  el.style.setProperty("--av", p.color);
+  const photo = safePhotoUrl(p.photo);
+  if (photo) {
+    el.style.backgroundImage = `url("${photo}")`;
+    el.textContent = "";
+  } else {
+    el.style.backgroundImage = "";
+    el.textContent = initials(p.name);
+  }
+}
+
+/**
+ * Paint a profile preview inside `root`: the person's name into `[data-profile-name]` and their
+ * avatar into `[data-profile-avatar]`. Used by the "Edit profile" menu row (app menu + drawer).
+ */
+export function paintProfile(
+  root: HTMLElement,
+  p: { name: string; color: string; photo?: string },
+): void {
+  const name = root.querySelector<HTMLElement>("[data-profile-name]");
+  if (name) name.textContent = p.name;
+  const av = root.querySelector<HTMLElement>("[data-profile-avatar]");
+  if (av) paintAvatar(av, p);
+}

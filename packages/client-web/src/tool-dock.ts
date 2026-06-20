@@ -13,8 +13,8 @@ const TOOLS: ReadonlyArray<readonly [string, string, string, ToolId | null]> = [
   ["select", "v", "Select", "select"],
   ["hand", "h", "Hand", "hand"],
   ["pen", "p", "Draw", "pen"],
-  ["sticky", "s", "Sticky note", null],
-  ["text", "t", "Text", null],
+  ["sticky", "s", "Sticky note", "sticky"],
+  ["text", "t", "Text", "text"],
   ["rect", "r", "Rectangle", null],
   ["ellipse", "o", "Ellipse", null],
 ];

@@ -11,6 +11,7 @@
 
 import { icon } from "./icons";
 import { settingsControlsHTML } from "./settings-controls";
+import { paintProfile } from "./util";
 
 export class CoDrawer extends HTMLElement {
   #wired = false;
@@ -27,9 +28,9 @@ export class CoDrawer extends HTMLElement {
       '<aside class="drawer" id="drawer" aria-label="Menu">' +
       '<div class="drawer-head"><span class="logo">◳</span> <strong>Coboard</strong></div>' +
       `<div class="drawer-room">Room · <strong>${room}</strong></div>` +
+      `<button class="drawer-item" data-act="profile" type="button"><span>Edit profile</span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
       settingsControlsHTML() +
-      `<button class="drawer-item" data-act="profile" type="button"><span>Edit profile</span><span class="drawer-item-ic">${icon("user")}</span></button>` +
-      `<button class="drawer-item" data-act="help" type="button"><span>Keyboard shortcuts</span><span class="drawer-item-ic">${icon("help")}</span></button>` +
+      `<button class="drawer-item" data-act="help" type="button"><span>Help</span><span class="drawer-item-ic">${icon("help")}</span></button>` +
       "</aside>";
     this.#scrim = this.querySelector(".drawer-scrim");
     this.#panel = this.querySelector(".drawer");
@@ -62,6 +63,11 @@ export class CoDrawer extends HTMLElement {
     this.setAttribute("room", r);
     const el = this.querySelector<HTMLElement>(".drawer-room strong");
     if (el) el.textContent = r;
+  }
+
+  /** Paint the current user's name + avatar into the "Edit profile" row (set by main.ts; updates on edit). */
+  set profile(p: { name: string; color: string; photo?: string }) {
+    paintProfile(this, p);
   }
 }
 

@@ -65,6 +65,17 @@ function show(el: HTMLElement): void {
   anchor = el;
   const p = pill();
   p.textContent = text;
+  // Optional keyboard-shortcut hint → one <kbd> chip per whitespace-separated token (e.g. "⌘ +").
+  const keys = el.getAttribute("data-tip-key");
+  if (keys) {
+    for (const k of keys.split(/\s+/)) {
+      if (!k) continue;
+      const kbd = document.createElement("kbd");
+      kbd.className = "kbd";
+      kbd.textContent = k;
+      p.append(" ", kbd);
+    }
+  }
   p.classList.add("show"); // display it first so place() can measure it
   place();
 }

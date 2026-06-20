@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import {
   addStroke,
+  DEFAULT_STICKY_COLOR,
   deleteObjects,
   objectsMap,
   orderArray,
@@ -15,14 +16,18 @@ import {
   type StrokeStyle,
 } from "@coboard/shared";
 import { ViewportController } from "./viewport";
+import { TextLayer } from "./text-layer";
 
-export type ToolId = "select" | "hand" | "pen";
+export type ToolId = "select" | "hand" | "pen" | "text" | "sticky";
 
 export interface CanvasOptions {
   container: HTMLElement;
   doc: Y.Doc;
   awareness: Awareness;
   user: PresenceState;
+  /** Ask the host to switch tools (updates the dock highlight) — e.g. revert to select after a
+   *  text/sticky box is placed + finished. */
+  requestTool?: (tool: ToolId) => void;
 }
 
 const CURSOR_HZ = 30;
@@ -112,6 +117,11 @@ export class BoardCanvas {
   private readonly objects: Y.Map<Y.Map<unknown>>;
   private readonly cursors = new Map<number, Konva.Group>();
   private readonly cursorTargets = new Map<number, { x: number; y: number }>();
+  /** Remote cursors render in their own stage whose container sits ABOVE the HTML text overlay, so a
+   *  cursor is never painted under a text box (all main-stage Konva layers live below the overlay).
+   *  It mirrors the main camera transform (syncCursorStage) so world-space cursors still line up. */
+  private cursorStage!: Konva.Stage;
+  private readonly cursorLayer = new Konva.Layer({ listening: false });
   /** Colored outlines showing what each *remote* peer has selected (drawn in their cursor color). */
   private readonly remoteSelections = new Konva.Group({ listening: false });
   /** Outline rects reused across renders, keyed `clientId:objId` — avoids per-frame Konva churn
@@ -124,9 +134,14 @@ export class BoardCanvas {
   private readonly undoManager: Y.UndoManager;
   /** Camera: owns the stage transform (pan/zoom), wheel, grid, and zoom readout. */
   private readonly viewport: ViewportController;
+  /** HTML overlay that renders + edits text objects (kept out of the Konva scene). */
+  private readonly textLayer: TextLayer;
 
   private tool: ToolId = "select";
   private color = "#0e1116";
+  private stickyColor: string = DEFAULT_STICKY_COLOR;
+  /** True while setTool is baking an open editor → suppresses the commit's auto-revert-to-select. */
+  private suppressAutoSelect = false;
   private widthPx = 14;
   private style: StrokeStyle = "solid";
   private opacity = 1; // fixed default — the pen panel has no opacity control yet
@@ -134,7 +149,14 @@ export class BoardCanvas {
   private marquee: Konva.Rect | null = null;
   private marqueeStart: { x: number; y: number } | null = null;
   private marqueeBase = new Set<string>();
+  private marqueeAdditive = false;
   private moveState: { startX: number; startY: number; dx: number; dy: number } | null = null;
+  /** A tap on an already-sole-selected text/sticky box → edit it on release (FigJam two-click:
+   *  first click selects the box, second click enters its text). Cleared if the tap becomes a drag. */
+  private textTapEdit: { id: string; x: number; y: number } | null = null;
+  /** When/what text box was last freshly selected — the two-click edit only fires on a QUICK second
+   *  click (within TWO_CLICK_MS), so a later click on a still-selected box re-selects, not edits. */
+  private textSelectAt: { id: string; t: number } | null = null;
   private pinch: { dist: number; cx: number; cy: number } | null = null;
   private lastCursorSent = 0;
   /** Throttle clocks for the live drag / resize broadcasts (ms). */
@@ -178,8 +200,15 @@ export class BoardCanvas {
     this.opts.awareness.setLocalStateField("cursor", null);
   };
   private readonly onWindowPointerUp = (): void => {
-    if (this.moveState) this.endMove();
+    if (this.textLayer.isMoving()) this.textLayer.endMove();
+    else if (this.moveState) this.endMove();
     else if (this.marquee) this.endMarquee();
+    // Two-click: releasing a tap on an already-sole-selected box enters its text editor.
+    if (this.textTapEdit) {
+      const at = this.textTapEdit;
+      this.textTapEdit = null;
+      this.textLayer.editOrCreate(at, true); // edit with all text selected (FigJam-style)
+    }
   };
   private resizeObserver: ResizeObserver | null = null;
   /** Cache of content-relative client rects per object id; cleared whenever geometry rebuilds. */
@@ -257,22 +286,59 @@ export class BoardCanvas {
     this.viewport = new ViewportController(this.stage, opts.container, () => {
       this.cull(); // re-cull for the new viewport before the redraw below
       this.scaleCursors();
+      this.syncCursorStage(); // keep the cursor stage locked to the camera
       this.refreshTransformer();
       this.renderSelectionBoxes();
       this.renderRemoteSelections(true); // zoom changes screen-space geometry → force rebuild
+      this.textLayer.syncTransform(); // keep HTML text boxes locked to the camera
     });
+    // The text overlay positions HTML boxes in screen space from the live camera transform.
+    this.textLayer = new TextLayer({
+      container: opts.container,
+      doc: opts.doc,
+      awareness: opts.awareness,
+      camera: () => ({ scale: this.stage.scaleX(), x: this.stage.x(), y: this.stage.y() }),
+      onSelectionChange: () => {
+        this.notifySelection(); // fold the text selection into the count…
+        this.publishSelection(); // …and broadcast it so peers see the text outline
+      },
+      onCommitted: () => {
+        // Finishing a box placed with the text/sticky tool reverts to select (FigJam one-shot).
+        // Suppressed when the commit was triggered by an explicit tool switch (don't fight the user).
+        if (this.suppressAutoSelect) return;
+        if (this.tool === "text" || this.tool === "sticky") this.opts.requestTool?.("select");
+      },
+    });
+
+    // The cursor stage's container is appended AFTER the text overlay → cursors paint on top of text.
+    const cursorContainer = document.createElement("div");
+    cursorContainer.className = "cursor-layer";
+    opts.container.appendChild(cursorContainer);
+    this.cursorStage = new Konva.Stage({
+      container: cursorContainer,
+      width: this.stage.width(),
+      height: this.stage.height(),
+      listening: false,
+    });
+    this.cursorStage.add(this.cursorLayer);
+    this.syncCursorStage();
 
     this.renderObjects();
     this.objects.observeDeep(() => this.renderObjects());
 
     this.bindPointer();
-    // Hand-pan moves the viewport without a zoom transform, so re-cull on drag too.
-    this.stage.on("dragmove", () => this.cull());
+    // Hand-pan moves the viewport without a zoom transform, so re-cull + re-sync text on drag too.
+    this.stage.on("dragmove", () => {
+      this.cull();
+      this.textLayer.syncTransform();
+    });
     this.bindSelection();
     this.bindTouch();
     this.bindDragCursor();
     this.bindResize();
     this.bindAwareness();
+    this.bindText();
+    this.bindSticky();
 
     opts.awareness.setLocalStateField("user", opts.user.name);
     opts.awareness.setLocalStateField("color", opts.user.color);
@@ -285,10 +351,29 @@ export class BoardCanvas {
       this.clearSelection();
       this.cancelMarquee();
     }
+    // Leaving a text-editing tool (text or sticky) bakes any open editor into the doc. The bake
+    // must NOT trigger the commit's auto-revert-to-select (the user is explicitly choosing a tool).
+    if ((this.tool === "text" || this.tool === "sticky") && tool !== this.tool) {
+      this.suppressAutoSelect = true;
+      this.textLayer.commit();
+      this.suppressAutoSelect = false;
+    }
+    if (tool !== "sticky") this.textLayer.hideStickyGhost(); // ghost only rides with the sticky tool
     this.tool = tool;
     this.stage.draggable(tool === "hand");
     this.stage.container().style.cursor =
-      tool === "hand" ? "grab" : tool === "pen" ? PEN_CURSOR_URL : CURSOR_URL;
+      tool === "hand"
+        ? "grab"
+        : tool === "pen"
+          ? PEN_CURSOR_URL
+          : tool === "text"
+            ? "text"
+            : CURSOR_URL;
+  }
+  /** The colour the next dropped sticky note gets (driven by the sticky palette). */
+  setStickyColor(color: string): void {
+    this.stickyColor = color;
+    this.textLayer.setStickyColor(color); // recolours the note currently being edited, too
   }
   setColor(color: string): void {
     this.color = color;
@@ -534,6 +619,11 @@ export class BoardCanvas {
     this.stage.on("pointermove", () => {
       const p = this.point();
       this.publishCursor(p);
+      if (this.tool === "sticky") this.textLayer.showStickyGhost(p, this.stickyColor); // placement preview
+      if (this.tool === "text") {
+        // I-beam over an existing text box (click to edit it); the default cursor over empty board.
+        this.stage.container().style.cursor = this.textLayer.hitTest(p) ? "text" : CURSOR_URL;
+      }
       if (!this.drawing) return;
       this.drawing.points.push(p.x, p.y);
       this.drawing.line.points(this.drawing.points);
@@ -579,9 +669,57 @@ export class BoardCanvas {
     this.stage.on("pointerup", finish);
     this.stage.on("pointerleave", () => {
       finish();
+      // A text resize drags an HTML handle sitting *over* the canvas, so the pointer "leaves" the
+      // Konva content while still on the board — TextLayer keeps publishing the cursor there, so
+      // clearing it here would make peers' cursor flicker (the cursor group is destroyed/recreated).
+      if (this.textLayer.isResizing()) return;
+      this.textLayer.hideStickyGhost(); // pointer left the board → drop the placement preview
       this.opts.awareness.setLocalStateField("cursor", null); // hide my cursor for peers
     });
     window.addEventListener("blur", this.onWindowBlur);
+  }
+
+  // ---- text + sticky (tap to place) ----
+  /** Shared tap-to-place binding for the text + sticky tools. Movement is tracked across
+   *  pointermove (reliable while the pointer is down) rather than from the pointerup position —
+   *  on touch, getRelativePointerPosition() can be stale/null at touchend, which would otherwise
+   *  turn every tap into a "drag" and silently drop the placement (the mobile bug). */
+  private bindTapPlace(
+    tool: ToolId,
+    place: (at: { x: number; y: number }, client?: { x: number; y: number }) => void,
+  ): void {
+    let down: { x: number; y: number } | null = null;
+    let client: { x: number; y: number } | null = null;
+    let moved = false;
+    this.stage.on("pointerdown", (e) => {
+      if (this.tool !== tool) return;
+      down = this.point();
+      const ev = e.evt as PointerEvent; // viewport coords for caret-from-point on an edit
+      client = { x: ev.clientX, y: ev.clientY };
+      moved = false;
+    });
+    this.stage.on("pointermove", () => {
+      if (this.tool !== tool || !down) return;
+      const p = this.point();
+      if (Math.hypot(p.x - down.x, p.y - down.y) > this.textLayer.tapSlop()) moved = true;
+    });
+    this.stage.on("pointerup", () => {
+      if (this.tool !== tool || !down) return;
+      const at = down;
+      const c = client;
+      const wasTap = !moved;
+      down = null;
+      client = null;
+      if (wasTap) place(at, c ?? undefined); // drag-to-size a fixed-width box is a later increment
+    });
+  }
+
+  private bindText(): void {
+    this.bindTapPlace("text", (at, client) => this.textLayer.editOrCreate(at, false, client));
+  }
+
+  private bindSticky(): void {
+    this.bindTapPlace("sticky", (at) => this.textLayer.stickyAt(at, this.stickyColor));
   }
 
   // ---- selection (FigJam-style: marquee + click select, move, resize) ----
@@ -591,6 +729,34 @@ export class BoardCanvas {
       if (this.isOnTransformer(e.target)) return; // a handle drag → let the transformer resize
       this.cancelMarquee(); // drop any marquee orphaned by a missed pointerup before starting fresh
       const shift = (e.evt as PointerEvent).shiftKey;
+      // Text lives in the HTML overlay (not the Konva hit graph), so hit-test it first.
+      const tid = this.textLayer.hitTest(this.point());
+      if (tid) {
+        // Two-click: a QUICK second tap on the already-sole-selected box edits it (fired on release
+        // if it stayed a tap — a drag instead moves the box). A slow click just re-selects, so you
+        // can always re-select a box you picked a while ago instead of dropping into its text.
+        const p = this.point();
+        const TWO_CLICK_MS = 700;
+        const alreadySole =
+          !shift &&
+          this.selected.size === 0 &&
+          this.textLayer.isSelected(tid) &&
+          this.textLayer.selectedIds().length === 1;
+        const recent =
+          !!this.textSelectAt &&
+          this.textSelectAt.id === tid &&
+          Date.now() - this.textSelectAt.t < TWO_CLICK_MS;
+        if (!shift) this.clearSelection(); // drop stroke selection (clearSelection also clears text)
+        if (shift || !this.textLayer.isSelected(tid)) this.textLayer.selectText(tid, shift);
+        this.textLayer.beginMove(this.point());
+        const edit = alreadySole && recent;
+        this.textTapEdit = edit ? { id: tid, x: p.x, y: p.y } : null;
+        this.textSelectAt = edit ? null : { id: tid, t: Date.now() }; // record/restart the window
+        return;
+      }
+      this.textTapEdit = null;
+      this.textSelectAt = null;
+      if (!shift) this.textLayer.clearSelection(); // clicking strokes/empty drops the text selection
       const id = this.objIdOf(e.target);
       if (id) {
         if (shift) {
@@ -608,12 +774,20 @@ export class BoardCanvas {
       }
     });
     this.stage.on("pointermove", () => {
-      if (this.moveState) this.updateMove();
+      if (this.textTapEdit) {
+        const p = this.point();
+        const d = Math.hypot(p.x - this.textTapEdit.x, p.y - this.textTapEdit.y);
+        if (d > this.textLayer.tapSlop()) this.textTapEdit = null; // became a drag → move, don't edit
+      }
+      if (this.textLayer.isMoving()) this.textLayer.moveTo(this.point());
+      else if (this.moveState) this.updateMove();
       else if (this.marquee) this.updateMarquee();
     });
     this.stage.on("pointerup", this.onWindowPointerUp);
     // A release that lands outside the stage still ends the gesture.
     window.addEventListener("pointerup", this.onWindowPointerUp);
+    // (Editing is driven by the windowed two-click above — a quick second tap on a selected box —
+    // which also covers native double-clicks, so no separate dblclick handler is needed.)
   }
 
   /** Walk up from a hit node to its owning object id (null for empty canvas). */
@@ -643,6 +817,7 @@ export class BoardCanvas {
     this.reattachTransformer();
   }
   clearSelection(): void {
+    this.textLayer.clearSelection();
     if (!this.selected.size) return;
     this.selected.clear();
     this.cull(); // re-hide any off-screen nodes that were kept visible only because selected
@@ -651,15 +826,17 @@ export class BoardCanvas {
   /** Select every object on the board (⌘A). */
   selectAll(): void {
     this.setSelection([...this.nodeById.keys()]);
+    this.textLayer.selectAll();
   }
   deleteSelection(): void {
+    this.textLayer.deleteSelected();
     if (!this.selected.size) return;
     const ids = [...this.selected];
     this.selected.clear();
     deleteObjects(this.opts.doc, ids); // observer re-renders; reattach drops the gone ids
   }
   hasSelection(): boolean {
-    return this.selected.size > 0;
+    return this.selected.size > 0 || this.textLayer.hasSelection();
   }
   /** Test/debug hook: how many remote-peer selection outlines are currently drawn. */
   remoteSelectionCount(): number {
@@ -700,7 +877,7 @@ export class BoardCanvas {
     this.notifySelection();
   }
   private notifySelection(): void {
-    this.selectionListener?.(this.selected.size);
+    this.selectionListener?.(this.selected.size + this.textLayer.selectedCount());
   }
 
   /**
@@ -709,7 +886,7 @@ export class BoardCanvas {
    * (reattachTransformer runs on every render, including unrelated remote edits).
    */
   private publishSelection(): void {
-    const ids = [...this.selected];
+    const ids = [...this.selected, ...this.textLayer.selectedIds()]; // strokes + text so peers outline both
     const key = ids.slice().sort().join(",");
     if (key === this.lastPublishedSelection) return;
     // A live marquee resolves the selection on every pointermove; cap that broadcast
@@ -825,6 +1002,7 @@ export class BoardCanvas {
     const p = this.point();
     this.marqueeStart = p;
     this.marqueeBase = new Set(additive ? this.selected : []);
+    this.marqueeAdditive = additive;
     this.marquee = new Konva.Rect({
       x: p.x,
       y: p.y,
@@ -871,6 +1049,7 @@ export class BoardCanvas {
       }
     }
     this.setSelection([...hits]);
+    this.textLayer.selectInBox(box, this.marqueeAdditive); // text isn't a Konva node — select it separately
   }
   private cancelMarquee(): void {
     this.marquee?.destroy();
@@ -1119,6 +1298,23 @@ export class BoardCanvas {
 
   // ---- touch: pinch-to-zoom + two-finger pan (mobile) ----
   private bindTouch(): void {
+    // Suppress the browser's own menus on the board (long-press context menu on mobile, right-click
+    // on desktop) so they don't fight node selection — except inside an active text editor, where
+    // the native edit menu (paste etc.) is still wanted.
+    this.stage.container().addEventListener("contextmenu", (e) => {
+      if (!(e.target as HTMLElement).closest?.(".co-text-editor")) e.preventDefault();
+    });
+    // On touch, a tap normally generates emulated mouse events (mousedown/up/click) afterwards.
+    // With the text/sticky tools that emulated mousedown lands on the canvas and blurs the editor
+    // we just opened + focused → it commits instantly (the "menu flicker" + text never sticks on
+    // mobile). Cancelling the touch's default action suppresses the emulation; the Konva pointer
+    // events (which place + focus the box) still fire, so placement keeps working.
+    this.stage.on("touchend", (e) => {
+      if (this.tool === "text" || this.tool === "sticky") e.evt.preventDefault();
+    });
+    this.stage.on("touchstart", (e) => {
+      if (this.tool === "text" || this.tool === "sticky") e.evt.preventDefault();
+    });
     this.stage.on("touchmove", (e) => {
       const touches = (e.evt as TouchEvent).touches;
       if (!touches || touches.length < 2) return;
@@ -1190,7 +1386,10 @@ export class BoardCanvas {
   }
 
   private bindResize(): void {
-    this.resizeObserver = new ResizeObserver(() => this.viewport.resize());
+    this.resizeObserver = new ResizeObserver(() => {
+      this.viewport.resize();
+      this.syncCursorStage();
+    });
     this.resizeObserver.observe(this.opts.container);
   }
 
@@ -1224,7 +1423,7 @@ export class BoardCanvas {
         group.position(cursor);
         group.scale({ x: this.viewport.screenPx(1), y: this.viewport.screenPx(1) });
         this.cursors.set(clientId, group);
-        this.overlay.add(group);
+        this.cursorLayer.add(group);
       }
       this.cursorTargets.set(clientId, cursor);
     });
@@ -1235,7 +1434,7 @@ export class BoardCanvas {
         this.cursorTargets.delete(clientId);
       }
     }
-    this.overlay.batchDraw();
+    this.cursorLayer.batchDraw();
     this.ensureAnim();
   }
 
@@ -1267,6 +1466,15 @@ export class BoardCanvas {
   private scaleCursors(): void {
     const inv = this.viewport.screenPx(1);
     this.cursors.forEach((g) => g.scale({ x: inv, y: inv }));
+  }
+
+  /** Mirror the main camera transform + size onto the cursor stage so its world-space cursors line
+   *  up exactly with the board, then redraw. (The cursor stage sits above the HTML text overlay.) */
+  private syncCursorStage(): void {
+    this.cursorStage.scale({ x: this.stage.scaleX(), y: this.stage.scaleY() });
+    this.cursorStage.position(this.stage.position());
+    this.cursorStage.size({ width: this.stage.width(), height: this.stage.height() });
+    this.cursorLayer.batchDraw();
   }
 
   /**
@@ -1331,6 +1539,7 @@ export class BoardCanvas {
         this.content.batchDraw();
         this.renderRemoteSelections(true); // keep peers' outlines glued to the gliding nodes
       }
+      this.cursorLayer.batchDraw(); // cursors glided this frame (their own top stage)
       this.overlay.batchDraw();
       if (moving) {
         this.raf = requestAnimationFrame(step);
@@ -1342,12 +1551,16 @@ export class BoardCanvas {
   }
 
   destroy(): void {
+    this.textLayer.destroy();
     cancelAnimationFrame(this.raf);
     this.viewport.stopZoomAnim(); // stop any in-flight zoom-step rAF before the stage is gone
     this.opts.awareness.off("change", this.onAwarenessChange);
     window.removeEventListener("blur", this.onWindowBlur);
     window.removeEventListener("pointerup", this.onWindowPointerUp);
     this.resizeObserver?.disconnect();
+    const cursorContainer = this.cursorStage.container();
+    this.cursorStage.destroy();
+    cursorContainer.remove();
     this.stage.destroy();
   }
 }

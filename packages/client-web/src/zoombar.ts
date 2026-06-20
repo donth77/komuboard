@@ -22,22 +22,25 @@ export class CoZoombar extends HTMLElement {
     if (this.#wired) return;
     this.#wired = true;
     this.innerHTML =
-      '<button class="zb" data-act="out" type="button" aria-label="Zoom out" data-tip="Zoom out">−</button>' +
+      '<button class="zb" data-act="out" type="button" aria-label="Zoom out" data-tip="Zoom out" data-tip-key="⌘ −">−</button>' +
       '<span class="zb pct" data-tip="Zoom level"><input type="text" inputmode="numeric" value="100" aria-label="Zoom level (percent)" />%</span>' +
-      '<button class="zb" data-act="in" type="button" aria-label="Zoom in" data-tip="Zoom in">+</button>' +
+      '<button class="zb" data-act="in" type="button" aria-label="Zoom in" data-tip="Zoom in" data-tip-key="⌘ +">+</button>' +
       '<span class="zb-sep"></span>' +
       `<button class="zb" data-act="reset" type="button" aria-label="Reset zoom" data-tip="Reset zoom">${icon("fit", "ico-sm")}</button>` +
       `<button class="zb" data-act="fullscreen" type="button" aria-label="Toggle fullscreen" data-tip="Toggle fullscreen">${icon("expand", "ico-sm")}</button>`;
     this.#input = this.querySelector("input") ?? undefined;
 
     this.addEventListener("click", (e) => {
-      const act = (e.target as HTMLElement | null)
-        ?.closest<HTMLElement>("[data-act]")
-        ?.getAttribute("data-act");
+      const target = e.target as HTMLElement | null;
+      const act = target?.closest<HTMLElement>("[data-act]")?.getAttribute("data-act");
       if (act === "in" || act === "out" || act === "reset" || act === "fullscreen") {
         this.dispatchEvent(
           new CustomEvent<ZoomDetail>("zoom", { detail: { action: act }, bubbles: true }),
         );
+      } else if (target?.closest(".pct")) {
+        // Click anywhere on the zoom-level chip (the "%", the padding, or the field) → focus the
+        // input so you can type immediately; the focus handler below selects the current value.
+        this.#input?.focus();
       }
     });
 

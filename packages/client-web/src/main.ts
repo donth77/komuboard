@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import YProvider from "y-partyserver/provider";
 import type { Awareness } from "y-protocols/awareness";
 import {
+  DEFAULT_STICKY_COLOR,
   PARTY,
   pickUserColor,
   randomGuestName,
@@ -20,6 +21,7 @@ import { settingsControlsHTML, syncSettingsControls } from "./settings-controls"
 import "./avatar-presence-row";
 import type { PresencePerson } from "./avatar-presence-row";
 import "./tool-dock";
+import "./sticky-bar";
 import type { PenChange } from "./draw-bar";
 import "./zoombar";
 import type { ZoomDetail } from "./zoombar";
@@ -28,6 +30,8 @@ import "./drawer";
 import "./tooltip"; // body-level singleton tooltip for every [data-tip] element (always top-most)
 import { icon } from "./icons";
 import { createProfileDialog } from "./ui/profile";
+import { paintProfile } from "./util";
+import { SWATCHES } from "./palette";
 
 declare global {
   interface Window {
@@ -121,18 +125,7 @@ const identity = loadIdentity();
 const user: PresenceState = { name: identity.name, color: identity.color };
 window.__coboard = { doc: ydoc, provider, awareness: provider.awareness };
 
-// pen state — FigJam-style fixed palette; a trailing rainbow swatch opens the custom picker.
-const SWATCHES = [
-  "#0e1116",
-  "#dc2626",
-  "#f59e0b",
-  "#facc15",
-  "#16a34a",
-  "#2563eb",
-  "#7c3aed",
-  "#ec4899",
-  "#ffffff",
-];
+// pen state — FigJam-style fixed palette (./palette); a trailing rainbow swatch opens the custom picker.
 const penColor = "#0e1116";
 
 // --------------------------------------------------------------------------
@@ -151,6 +144,7 @@ app.innerHTML = `
   <co-tool-dock></co-tool-dock>
 
   <div class="sheet-wrap"><co-draw-bar></co-draw-bar></div>
+  <co-sticky-bar class="hidden"></co-sticky-bar>
 
   <co-zoombar></co-zoombar>
 
@@ -169,6 +163,8 @@ const canvas = new BoardCanvas({
   doc: ydoc,
   awareness: provider.awareness,
   user,
+  // Revert to select after a text/sticky box is placed + finished (drives the dock highlight too).
+  requestTool: (tool) => selectTool(tool),
 });
 if (window.__coboard) window.__coboard.canvas = canvas; // e2e hook: introspect remote presence
 canvas.setColor(penColor);
@@ -196,6 +192,11 @@ if (drawBarEl) {
   drawBarEl.swatches = SWATCHES;
   drawBarEl.color = penColor;
 }
+const stickyBarEl = document.querySelector("co-sticky-bar");
+if (stickyBarEl) {
+  stickyBarEl.color = DEFAULT_STICKY_COLOR;
+  canvas.setStickyColor(DEFAULT_STICKY_COLOR);
+}
 const mobileMql = window.matchMedia("(max-width: 640px)");
 let currentTool: ToolId = "select";
 // Apply a tool to the canvas + panel visibility (does NOT touch the dock highlight).
@@ -206,6 +207,7 @@ function applyTool(tool: ToolId): void {
   drawBarEl?.classList.toggle("hidden", !isPen); // the draw bar shows while the Draw tool is active
   drawBarEl?.classList.remove("collapsed"); // pen → fully expand the mobile sheet; non-pen → hidden wins
   app?.classList.toggle("pen-open", isPen); // dock top merges with the sheet/tab while pen is active
+  stickyBarEl?.classList.toggle("hidden", tool !== "sticky"); // colour palette shows with the Sticky tool
 }
 // Show/hide the draw menu (desktop bar + mobile sheet) without changing the active tool —
 // re-clicking the already-selected Draw icon toggles it. `pen-open` tracks "menu visible".
@@ -242,6 +244,11 @@ app?.addEventListener("pen-change", (e) => {
   if (d.style !== undefined) canvas.setStyle(d.style);
 });
 
+// <co-sticky-bar> emits `sticky-color` (bubbling) → set the colour for the next/edited sticky note.
+app?.addEventListener("sticky-color", (e) => {
+  canvas.setStickyColor((e as CustomEvent<{ color: string }>).detail.color);
+});
+
 // Shortcuts overlay (reusable <co-dialog>).
 const shortcutsDialog = createDialog({
   title: "Keyboard shortcuts",
@@ -250,12 +257,13 @@ const shortcutsDialog = createDialog({
     '<div class="kbd-row"><span>Select</span><kbd class="kbd">V</kbd></div>' +
     '<div class="kbd-row"><span>Hand / pan</span><kbd class="kbd">H</kbd></div>' +
     '<div class="kbd-row"><span>Pen</span><kbd class="kbd">P</kbd></div>' +
+    '<div class="kbd-row"><span>Text</span><kbd class="kbd">T</kbd></div>' +
     '<div class="kbd-row"><span>Select all</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">A</kbd></span></div>' +
     '<div class="kbd-row"><span>Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">⌫</kbd></span></div>' +
     '<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">Z</kbd></span></div>' +
     '<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">⇧</kbd> <kbd class="kbd">Z</kbd></span></div>' +
     '<div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
-    '<div class="kbd-row"><span>Zoom in / out</span><span><kbd class="kbd">⌘</kbd> + scroll</span></div>' +
+    '<div class="kbd-row"><span>Zoom in / out</span><span><kbd class="kbd">⌘</kbd> <kbd class="kbd">+</kbd> / <kbd class="kbd">−</kbd></span></div>' +
     '<div class="kbd-row"><span>Toggle this menu</span><kbd class="kbd">?</kbd></div>',
 });
 
@@ -265,11 +273,24 @@ function isTyping(el: EventTarget | null): boolean {
 }
 
 // Keyboard: V/H/P tools, hold Space to pan, ? for the shortcuts menu, Esc to close.
-const KEY_TOOL: Record<string, ToolId> = { v: "select", h: "hand", p: "pen" };
+const KEY_TOOL: Record<string, ToolId> = { v: "select", h: "hand", p: "pen", t: "text" };
 let spacePanning = false;
 window.addEventListener("keydown", (e) => {
-  if (isTyping(e.target)) return;
   if (document.querySelector("dialog[open]")) return; // an open dialog owns the keyboard (Esc closes it)
+  // Canvas zoom (⌘/Ctrl + =/+ to zoom in, ⌘/Ctrl + -/_ to zoom out) — handled before the "is
+  // typing" guard so it works even with a field focused (e.g. the zoom input); no text-editing
+  // conflict, and preventDefault stops the browser's native page zoom regardless of focus.
+  if ((e.metaKey || e.ctrlKey) && (e.key === "=" || e.key === "+")) {
+    canvas.zoomStep(1);
+    e.preventDefault();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && (e.key === "-" || e.key === "_")) {
+    canvas.zoomStep(-1);
+    e.preventDefault();
+    return;
+  }
+  if (isTyping(e.target)) return;
   if (e.key === "?") {
     shortcutsDialog.open();
     e.preventDefault();
@@ -331,6 +352,7 @@ window.addEventListener("keyup", (e) => {
 // --------------------------------------------------------------------------
 const topbar = document.querySelector("co-topbar");
 const drawer = document.querySelector("co-drawer");
+if (drawer) drawer.profile = { name: identity.name, color: identity.color, photo: identity.photo };
 
 const syncSettings = (): void => syncSettingsControls(theme, gridMode);
 
@@ -391,12 +413,13 @@ function toggleAppMenu(): void {
   menu.innerHTML =
     '<div class="app-menu-head"><span class="logo">◳</span> <strong>Coboard</strong></div>' +
     '<div class="app-menu-body">' +
-    `<button class="app-menu-item" type="button" data-act="profile"><span>Edit profile</span><span class="app-menu-item-ic">${icon("user")}</span></button>` +
+    `<button class="app-menu-item" type="button" data-act="profile"><span>Edit profile</span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
     '<div class="app-menu-sep"></div>' +
     settingsControlsHTML() +
     "</div>";
   document.body.appendChild(menu);
   appMenu = menu;
+  paintProfile(menu, { name: identity.name, color: identity.color, photo: identity.photo });
   const r = navBtn.getBoundingClientRect();
   menu.style.left = `${r.left}px`;
   menu.style.top = `${r.bottom + 8}px`;
@@ -459,18 +482,16 @@ function renderPresenceRow(): void {
     people.set(id, entry);
   });
   const users = usersMap(ydoc);
-  const list: PresencePerson[] = [...people.entries()]
-    .map(([id, p]) => {
-      const profile = users.get(id);
-      return {
-        id,
-        name: profile?.name ?? p.name,
-        color: profile?.color ?? p.color,
-        photo: profile?.photo,
-        me: p.me,
-      };
-    })
-    .sort((a, b) => (a.me ? -1 : b.me ? 1 : 0));
+  const list: PresencePerson[] = [...people.entries()].map(([id, p]) => {
+    const profile = users.get(id);
+    return {
+      id,
+      name: profile?.name ?? p.name,
+      color: profile?.color ?? p.color,
+      photo: profile?.photo,
+      me: p.me,
+    };
+  }); // natural awareness order — your avatar stacks in line (Edit profile lives in the menu now)
   // awareness "change" fires on every cursor move (≈30Hz × peers); only touch the DOM when the
   // membership-relevant data actually changed — cursor-only ticks produce an identical list.
   const key = list
@@ -501,6 +522,8 @@ const profile = createProfileDialog({
     provider.awareness.setLocalStateField("color", identity.color);
     publishProfile();
     renderPresenceRow();
+    if (drawer)
+      drawer.profile = { name: identity.name, color: identity.color, photo: identity.photo };
   },
 });
 // Clicking your own avatar (the row's `rename` intent) opens the profile editor.

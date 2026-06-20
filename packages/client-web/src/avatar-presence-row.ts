@@ -18,6 +18,10 @@
  *   - exit:  fade + shrink, popped out of flow so the row closes immediately,
  *   - layout: a FLIP pass springs the remaining avatars from their old slot to
  *     the new one, so neighbours glide into the gap instead of snapping.
+ *
+ * On initial page load the row hydrates from awareness over a few ticks; enter/FLIP
+ * animations are suppressed during that window (HYDRATION_MS) so a reload shows the
+ * room's current occupants in place rather than replaying everyone "joining".
  */
 import { animate } from "motion";
 import { initials, safePhotoUrl } from "./util";
@@ -32,6 +36,11 @@ export interface PresencePerson {
 
 // Snappy spring with a hint of overshoot — close to Framer Motion's layout feel.
 const SPRING = { type: "spring", stiffness: 500, damping: 34 } as const;
+
+// After mount the room's current presence streams in over a few awareness ticks. We snap
+// (no enter/FLIP animation) for this window so a reload doesn't replay everyone joining;
+// joins after it animate normally. Generous enough to cover a normal connect + first sync.
+const HYDRATION_MS = 1500;
 
 function prefersReducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -65,6 +74,8 @@ export class CoAvatarPresenceRow extends HTMLElement {
   /** Open "+N" overflow popover (a scrollable list of the hidden collaborators), or null. */
   #overflowPop: HTMLElement | null = null;
   #onDocPointer: ((e: PointerEvent) => void) | null = null;
+  /** Wall-clock of construction — enter/FLIP animations are suppressed for HYDRATION_MS after it. */
+  #mountedAt = performance.now();
 
   connectedCallback(): void {
     this.classList.add("avatar-presence-row"); // reuse the global stylesheet
@@ -132,6 +143,9 @@ export class CoAvatarPresenceRow extends HTMLElement {
     // Inline display beats the `.avatar-presence-row { display: flex }` rule; "" restores it.
     this.style.display = this.#people.length <= 1 ? "none" : "";
     const reduce = prefersReducedMotion();
+    // During the initial hydration window, snap everything into place (like reduced-motion) so a
+    // page reload shows the room's current occupants in place instead of replaying their joins.
+    const instant = reduce || performance.now() - this.#mountedAt < HYDRATION_MS;
     const shown = this.#people.slice(0, this.max);
     const shownIds = new Set(shown.map((p) => p.id));
 
@@ -146,7 +160,7 @@ export class CoAvatarPresenceRow extends HTMLElement {
       if (!el) {
         el = document.createElement("span");
         el.className = "avatar";
-        if (!reduce) el.style.opacity = "0"; // stay hidden until the enter spring runs
+        if (!instant) el.style.opacity = "0"; // hidden until the enter spring runs (skipped while hydrating)
         this.#avatars.set(p.id, el);
         entering.push(el);
       }
@@ -178,7 +192,7 @@ export class CoAvatarPresenceRow extends HTMLElement {
     for (const [id, el] of [...this.#avatars]) {
       if (shownIds.has(id)) continue;
       this.#avatars.delete(id);
-      if (reduce) {
+      if (instant) {
         el.remove();
         continue;
       }
@@ -195,7 +209,7 @@ export class CoAvatarPresenceRow extends HTMLElement {
       );
     }
 
-    if (reduce) return;
+    if (instant) return;
 
     // FLIP step 2 — spring the remaining avatars from their old slot to the new one.
     for (const [id, el] of this.#avatars) {
