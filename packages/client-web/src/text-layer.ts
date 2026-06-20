@@ -163,12 +163,20 @@ function sameDragMap(
   }
   return true;
 }
-type ResizeGeom = { x: number; width: number | undefined; fontSize: number };
+// y/height are only present for shape resizes (free-box); undefined for text (width + font scale).
+type ResizeGeom = {
+  x: number;
+  y?: number;
+  width: number | undefined;
+  height?: number;
+  fontSize: number;
+};
 function sameResizeMap(a: Map<string, ResizeGeom>, b: Map<string, ResizeGeom>): boolean {
   if (a.size !== b.size) return false;
   for (const [k, v] of a) {
     const o = b.get(k);
     if (!o || o.x !== v.x || o.width !== v.width || o.fontSize !== v.fontSize) return false;
+    if (o.y !== v.y || o.height !== v.height) return false;
   }
   return true;
 }
@@ -212,32 +220,31 @@ export class TextLayer {
   private lastTextDragSent = 0;
   private lastCursorSent = 0;
   /** Peers' in-progress text resize: text id → live *target* geometry, + the glided render value. */
-  private remoteResize = new Map<
-    string,
-    { x: number; width: number | undefined; fontSize: number }
-  >();
-  private readonly remoteResizeCurrent = new Map<
-    string,
-    { x: number; width: number | undefined; fontSize: number }
-  >();
+  private remoteResize = new Map<string, ResizeGeom>();
+  private readonly remoteResizeCurrent = new Map<string, ResizeGeom>();
   private lastResizeSent = 0;
   /** Handle box for a single text selection (created lazily), + the in-progress resize. */
   private resizeEl: HTMLDivElement | null = null;
   private resizePreview: {
     id: string;
     x: number;
+    y: number;
     width: number | undefined;
+    height: number | undefined;
     fontSize: number;
   } | null = null;
   private resizing: {
     id: string;
     handle: string;
     startX: number;
+    startY: number;
     ox: number;
     oy: number;
     ow: number | undefined;
+    oh: number | undefined;
     ofs: number;
     baseW: number;
+    isShape: boolean;
   } | null = null;
 
   // --- selection + move (driven by the canvas's select tool; text keeps its own chrome) ---
@@ -299,7 +306,7 @@ export class TextLayer {
       this.paint(el, obj);
       this.root.appendChild(el); // (re)append in z-order — cheap for a handful of boxes
       const g = this.effectiveGeom(id, obj);
-      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, obj.height);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
     }
     for (const [id, el] of this.els) {
       if (seen.has(id)) continue;
@@ -412,7 +419,7 @@ export class TextLayer {
     const obj = m ? readObject(m) : null;
     if (!el || obj?.type !== "text") return;
     const g = this.effectiveGeom(id, obj);
-    this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, obj.height);
+    this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
   }
 
   /** Swap in a new set of peer-edited ids: hide/un-hide the affected copies, then re-measure any
@@ -432,7 +439,7 @@ export class TextLayer {
       const obj = m ? readObject(m) : null;
       if (obj?.type !== "text") continue;
       const g = this.effectiveGeom(id, obj);
-      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, obj.height);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
     }
     if (this.edit) {
       const e = this.edit;
@@ -1065,23 +1072,46 @@ export class TextLayer {
     return this.remoteDragCurrent.get(id) ?? { dx: 0, dy: 0 };
   }
 
-  /** Geometry to render a box at — the live resize preview if active, else doc + drag offset. */
+  /** Geometry to render a box at — the live resize preview if active, else doc + drag offset.
+   *  `height` is only meaningful for shapes (fixed-height boxes); undefined = auto-height. */
   private effectiveGeom(
     id: string,
     obj: TextObject,
-  ): { x: number; y: number; width: number | undefined; fontSize: number } {
-    if (this.resizePreview?.id === id) {
+  ): {
+    x: number;
+    y: number;
+    width: number | undefined;
+    height: number | undefined;
+    fontSize: number;
+  } {
+    const pv = this.resizePreview;
+    if (pv?.id === id) {
       return {
-        x: this.resizePreview.x,
-        y: obj.y,
-        width: this.resizePreview.width,
-        fontSize: this.resizePreview.fontSize,
+        x: pv.x,
+        y: pv.y,
+        width: pv.width,
+        height: pv.height ?? obj.height,
+        fontSize: pv.fontSize,
       };
     }
     const rr = this.remoteResizeCurrent.get(id); // a peer's in-progress resize (glided)
-    if (rr) return { x: rr.x, y: obj.y, width: rr.width, fontSize: rr.fontSize };
+    if (rr) {
+      return {
+        x: rr.x,
+        y: rr.y ?? obj.y,
+        width: rr.width,
+        height: rr.height ?? obj.height,
+        fontSize: rr.fontSize,
+      };
+    }
     const off = this.moveOffset(id);
-    return { x: obj.x + off.dx, y: obj.y + off.dy, width: obj.width, fontSize: obj.fontSize };
+    return {
+      x: obj.x + off.dx,
+      y: obj.y + off.dy,
+      width: obj.width,
+      height: obj.height,
+      fontSize: obj.fontSize,
+    };
   }
 
   // ---- resize (a handle box around a single selected box — text isn't a Konva node, so the
@@ -1091,7 +1121,8 @@ export class TextLayer {
     if (this.resizeEl) return this.resizeEl;
     const box = document.createElement("div");
     box.className = "co-text-resize";
-    for (const h of ["nw", "ne", "sw", "se", "w", "e"]) {
+    // n/s handles only matter for shapes (free height); they're hidden for text/sticky (auto-height).
+    for (const h of ["nw", "ne", "sw", "se", "w", "e", "n", "s"]) {
       const hd = document.createElement("div");
       hd.className = `co-text-handle h-${h}`;
       hd.addEventListener("pointerdown", (e) => this.beginResize(e, h));
@@ -1118,6 +1149,8 @@ export class TextLayer {
     box.style.top = el.style.top;
     box.style.width = `${el.offsetWidth}px`;
     box.style.height = `${el.offsetHeight}px`;
+    // A shape has free width×height → show the n/s (vertical) handles; text/sticky don't.
+    box.classList.toggle("co-text-resize-shape", el.classList.contains("shape"));
   }
 
   private beginResize(e: PointerEvent, handle: string): void {
@@ -1133,11 +1166,14 @@ export class TextLayer {
       id,
       handle,
       startX: e.clientX,
+      startY: e.clientY,
       ox: obj.x,
       oy: obj.y,
       ow: obj.width,
+      oh: obj.height ?? size.h, // shapes carry an explicit height; fall back to measured
       ofs: obj.fontSize,
       baseW: obj.width ?? size.w, // auto-width boxes scale from their measured width
+      isShape: obj.shape != null,
     };
     window.addEventListener("pointermove", this.onResizeMove);
     window.addEventListener("pointerup", this.onResizeUp);
@@ -1147,17 +1183,43 @@ export class TextLayer {
     const rs = this.resizing;
     if (!rs) return;
     this.publishCursorAt(e.clientX, e.clientY); // keep peers' view of my cursor on the handle
-    const wdx = (e.clientX - rs.startX) / Math.max(this.opts.camera().scale, 1e-6);
+    const scale = Math.max(this.opts.camera().scale, 1e-6);
+    const wdx = (e.clientX - rs.startX) / scale;
+    const wdy = (e.clientY - rs.startY) / scale;
+    const m = this.objects.get(rs.id);
+    const obj = m ? readObject(m) : null;
+    const el = this.els.get(rs.id);
+    if (!el || obj?.type !== "text") return;
+
     let x = rs.ox;
+    let y = rs.oy;
     let width = rs.ow;
+    let height = rs.oh;
     let fontSize = rs.ofs;
-    if (rs.handle === "e") {
+
+    if (rs.isShape) {
+      // A shape resizes its box freely (width×height), font fixed. Each edge in the handle name
+      // moves; the opposite edge stays anchored.
+      const h = rs.handle;
+      const ow = rs.ow ?? rs.baseW;
+      const oh = rs.oh ?? MIN_TEXT_W;
+      if (h.includes("e")) width = Math.max(MIN_TEXT_W, ow + wdx);
+      if (h.includes("w")) {
+        width = Math.max(MIN_TEXT_W, ow - wdx);
+        x = rs.ox + (ow - width); // anchor the right edge
+      }
+      if (h.includes("s")) height = Math.max(MIN_TEXT_W, oh + wdy);
+      if (h.includes("n")) {
+        height = Math.max(MIN_TEXT_W, oh - wdy);
+        y = rs.oy + (oh - height); // anchor the bottom edge
+      }
+    } else if (rs.handle === "e") {
       width = Math.max(MIN_TEXT_W, rs.baseW + wdx); // grow/shrink width (auto-width → fixed)
     } else if (rs.handle === "w") {
       width = Math.max(MIN_TEXT_W, rs.baseW - wdx);
       x = rs.ox + (rs.baseW - width); // keep the right edge fixed
     } else {
-      // corner → scale the font by the horizontal drag ratio (and width too, if it's fixed)
+      // text/sticky corner → scale the font by the horizontal drag ratio (and width too, if fixed)
       const rightSide = rs.handle === "se" || rs.handle === "ne";
       const targetW = Math.max(MIN_TEXT_W, rs.baseW + (rightSide ? wdx : -wdx));
       const ratio = targetW / rs.baseW;
@@ -1169,21 +1231,36 @@ export class TextLayer {
         x = rs.ox + rs.baseW * (1 - ratio); // auto-width left corner: anchor the right edge
       }
     }
-    const m = this.objects.get(rs.id);
-    const obj = m ? readObject(m) : null;
-    const el = this.els.get(rs.id);
-    if (!el || obj?.type !== "text") return;
-    this.resizePreview = { id: rs.id, x, width, fontSize };
-    this.layout(el, x, obj.y, width, fontSize, obj.fontFamily, obj.align);
+    this.resizePreview = {
+      id: rs.id,
+      x,
+      y,
+      width,
+      height: rs.isShape ? height : undefined,
+      fontSize,
+    };
+    this.layout(
+      el,
+      x,
+      y,
+      width,
+      fontSize,
+      obj.fontFamily,
+      obj.align,
+      rs.isShape ? height : undefined,
+    );
     this.updateResizeChrome();
     // Stream the live resize to peers (throttled) — ephemeral; the doc commits on release.
     const now = Date.now();
     if (now - this.lastResizeSent >= EDIT_BROADCAST_MS) {
       this.lastResizeSent = now;
-      this.opts.awareness.setLocalStateField(
-        "textresize",
-        width != null ? { id: rs.id, x, width, fontSize } : { id: rs.id, x, fontSize },
-      );
+      const payload: Record<string, unknown> = { id: rs.id, x, fontSize };
+      if (width != null) payload.width = width;
+      if (rs.isShape) {
+        payload.y = y;
+        payload.height = height;
+      }
+      this.opts.awareness.setLocalStateField("textresize", payload);
     }
   };
 
@@ -1197,12 +1274,23 @@ export class TextLayer {
     if (rs && pv) {
       // One transaction (Yjs merges the nested transacts) → a single undo step.
       this.opts.doc.transact(() => {
-        setTextGeometry(
-          this.opts.doc,
-          pv.id,
-          pv.width != null ? { x: pv.x, width: pv.width } : { x: pv.x },
-        );
-        setTextStyle(this.opts.doc, pv.id, { fontSize: pv.fontSize });
+        if (rs.isShape) {
+          // A shape bakes its full box geometry (font unchanged).
+          const geom: { x: number; y: number; width?: number; height?: number } = {
+            x: pv.x,
+            y: pv.y,
+          };
+          if (pv.width != null) geom.width = pv.width;
+          if (pv.height != null) geom.height = pv.height;
+          setTextGeometry(this.opts.doc, pv.id, geom);
+        } else {
+          setTextGeometry(
+            this.opts.doc,
+            pv.id,
+            pv.width != null ? { x: pv.x, width: pv.width } : { x: pv.x },
+          );
+          setTextStyle(this.opts.doc, pv.id, { fontSize: pv.fontSize });
+        }
       });
     }
     // Stop the live preview last, so the committed render overlaps the cleared preview on peers.
@@ -1242,7 +1330,14 @@ export class TextLayer {
         }
       }
       const tr = st.textresize as
-        | { id?: unknown; x?: unknown; width?: unknown; fontSize?: unknown }
+        | {
+            id?: unknown;
+            x?: unknown;
+            y?: unknown;
+            width?: unknown;
+            height?: unknown;
+            fontSize?: unknown;
+          }
         | undefined;
       if (
         tr &&
@@ -1251,11 +1346,14 @@ export class TextLayer {
         typeof tr.x === "number" &&
         typeof tr.fontSize === "number"
       ) {
-        resize.set(tr.id, {
+        const g: ResizeGeom = {
           x: tr.x,
           width: typeof tr.width === "number" ? tr.width : undefined,
           fontSize: tr.fontSize,
-        });
+        };
+        if (typeof tr.y === "number") g.y = tr.y; // shape resize carries y/height
+        if (typeof tr.height === "number") g.height = tr.height;
+        resize.set(tr.id, g);
       }
     }
     // Idle fast-path: nothing remote now or before → skip the chrome/layout passes.
@@ -1328,26 +1426,29 @@ export class TextLayer {
       }
       const cur = this.remoteResizeCurrent.get(id) ?? {
         x: obj.x,
+        y: obj.y,
         width: obj.width,
+        height: obj.height,
         fontSize: obj.fontSize,
       };
       const nx = cur.x + (target.x - cur.x) * LERP;
       const nfs = cur.fontSize + (target.fontSize - cur.fontSize) * LERP;
-      let nw = target.width;
-      if (typeof cur.width === "number" && typeof target.width === "number") {
-        nw = cur.width + (target.width - cur.width) * LERP;
-      }
+      const lerpOpt = (c: number | undefined, t: number | undefined): number | undefined =>
+        typeof c === "number" && typeof t === "number" ? c + (t - c) * LERP : t;
+      const nw = lerpOpt(cur.width, target.width);
+      const ny = lerpOpt(cur.y, target.y) ?? obj.y; // shape resize moves the top edge too
+      const nh = lerpOpt(cur.height, target.height);
+      const near = (a: number | undefined, b: number | undefined, e: number): boolean =>
+        typeof a !== "number" || typeof b !== "number" || Math.abs(a - b) < e;
       const settled =
         Math.abs(target.x - nx) < 0.05 &&
         Math.abs(target.fontSize - nfs) < 0.05 &&
-        (typeof target.width !== "number" ||
-          typeof nw !== "number" ||
-          Math.abs(target.width - nw) < 0.5);
+        near(target.width, nw, 0.5) &&
+        near(target.y, ny, 0.05) &&
+        near(target.height, nh, 0.5);
       this.remoteResizeCurrent.set(
         id,
-        settled
-          ? { x: target.x, width: target.width, fontSize: target.fontSize }
-          : { x: nx, width: nw, fontSize: nfs },
+        settled ? { ...target } : { x: nx, y: ny, width: nw, height: nh, fontSize: nfs },
       );
       if (!settled) active = true;
       changed = true;

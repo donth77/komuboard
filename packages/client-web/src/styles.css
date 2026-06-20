@@ -1950,14 +1950,16 @@ input[type="range"] {
 }
 /* ── Shapes — a text box with a `shape` renders as an outlined card with a centred label ──────── */
 .co-text.shape {
-  padding: 0.5em;
+  padding: 0.7em;
   box-sizing: border-box;
   border: 1.5px solid #1f2933;
   border-radius: 4px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center; /* centre the label both axes */
+  /* Vertically centre the label; horizontal placement is left to `text-align` (so the alignment
+     control works). The text block is full-width (align-items: stretch) — NOT shrink-wrapped — so
+     text-align actually moves it, and the "Add text" placeholder follows the same alignment. */
+  justify-content: center;
   word-break: break-word;
 }
 .co-text.shape-ellipse {
@@ -2036,6 +2038,23 @@ input[type="range"] {
   left: 100%;
   top: 50%;
   cursor: ew-resize;
+}
+/* n/s handles — shown only for shapes (free height); hidden for text/sticky (auto-height). */
+.co-text-handle.h-n,
+.co-text-handle.h-s {
+  display: none;
+  left: 50%;
+  cursor: ns-resize;
+}
+.co-text-handle.h-n {
+  top: 0;
+}
+.co-text-handle.h-s {
+  top: 100%;
+}
+.co-text-resize-shape .co-text-handle.h-n,
+.co-text-resize-shape .co-text-handle.h-s {
+  display: block;
 }
 
 /* ── Floating rich-text toolbar (above the active text editor) ─────────────── */
