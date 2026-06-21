@@ -1823,6 +1823,15 @@ export class TextLayer {
     this.refreshSelectionChrome();
     this.opts.onSelectionChange?.();
   }
+  /** Drop specific ids from the selection (last-writer-wins: a peer just took them over). */
+  deselectIds(ids: string[]): void {
+    let changed = false;
+    for (const id of ids) if (this.selected.delete(id)) changed = true;
+    if (changed) {
+      this.refreshSelectionChrome();
+      this.opts.onSelectionChange?.();
+    }
+  }
   selectAll(): void {
     const before = this.selected.size;
     for (const id of this.els.keys()) this.selected.add(id);

@@ -328,8 +328,8 @@ export class BoardCanvas {
   /** Throttle clock for the live in-progress-stroke broadcast (ms). */
   private lastDrawSent = 0;
   /** Ephemeral preview lines for *remote* peers' in-progress strokes, keyed by stroke id. */
-  private readonly remoteDraws = new Map<string, Konva.Line>();
-  private readonly remoteDrawGroup = new Konva.Group({ listening: false });
+  /** Ids of peers' in-progress strokes, shown as transient DOM draft <svg>s (ADR-0009 P3). */
+  private readonly remoteDraws = new Set<string>();
   /** Last selection broadcast on awareness (sorted, joined) — skips republishing an unchanged set. */
   private lastPublishedSelection = "";
   /** Throttle clock for selection broadcasts during a live marquee drag (ms). */
@@ -397,9 +397,8 @@ export class BoardCanvas {
     this.stage.add(this.overlay);
     this.stage.add(this.uiLayer);
     // Peers' selection outlines sit in the overlay, in world space (so they pan/zoom
-    // with the board) and below the cursors (which are added to the overlay lazily). Peers'
-    // in-progress strokes render below the outlines, like content.
-    this.overlay.add(this.remoteDrawGroup);
+    // with the board) and below the cursors (which are added to the overlay lazily).
+    // Peers' in-progress strokes now render as transient DOM drafts (ADR-0009 P3).
     this.overlay.add(this.remoteSelections);
 
     this.transformer = new Konva.Transformer({
@@ -893,14 +892,11 @@ export class BoardCanvas {
   /** Remove any remote-draw preview now backed by a committed node (clean draw→commit handoff). */
   private pruneCommittedDraws(): void {
     if (!this.remoteDraws.size) return;
-    let pruned = false;
-    for (const [id, line] of this.remoteDraws) {
-      if (!this.nodeById.has(id)) continue;
-      line.destroy();
+    for (const id of this.remoteDraws) {
+      if (!this.objects.has(id)) continue; // committed → the text-layer renders the real svg
+      this.textLayer.removeInkDraft(`remote:${id}`);
       this.remoteDraws.delete(id);
-      pruned = true;
     }
-    if (pruned) this.overlay.batchDraw();
   }
 
   // ---- pen / drawing ----
@@ -2346,6 +2342,25 @@ export class BoardCanvas {
   /** Test/debug hook: the screen-space (container-relative) centre of a transformer anchor
    *  (e.g. "bottom-right"), or null if nothing is selected. */
   transformerAnchorPos(name: string): { x: number; y: number } | null {
+    // ADR-0009 P3: ink + DOM objects resize via the text-layer's DOM chrome, not the Konva
+    // transformer. Prefer the DOM resize handle for this corner; fall back to the transformer
+    // (the multi-node group proxy still uses it).
+    const corner = (
+      { "top-left": "nw", "top-right": "ne", "bottom-left": "sw", "bottom-right": "se" } as Record<
+        string,
+        string | undefined
+      >
+    )[name];
+    if (corner) {
+      const handle = document.querySelector<HTMLElement>(`.co-text-handle.h-${corner}`);
+      if (handle) {
+        const hr = handle.getBoundingClientRect();
+        const ref = (
+          document.getElementById("board") ?? this.stage.container()
+        ).getBoundingClientRect();
+        return { x: hr.x + hr.width / 2 - ref.x, y: hr.y + hr.height / 2 - ref.y };
+      }
+    }
     const anchor = this.transformer.findOne(`.${name}`);
     if (!anchor) return null;
     const r = anchor.getClientRect({ relativeTo: this.stage });
@@ -2353,6 +2368,10 @@ export class BoardCanvas {
   }
   /** Test/debug hook: a rendered object's content-relative bounding rect (null if not drawn). */
   nodeContentRect(id: string): Rect | null {
+    // ADR-0009 P3: ink + DOM objects live in the text-layer; its world rect honours live previews
+    // (a peer's in-progress resize), which the old Konva node rect did not.
+    const textRect = this.textLayer.worldRectOf(id);
+    if (textRect) return textRect;
     const node = this.nodeById.get(id);
     return node ? node.getClientRect({ relativeTo: node.getLayer() ?? this.content }) : null;
   }
@@ -3347,18 +3366,33 @@ export class BoardCanvas {
       const resize = state["resize"] as { nodes?: { id?: string }[] } | undefined;
       if (resize?.nodes) for (const n of resize.nodes) if (n?.id) dragging.add(n.id);
     });
-    // Never disturb an in-progress local gesture (drag/marquee); just record remote state below.
-    if (this.selected.size && !this.moveState && !this.marquee) {
+    // Never disturb an in-progress local gesture — canvas drag/marquee OR a text-layer move/resize.
+    const busy =
+      !!this.moveState ||
+      !!this.marquee ||
+      this.textLayer.isMoving() ||
+      this.textLayer.isResizing();
+    if (!busy) {
+      const taken = (id: string): boolean =>
+        dragging.has(id) || (remoteSel.has(id) && !this.prevRemoteSel.has(id));
       let changed = false;
       for (const id of [...this.selected]) {
-        if (dragging.has(id) || (remoteSel.has(id) && !this.prevRemoteSel.has(id))) {
+        if (taken(id)) {
           this.selected.delete(id); // a peer took it over → release my transform box
           changed = true;
         }
       }
+      // Strokes/connectors/stamps/text/shapes now hold their selection in the text-layer (ADR-0009
+      // P3), so yield any of THOSE a peer just took too — else my box lingers (last-writer-wins).
+      const textTaken = this.textLayer.selectedIds().filter(taken);
+      if (textTaken.length) {
+        this.textLayer.deselectIds(textTaken);
+        changed = true;
+      }
       if (changed) {
         this.cull(); // re-hide any off-screen node kept visible only because it was selected
-        this.reattachTransformer(); // detach the box from the yielded nodes + rebroadcast my selection
+        this.reattachTransformer(); // detach the box from the yielded nodes
+        this.publishSelection(); // rebroadcast my now-reduced selection (peers + my own awareness)
       }
     }
     this.prevRemoteSel = remoteSel;
@@ -3459,33 +3493,30 @@ export class BoardCanvas {
   private renderRemoteDraws(): void {
     const self = this.opts.awareness.clientID;
     const active = new Set<string>();
-    let changed = false;
     this.opts.awareness.getStates().forEach((state, clientId) => {
       if (clientId === self) return;
       const d = state["draw"] as Partial<DrawState> | undefined;
       if (!d?.id || !d.points?.length) return;
       active.add(d.id);
-      if (this.nodeById.has(d.id)) return; // already committed → the real node renders it
-      let line = this.remoteDraws.get(d.id);
-      if (!line) {
-        line = new Konva.Line({ listening: false });
-        this.remoteDrawGroup.add(line);
-        this.remoteDraws.set(d.id, line);
-      }
-      line.setAttrs(
-        this.lineConfig(d.color ?? "#000000", d.width ?? 4, d.style ?? "solid", d.opacity ?? 1),
-      );
-      line.points(d.points);
-      changed = true;
+      if (this.objects.has(d.id)) return; // already committed → the text-layer renders the real svg
+      this.remoteDraws.add(d.id);
+      this.textLayer.upsertInkDraft(`remote:${d.id}`, {
+        id: d.id,
+        type: "stroke",
+        points: d.points,
+        color: d.color ?? "#000000",
+        width: d.width ?? 4,
+        style: d.style ?? "solid",
+        opacity: d.opacity ?? 1,
+        authorId: "",
+      });
     });
-    // drop previews that committed (a node now exists) or ended (no longer broadcast)
-    for (const [id, line] of this.remoteDraws) {
-      if (active.has(id) && !this.nodeById.has(id)) continue;
-      line.destroy();
+    // drop drafts that committed (the real object now exists) or ended (no longer broadcast)
+    for (const id of this.remoteDraws) {
+      if (active.has(id) && !this.objects.has(id)) continue;
+      this.textLayer.removeInkDraft(`remote:${id}`);
       this.remoteDraws.delete(id);
-      changed = true;
     }
-    if (changed) this.overlay.batchDraw();
   }
 
   // ---- touch: pinch-to-zoom + two-finger pan (mobile) ----
