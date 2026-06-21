@@ -529,11 +529,12 @@ export class BoardCanvas {
     this.syncCursorStage();
 
     this.renderObjects();
-    this.renderStamps();
+    // Stamps render in the HTML overlay now (ADR-0009 Phase 1) so they z-order per-object with
+    // text/shapes/stickies by placement; the text-layer's own observer paints them. The Konva stamp
+    // pipeline below (renderStamps + stampLayer + selection branches) is dormant pending cleanup.
     this.objects.observeDeep(() => {
       this.renderObjects();
       this.renderConnectors();
-      this.renderStamps();
     });
 
     this.bindPointer();
@@ -2137,6 +2138,7 @@ export class BoardCanvas {
         const alreadySole =
           !shift &&
           this.selected.size === 0 &&
+          !this.textLayer.isStampId(tid) && // a stamp isn't text-editable → no two-click-to-edit
           this.textLayer.isSelected(tid) &&
           this.textLayer.selectedIds().length === 1;
         const recent =

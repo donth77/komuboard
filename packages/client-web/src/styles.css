@@ -2263,6 +2263,34 @@ input[type="range"] {
   box-shadow: 0 0 0 1.5px #4a9eff;
   border-radius: 2px;
 }
+/* ── Stamps — an emoji/mark sticker placed on the board. ADR-0009 Phase 1: stamps render here in the
+   HTML overlay as a square <img> box, z-ordered with text/shapes/stickies by placement order. The
+   white outline is baked into the image; the drop-shadow lifts it off the board like a sticker. ── */
+.co-stamp {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  aspect-ratio: 1 / 1; /* square — height tracks width so the box stays square at any zoom/measure */
+  pointer-events: none; /* clicks pass through to the canvas; selection is via hit-test like text */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.co-stamp img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+  filter: drop-shadow(0 2px 3px rgba(16, 17, 22, 0.22));
+}
+/* Selected (local select tool) — a ring around the stamp box, matching .co-text.selected. */
+.co-stamp.selected {
+  box-shadow: 0 0 0 1.5px #4a9eff;
+  border-radius: 2px;
+}
 /* ── Sticky notes — a text box with a `bg` renders as a coloured, padded, square card ─────────── */
 .co-text.sticky {
   padding: 1.2em;
@@ -2593,6 +2621,11 @@ input[type="range"] {
 .co-text-resize-shape .co-text-handle.h-n,
 .co-text-resize-shape .co-text-handle.h-s {
   display: block;
+}
+/* A stamp resizes uniformly (square) → corner handles only; hide the w/e side handles too. */
+.co-text-resize-stamp .co-text-handle.h-w,
+.co-text-resize-stamp .co-text-handle.h-e {
+  display: none;
 }
 /* Rotation zones — invisible squares just OUTSIDE each corner. Hover shows a curved double-arrow
    rotate cursor ORIENTED to wrap that corner (the convex side faces outward); drag spins the box.

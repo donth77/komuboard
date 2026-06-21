@@ -26,6 +26,7 @@ import {
   orderArray,
   randomId,
   readObject,
+  setStampGeom,
   setTextGeometry,
   setTextRuns,
   setTextStyle,
@@ -33,6 +34,7 @@ import {
   type BorderStyle,
   type ConnectorSide,
   type ShapeKind,
+  type StampObject,
   type TextAlign,
   type TextObject,
   type TextRun,
@@ -51,6 +53,7 @@ import {
 } from "./text-runs";
 import { TextBar, type TextBarState } from "./text-bar";
 import { ROTATE_CURSORS } from "./cursors";
+import { cachedEmojiSticker, emojiStickerUrl } from "./emoji-sticker";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
@@ -290,6 +293,8 @@ export class TextLayer {
     ofs: number;
     baseW: number;
     isShape: boolean;
+    /** A stamp resizes uniformly (square), anchoring the opposite corner; commits via setStampGeom. */
+    isStamp: boolean;
     /** Aspect ratio frozen the instant Shift goes down mid-resize (so the lock starts from the
      *  current in-progress shape, not the box's original proportions). Cleared when Shift lifts. */
     lock?: { w: number; h: number };
@@ -364,6 +369,25 @@ export class TextLayer {
     for (const id of order) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
+      // Stamps render here too (ADR-0009): a `.co-stamp` <img> box, z-ordered with text/shapes by
+      // `orderArray` index so any object stacks over any other by placement order (FigJam parity).
+      if (obj?.type === "stamp") {
+        seen.add(id);
+        let el = this.els.get(id);
+        if (!el) {
+          el = document.createElement("div");
+          el.className = "co-stamp";
+          el.dataset.id = id;
+          this.els.set(id, el);
+        }
+        this.paintStamp(el, obj);
+        this.root.appendChild(el); // (re)append in z-order
+        const g = this.effectiveGeom(id, obj);
+        // A stamp is a fixed square box (size×size); reuse the box layout (fontFamily/align unused).
+        this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
+        this.applyRotation(el, g.rotation);
+        continue;
+      }
       if (obj?.type !== "text") continue;
       seen.add(id);
       let el = this.els.get(id);
@@ -409,6 +433,41 @@ export class TextLayer {
     el.style.color = INK; // default ink; per-run colours override via the rendered spans
     if (obj.shape) this.applyShape(el, obj.shape, obj.bg, obj.borderColor, obj.borderStyle);
     else this.applySticky(el, obj.bg);
+  }
+
+  /** Paint a stamp's image into its `.co-stamp` box. Emoji srcs are white-outlined (shared sticker
+   *  renderer, cached); marks carry a baked border; an `img:` avatar is its data URL. The outline +
+   *  CSS drop-shadow give the placed sticker look. Cheap-guarded so a repaint reuses the same <img>. */
+  private paintStamp(el: HTMLDivElement, obj: StampObject): void {
+    let img = el.querySelector<HTMLImageElement>("img");
+    if (!img) {
+      img = document.createElement("img");
+      img.draggable = false;
+      img.alt = "";
+      el.appendChild(img);
+    }
+    if (el.dataset.src === obj.src) return; // already showing this sticker
+    el.dataset.src = obj.src;
+    const image = img;
+    const src = obj.src;
+    const i = src.indexOf(":");
+    const kind = src.slice(0, i);
+    const val = src.slice(i + 1);
+    if (kind === "emoji") {
+      const cached = cachedEmojiSticker(val);
+      if (cached) {
+        image.src = cached;
+      } else {
+        image.src = `/emoji/${val}.svg`; // instant raw paint; upgrade to the outlined sticker when ready
+        void emojiStickerUrl(val).then((url) => {
+          if (el.dataset.src === src) image.src = url; // still the same stamp
+        });
+      }
+    } else if (kind === "img") {
+      image.src = val; // a data URL (the placed avatar)
+    } else {
+      image.src = `/stamps/${val}.svg`; // a colour mark — border baked into the svg
+    }
   }
 
   /** Toggle the sticky-note look (coloured padded card) on a box element. */
@@ -561,6 +620,11 @@ export class TextLayer {
     for (const [id, el] of this.els) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
+      if (obj?.type === "stamp") {
+        const g = this.effectiveGeom(id, obj);
+        this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
+        continue;
+      }
       if (obj?.type !== "text") continue;
       const g = this.effectiveGeom(id, obj);
       this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
@@ -587,14 +651,17 @@ export class TextLayer {
       if (!id) continue;
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      if (obj?.type !== "text") continue;
+      if (obj?.type !== "text" && obj?.type !== "stamp") continue;
       const size = this.sizes.get(id);
       if (!size) continue;
+      // Stamps are centre-anchored (obj.x/y = centre); text/shapes are top-left anchored.
+      const left = obj.type === "stamp" ? obj.x - size.w / 2 : obj.x;
+      const top = obj.type === "stamp" ? obj.y - size.h / 2 : obj.y;
       if (
-        world.x >= obj.x &&
-        world.x <= obj.x + size.w &&
-        world.y >= obj.y &&
-        world.y <= obj.y + size.h
+        world.x >= left &&
+        world.x <= left + size.w &&
+        world.y >= top &&
+        world.y <= top + size.h
       ) {
         return id;
       }
@@ -621,12 +688,19 @@ export class TextLayer {
   ): void {
     if (this.edit) this.commit();
     const hit = this.hitTest(world);
-    if (hit) {
+    if (hit && !this.isStampId(hit)) {
       if (this.remoteEditIds.has(hit)) return; // a peer is editing this box — leave it to them
       this.beginEdit(hit, selectAll, caretAt);
     } else {
-      this.beginCreate(world.x, world.y);
+      this.beginCreate(world.x, world.y); // empty space (or a non-editable stamp) → new text box
     }
+  }
+
+  /** True if `id` is a stamp object (not text). Stamps render in this layer but aren't text-editable. */
+  isStampId(id: string): boolean {
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    return obj?.type === "stamp";
   }
 
   private beginCreate(x: number, y: number): void {
@@ -1306,7 +1380,14 @@ export class TextLayer {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
       const el = this.els.get(id);
-      if (obj?.type !== "text" || !el) continue;
+      if (!el) continue;
+      if (obj?.type === "stamp") {
+        // effectiveGeom folds in the live moveState offset + the centre→top-left conversion.
+        const g = this.effectiveGeom(id, obj);
+        this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
+        continue;
+      }
+      if (obj?.type !== "text") continue;
       this.layout(
         el,
         obj.x + mv.dx,
@@ -1355,7 +1436,7 @@ export class TextLayer {
    *  `height` is only meaningful for shapes (fixed-height boxes); undefined = auto-height. */
   private effectiveGeom(
     id: string,
-    obj: TextObject,
+    obj: TextObject | StampObject,
   ): {
     x: number;
     y: number;
@@ -1364,6 +1445,52 @@ export class TextLayer {
     fontSize: number;
     rotation: number;
   } {
+    // A stamp is stored centre-anchored (x/y = centre, square `size`); normalise it into the same
+    // top-left box model as text/shapes so every downstream consumer (render/hit-test/chrome/resize)
+    // is type-agnostic. The previews below carry box geometry directly, matching text.
+    if (obj.type === "stamp") {
+      const size = obj.size;
+      const rotation =
+        this.rotatePreview?.id === id
+          ? this.rotatePreview.rotation
+          : (this.remoteRotate.get(id) ?? obj.rotation ?? 0);
+      const gp = this.groupPreview?.get(id);
+      if (gp)
+        return {
+          x: gp.x,
+          y: gp.y,
+          width: gp.width,
+          height: gp.height,
+          fontSize: gp.fontSize,
+          rotation: gp.rotation,
+        };
+      const pv = this.resizePreview;
+      if (pv?.id === id) {
+        const w = pv.width ?? size;
+        return { x: pv.x, y: pv.y, width: w, height: pv.height ?? w, fontSize: w, rotation };
+      }
+      const rr = this.remoteResizeCurrent.get(id); // a peer's in-progress resize (glided)
+      if (rr) {
+        const w = rr.width ?? size;
+        return {
+          x: rr.x,
+          y: rr.y ?? obj.y - size / 2,
+          width: w,
+          height: rr.height ?? w,
+          fontSize: w,
+          rotation,
+        };
+      }
+      const off = this.moveOffset(id);
+      return {
+        x: obj.x - size / 2 + off.dx,
+        y: obj.y - size / 2 + off.dy,
+        width: size,
+        height: size,
+        fontSize: size,
+        rotation,
+      };
+    }
     // A local group transform (canvas-driven resize/rotate of the whole selection) wins over all.
     const gp = this.groupPreview?.get(id);
     if (gp) {
@@ -1444,11 +1571,11 @@ export class TextLayer {
     for (const id of this.selected) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      if (obj?.type !== "text") continue;
+      if (obj?.type !== "text" && obj?.type !== "stamp") continue;
       const g = this.effectiveGeom(id, obj);
       const sz = this.sizes.get(id);
-      const width = g.width ?? obj.width ?? sz?.w ?? 0;
-      const height = g.height ?? obj.height ?? sz?.h ?? 0;
+      const width = g.width ?? (obj.type === "text" ? obj.width : undefined) ?? sz?.w ?? 0;
+      const height = g.height ?? (obj.type === "text" ? obj.height : undefined) ?? sz?.h ?? 0;
       out.push({ x: g.x, y: g.y, width, height });
     }
     return out;
@@ -1459,11 +1586,11 @@ export class TextLayer {
   worldRectOf(id: string): { x: number; y: number; width: number; height: number } | null {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
-    if (obj?.type !== "text") return null;
+    if (obj?.type !== "text" && obj?.type !== "stamp") return null;
     const g = this.effectiveGeom(id, obj);
     const sz = this.sizes.get(id);
-    const width = g.width ?? obj.width ?? sz?.w ?? 0;
-    const height = g.height ?? obj.height ?? sz?.h ?? 0;
+    const width = g.width ?? (obj.type === "text" ? obj.width : undefined) ?? sz?.w ?? 0;
+    const height = g.height ?? (obj.type === "text" ? obj.height : undefined) ?? sz?.h ?? 0;
     return { x: g.x, y: g.y, width, height };
   }
 
@@ -1482,14 +1609,14 @@ export class TextLayer {
   } | null {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
-    if (obj?.type !== "text") return null;
+    if (obj?.type !== "text" && obj?.type !== "stamp") return null;
     const g = this.effectiveGeom(id, obj);
     const sz = this.sizes.get(id);
     return {
       x: g.x,
       y: g.y,
-      width: g.width ?? obj.width ?? sz?.w ?? 0,
-      height: g.height ?? obj.height ?? sz?.h ?? 0,
+      width: g.width ?? (obj.type === "text" ? obj.width : undefined) ?? sz?.w ?? 0,
+      height: g.height ?? (obj.type === "text" ? obj.height : undefined) ?? sz?.h ?? 0,
       rotation: g.rotation,
       fontSize: g.fontSize,
     };
@@ -1507,9 +1634,11 @@ export class TextLayer {
       const el = this.els.get(id);
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      if (!el || obj?.type !== "text") continue;
+      if (!el || (obj?.type !== "text" && obj?.type !== "stamp")) continue;
       const g = this.effectiveGeom(id, obj);
-      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
+      const fontFamily = obj.type === "text" ? obj.fontFamily : "";
+      const align = obj.type === "text" ? obj.align : "left";
+      this.layout(el, g.x, g.y, g.width, g.fontSize, fontFamily, align, g.height);
       this.applyRotation(el, g.rotation);
     }
   }
@@ -1528,6 +1657,18 @@ export class TextLayer {
       fontSize: number;
     },
   ): void {
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    if (obj?.type === "stamp") {
+      // Box → centre+size: a stamp stays square, so average the (usually-uniform) group scale.
+      setStampGeom(this.opts.doc, id, {
+        x: geom.x + geom.width / 2,
+        y: geom.y + geom.height / 2,
+        size: (geom.width + geom.height) / 2,
+        rotation: geom.rotation,
+      });
+      return;
+    }
     setTextGeometry(this.opts.doc, id, {
       x: geom.x,
       y: geom.y,
@@ -1587,7 +1728,10 @@ export class TextLayer {
       box.classList.toggle("co-text-resize-shape", el.classList.contains("shape"));
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      this.applyRotation(box, obj?.type === "text" ? this.effectiveGeom(id, obj).rotation : 0);
+      // A stamp resizes uniformly (square) → corner handles only (hide the w/e side handles too).
+      box.classList.toggle("co-text-resize-stamp", obj?.type === "stamp");
+      const rotatable = obj?.type === "text" || obj?.type === "stamp";
+      this.applyRotation(box, rotatable ? this.effectiveGeom(id, obj).rotation : 0);
     }
     this.updateConnectorDots(); // dots also show in connector mode with no/multi selection
   }
@@ -1680,7 +1824,29 @@ export class TextLayer {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
     const size = this.sizes.get(id);
-    if (obj?.type !== "text" || !size) return;
+    if (!size) return;
+    if (obj?.type === "stamp") {
+      // Anchor the resize math on the box TOP-LEFT (centre − half-size), square, opposite-corner-fixed.
+      this.resizing = {
+        id,
+        handle,
+        startX: e.clientX,
+        startY: e.clientY,
+        ox: obj.x - size.w / 2,
+        oy: obj.y - size.h / 2,
+        ow: size.w,
+        oh: size.h,
+        ofs: size.w,
+        baseW: size.w,
+        isShape: false,
+        isStamp: true,
+      };
+      this.updateSelectionBar();
+      window.addEventListener("pointermove", this.onResizeMove);
+      window.addEventListener("pointerup", this.onResizeUp);
+      return;
+    }
+    if (obj?.type !== "text") return;
     this.resizing = {
       id,
       handle,
@@ -1693,6 +1859,7 @@ export class TextLayer {
       ofs: obj.fontSize,
       baseW: obj.width ?? size.w, // auto-width boxes scale from their measured width
       isShape: obj.shape != null,
+      isStamp: false,
     };
     this.updateSelectionBar(); // hide the floating toolbar while resizing (re-shows on release)
     window.addEventListener("pointermove", this.onResizeMove);
@@ -1709,7 +1876,35 @@ export class TextLayer {
     const m = this.objects.get(rs.id);
     const obj = m ? readObject(m) : null;
     const el = this.els.get(rs.id);
-    if (!el || obj?.type !== "text") return;
+    if (!el) return;
+    if (rs.isStamp) {
+      // Uniform square resize: derive the new side from the corner drag, anchor the opposite corner.
+      const MIN_STAMP = 16;
+      const h = rs.handle;
+      const s0 = rs.ow ?? rs.baseW;
+      const gx = h.includes("e") ? wdx : h.includes("w") ? -wdx : 0; // east/south grow +, west/north −
+      const gy = h.includes("s") ? wdy : h.includes("n") ? -wdy : 0;
+      const size = Math.max(MIN_STAMP, s0 + (gx + gy) / 2);
+      const nx = h.includes("w") ? rs.ox + (s0 - size) : rs.ox; // anchor the corner NOT being dragged
+      const ny = h.includes("n") ? rs.oy + (s0 - size) : rs.oy;
+      this.resizePreview = { id: rs.id, x: nx, y: ny, width: size, height: size, fontSize: size };
+      this.layout(el, nx, ny, size, size, "", "left", size);
+      this.updateResizeChrome();
+      const now = Date.now();
+      if (now - this.lastResizeSent >= EDIT_BROADCAST_MS) {
+        this.lastResizeSent = now;
+        this.opts.awareness.setLocalStateField("textresize", {
+          id: rs.id,
+          x: nx,
+          y: ny,
+          width: size,
+          height: size,
+          fontSize: size,
+        });
+      }
+      return;
+    }
+    if (obj?.type !== "text") return;
 
     let x = rs.ox;
     let y = rs.oy;
@@ -1827,7 +2022,15 @@ export class TextLayer {
     if (rs && pv) {
       // One transaction (Yjs merges the nested transacts) → a single undo step.
       this.opts.doc.transact(() => {
-        if (rs.isShape) {
+        if (rs.isStamp) {
+          // Box top-left → centre + square size.
+          const size = pv.width ?? rs.baseW;
+          setStampGeom(this.opts.doc, pv.id, {
+            x: pv.x + size / 2,
+            y: pv.y + size / 2,
+            size,
+          });
+        } else if (rs.isShape) {
           // A shape bakes its full box geometry (font unchanged).
           const geom: { x: number; y: number; width?: number; height?: number } = {
             x: pv.x,
@@ -1859,7 +2062,7 @@ export class TextLayer {
     const el = id ? this.els.get(id) : undefined;
     const m = id ? this.objects.get(id) : undefined;
     const obj = m ? readObject(m) : null;
-    if (!id || !el || obj?.type !== "text") return;
+    if (!id || !el || (obj?.type !== "text" && obj?.type !== "stamp")) return;
     const r = el.getBoundingClientRect(); // centre is rotation-invariant (CSS rotate about centre)
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
@@ -1903,7 +2106,10 @@ export class TextLayer {
     if (!rs) return;
     const deg = this.rotatePreview?.rotation ?? rs.startRotation;
     this.rotatePreview = null;
-    setTextGeometry(this.opts.doc, rs.id, { rotation: deg }); // commit (syncs the final angle)…
+    const m = this.objects.get(rs.id);
+    const obj = m ? readObject(m) : null;
+    if (obj?.type === "stamp") setStampGeom(this.opts.doc, rs.id, { rotation: deg });
+    else setTextGeometry(this.opts.doc, rs.id, { rotation: deg }); // commit (syncs the final angle)…
     this.opts.awareness.setLocalStateField("textrotate", null); // …then drop the live preview
     this.updateSelectionBar();
   };
@@ -2016,6 +2222,11 @@ export class TextLayer {
     for (const [id, el] of this.els) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
+      if (obj?.type === "stamp") {
+        const g = this.effectiveGeom(id, obj);
+        this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
+        continue;
+      }
       if (obj?.type !== "text") continue;
       const g = this.effectiveGeom(id, obj);
       // g.height must be passed, else a shape collapses to its text bounds during a peer's
@@ -2058,23 +2269,28 @@ export class TextLayer {
     for (const [id, target] of this.remoteResize) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      if (obj?.type !== "text") {
+      if (obj?.type !== "text" && obj?.type !== "stamp") {
         this.remoteResizeCurrent.delete(id);
         continue;
       }
-      const cur = this.remoteResizeCurrent.get(id) ?? {
-        x: obj.x,
-        y: obj.y,
-        width: obj.width,
-        height: obj.height,
-        fontSize: obj.fontSize,
-      };
+      // A stamp's committed start state is its box (centre−half-size → top-left, square size).
+      const startGeom =
+        obj.type === "stamp"
+          ? {
+              x: obj.x - obj.size / 2,
+              y: obj.y - obj.size / 2,
+              width: obj.size,
+              height: obj.size,
+              fontSize: obj.size,
+            }
+          : { x: obj.x, y: obj.y, width: obj.width, height: obj.height, fontSize: obj.fontSize };
+      const cur = this.remoteResizeCurrent.get(id) ?? startGeom;
       const nx = cur.x + (target.x - cur.x) * LERP;
       const nfs = cur.fontSize + (target.fontSize - cur.fontSize) * LERP;
       const lerpOpt = (c: number | undefined, t: number | undefined): number | undefined =>
         typeof c === "number" && typeof t === "number" ? c + (t - c) * LERP : t;
       const nw = lerpOpt(cur.width, target.width);
-      const ny = lerpOpt(cur.y, target.y) ?? obj.y; // shape resize moves the top edge too
+      const ny = lerpOpt(cur.y, target.y) ?? startGeom.y; // shape/stamp resize moves the top edge too
       const nh = lerpOpt(cur.height, target.height);
       const near = (a: number | undefined, b: number | undefined, e: number): boolean =>
         typeof a !== "number" || typeof b !== "number" || Math.abs(a - b) < e;
