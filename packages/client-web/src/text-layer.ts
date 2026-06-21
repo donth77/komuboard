@@ -26,15 +26,23 @@ import {
   orderArray,
   randomId,
   readObject,
+  setConnectorEnds,
+  setObjectsPoints,
   setStampGeom,
   setTextGeometry,
   setTextRuns,
   setTextStyle,
+  sideMidpoint,
   translateObjects,
   type BorderStyle,
+  type ConnectorCap,
+  type ConnectorEnd,
+  type ConnectorKind,
+  type ConnectorObject,
   type ConnectorSide,
   type ShapeKind,
   type StampObject,
+  type StrokeObject,
   type TextAlign,
   type TextObject,
   type TextRun,
@@ -219,6 +227,14 @@ export class TextLayer {
   private readonly root: HTMLDivElement;
   /** id → rendered display element (kept in sync with the doc). */
   private readonly els = new Map<string, HTMLDivElement>();
+  /** Strokes + connectors rendered as SVG (ADR-0009 Phase 3), keyed by id — z-order siblings of the
+   *  text/stamp boxes in `this.root`. Separate map: SVG elements aren't HTMLDivElement. */
+  private readonly inkEls = new Map<string, SVGSVGElement>();
+  /** World-space AABB of each stroke (origin + size), for hit-testing + the selection box. */
+  private readonly inkBBox = new Map<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >();
   /** id → measured world-space size, for hit-testing (refreshed on every layout). */
   private readonly sizes = new Map<string, { w: number; h: number }>();
   private edit: EditSession | null = null;
@@ -259,6 +275,8 @@ export class TextLayer {
   /** Peers' in-progress text resize: text id → live *target* geometry, + the glided render value. */
   private remoteResize = new Map<string, ResizeGeom>();
   private readonly remoteResizeCurrent = new Map<string, ResizeGeom>();
+  /** Ink (stroke/connector) ids glided for a peer's move/resize last tick — to reset when it ends. */
+  private prevInkRemote = new Set<string>();
   private lastResizeSent = 0;
   /** Peers' in-progress rotation (box id → degrees), applied straight to the render; cleared on release. */
   private remoteRotate = new Map<string, number>();
@@ -295,6 +313,8 @@ export class TextLayer {
     isShape: boolean;
     /** A stamp resizes uniformly (square), anchoring the opposite corner; commits via setStampGeom. */
     isStamp: boolean;
+    /** A stroke resizes free-aspect on its world AABB; commits by baking the affine into its points. */
+    isStroke?: boolean;
     /** Aspect ratio frozen the instant Shift goes down mid-resize (so the lock starts from the
      *  current in-progress shape, not the box's original proportions). Cleared when Shift lifts. */
     lock?: { w: number; h: number };
@@ -388,6 +408,30 @@ export class TextLayer {
         this.applyRotation(el, g.rotation);
         continue;
       }
+      // Strokes + connectors render as their own <svg> here too (ADR-0009 Phase 3) — z-order siblings
+      // of the text/stamp boxes, so a stroke stacks over/under any object by placement order.
+      if (obj?.type === "stroke") {
+        seen.add(id);
+        let el = this.inkEls.get(id);
+        if (!el) {
+          el = this.makeInkSvg(id, "stroke");
+          this.inkEls.set(id, el);
+        }
+        this.root.appendChild(el); // (re)append in z-order
+        this.paintStroke(el, obj);
+        continue;
+      }
+      if (obj?.type === "connector") {
+        seen.add(id);
+        let el = this.inkEls.get(id);
+        if (!el) {
+          el = this.makeInkSvg(id, "connector");
+          this.inkEls.set(id, el);
+        }
+        this.root.appendChild(el); // (re)append in z-order
+        this.paintConnector(el, obj);
+        continue;
+      }
       if (obj?.type !== "text") continue;
       seen.add(id);
       let el = this.els.get(id);
@@ -408,6 +452,13 @@ export class TextLayer {
       el.remove();
       this.els.delete(id);
       this.sizes.delete(id);
+    }
+    for (const [id, el] of this.inkEls) {
+      if (seen.has(id)) continue;
+      el.remove();
+      this.inkEls.delete(id);
+      this.sizes.delete(id);
+      this.inkBBox.delete(id);
     }
     if (this.linkCardFor && !this.linkCardFor.isConnected) this.removeLinkCard(); // repaint detached it
     this.updateDisplayVisibility();
@@ -468,6 +519,383 @@ export class TextLayer {
     } else {
       image.src = `/stamps/${val}.svg`; // a colour mark — border baked into the svg
     }
+  }
+
+  // ---- ink (strokes + connectors) as SVG, ADR-0009 Phase 3 ----
+  // Each stroke/connector is its OWN <svg> (in this.inkEls), a direct child of this.root appended in
+  // orderArray order — so ink is a true z-order sibling of the text/stamp boxes (DOM source order =
+  // z-order). The <svg> is positioned in screen space (its world AABB × camera) + a single scale();
+  // the <path> coords live in a stable local box, so a pan/zoom never rewrites `d`.
+
+  private makeInkSvg(id: string, kind: "stroke" | "connector"): SVGSVGElement {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", `co-ink co-${kind}`);
+    svg.dataset.id = id;
+    svg.dataset.type = kind;
+    return svg;
+  }
+
+  /** World-space AABB of a stroke straight from its points (+ half stroke-width for caps). */
+  private strokeWorldBBox(obj: StrokeObject): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } {
+    const p = obj.points;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (let i = 0; i + 1 < p.length; i += 2) {
+      const x = p[i] as number;
+      const y = p[i + 1] as number;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    if (minX > maxX) return { x: 0, y: 0, width: 0, height: 0 };
+    const pad = (obj.style.includes("highlight") ? obj.width * 1.6 : obj.width) / 2 + 1;
+    return {
+      x: minX - pad,
+      y: minY - pad,
+      width: maxX - minX + pad * 2,
+      height: maxY - minY + pad * 2,
+    };
+  }
+
+  /** Paint a stroke into its <svg>: one <path> in local coords. The `d` rebuild is guarded by a
+   *  cheap signature, so a camera change only re-runs layoutInk (move/scale), never rebuilds `d`. */
+  private paintStroke(el: SVGSVGElement, obj: StrokeObject): void {
+    const bbox = this.strokeWorldBBox(obj);
+    this.sizes.set(obj.id, { w: bbox.width, h: bbox.height }); // AABB for hit-test + selection box
+    this.inkBBox.set(obj.id, bbox);
+    this.drawStrokePath(el, obj, bbox);
+  }
+
+  /** Transient in-progress stroke previews (local pen draft + peers' live `draw`), keyed; on TOP of
+   *  every committed object and NOT in the hit-test/orderArray. ADR-0009 Phase 3 Step 6. */
+  private readonly draftEls = new Map<string, SVGSVGElement>();
+  /** Upsert a draft preview <svg> and paint it. `key` = "local" for the pen, or a peer's id. */
+  upsertInkDraft(key: string, obj: StrokeObject): void {
+    let el = this.draftEls.get(key);
+    if (!el) {
+      el = this.makeInkSvg(key, "stroke");
+      el.classList.add("co-draft");
+      this.draftEls.set(key, el);
+    }
+    this.root.appendChild(el); // last child of root = above all committed boxes
+    this.drawStrokePath(el, obj, this.strokeWorldBBox(obj));
+  }
+  /** Remove a draft preview (pen finished, or a peer's draw committed / cleared). */
+  removeInkDraft(key: string): void {
+    const el = this.draftEls.get(key);
+    if (el) {
+      el.remove();
+      this.draftEls.delete(key);
+    }
+  }
+
+  /** Draw a stroke's <path> into its <svg> in local-box coords + position it. The `d` rebuild is
+   *  signature-guarded so a camera change only re-runs layoutInk. Shared by committed strokes
+   *  (paintStroke) and the transient drafts (which skip the sizes/inkBBox hit-test entries). */
+  private drawStrokePath(
+    el: SVGSVGElement,
+    obj: StrokeObject,
+    bbox: { x: number; y: number; width: number; height: number },
+  ): void {
+    const p = obj.points;
+    let sum = 0;
+    for (let i = 0; i < p.length; i++) sum += (p[i] as number) * (i + 1);
+    const sig = `${p.length}_${Math.round(sum)}_${obj.color}_${obj.width}_${obj.style}_${obj.opacity}`;
+    if (el.dataset.sig !== sig) {
+      el.dataset.sig = sig;
+      const highlight = obj.style.includes("highlight");
+      const dashed = obj.style.includes("dashed");
+      const w = highlight ? obj.width * 1.6 : obj.width;
+      const lx = (p[0] as number) - bbox.x;
+      const ly = (p[1] as number) - bbox.y;
+      let d = `M ${lx.toFixed(2)} ${ly.toFixed(2)}`;
+      for (let i = 2; i + 1 < p.length; i += 2)
+        d += ` L ${((p[i] as number) - bbox.x).toFixed(2)} ${((p[i + 1] as number) - bbox.y).toFixed(2)}`;
+      if (p.length <= 2) d += ` L ${lx.toFixed(2)} ${ly.toFixed(2)}`; // single point → a round dot
+      let path = el.firstElementChild as SVGPathElement | null;
+      if (!path) {
+        path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        el.appendChild(path);
+      }
+      path.setAttribute("d", d);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", obj.color);
+      path.setAttribute("stroke-width", String(w));
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      path.setAttribute(
+        "stroke-dasharray",
+        dashed ? `${Math.max(2, obj.width * 2.5)} ${Math.max(2, obj.width * 2)}` : "",
+      );
+      path.style.opacity = String(highlight ? Math.min(obj.opacity, 0.4) : obj.opacity);
+      el.style.mixBlendMode = highlight ? "multiply" : "";
+      el.setAttribute("width", String(Math.max(bbox.width, 1)));
+      el.setAttribute("height", String(Math.max(bbox.height, 1)));
+    }
+    this.layoutInk(el, bbox);
+  }
+
+  /** Resolve a connector end to a world point (a bound end re-routes to its shape's side mid-edge). */
+  private resolveConnectorEnd(end: ConnectorEnd): { x: number; y: number } {
+    if (end.shapeId && end.side) {
+      const rect = this.shapeWorldRect(end.shapeId);
+      if (rect) return sideMidpoint(rect, end.side);
+    }
+    return { x: end.x, y: end.y };
+  }
+
+  /** World polyline for a connector (single-bend L-route for elbows, else a straight segment). */
+  private connectorPolyline(kind: ConnectorKind, from: ConnectorEnd, to: ConnectorEnd): number[] {
+    const a = this.resolveConnectorEnd(from);
+    const b = this.resolveConnectorEnd(to);
+    if (kind === "elbow" && Math.abs(b.x - a.x) > 1 && Math.abs(b.y - a.y) > 1) {
+      const horizontalFirst =
+        from.side === "left" || from.side === "right"
+          ? true
+          : from.side === "top" || from.side === "bottom"
+            ? false
+            : Math.abs(b.x - a.x) >= Math.abs(b.y - a.y);
+      const corner = horizontalFirst ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
+      return [a.x, a.y, corner.x, corner.y, b.x, b.y];
+    }
+    return [a.x, a.y, b.x, b.y];
+  }
+
+  /** How far a solid cap's body extends back from the tip (the shaft is trimmed by this). */
+  private capInset(cap: ConnectorCap, w: number): number {
+    if (cap === "arrow" || cap === "triangle") return w * 3.2;
+    if (cap === "circle") return w * 1.6;
+    if (cap === "diamond") return w * 1.9;
+    return 0;
+  }
+
+  /** SVG markup for one endpoint cap, oriented along `angle`, in the svg's local coords (via lx/ly). */
+  private capSvg(
+    p: { x: number; y: number },
+    angle: number,
+    cap: ConnectorCap,
+    color: string,
+    w: number,
+    lx: (x: number) => string,
+    ly: (y: number) => string,
+  ): string {
+    if (cap === "none") return "";
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const px = -sin;
+    const py = cos;
+    if (cap === "arrow" || cap === "triangle" || cap === "line") {
+      const len = w * 3.2;
+      const half = w * 2;
+      const bx = p.x - cos * len;
+      const by = p.y - sin * len;
+      const b1x = bx + px * half;
+      const b1y = by + py * half;
+      const b2x = bx - px * half;
+      const b2y = by - py * half;
+      if (cap === "line")
+        return `<path d="M ${lx(b1x)} ${ly(b1y)} L ${lx(p.x)} ${ly(p.y)} L ${lx(b2x)} ${ly(b2y)}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      const outline = cap === "triangle";
+      return `<path d="M ${lx(p.x)} ${ly(p.y)} L ${lx(b1x)} ${ly(b1y)} L ${lx(b2x)} ${ly(b2y)} Z" fill="${outline ? "#ffffff" : color}" stroke="${color}" stroke-width="${outline ? w * 0.8 : w * 0.5}" stroke-linejoin="round"/>`;
+    }
+    if (cap === "circle")
+      return `<circle cx="${lx(p.x)}" cy="${ly(p.y)}" r="${w * 1.6}" fill="#ffffff" stroke="${color}" stroke-width="${w * 0.8}"/>`;
+    const rd = w * 1.9;
+    return `<path d="M ${lx(p.x)} ${ly(p.y - rd)} L ${lx(p.x + rd)} ${ly(p.y)} L ${lx(p.x)} ${ly(p.y + rd)} L ${lx(p.x - rd)} ${ly(p.y)} Z" fill="#ffffff" stroke="${color}" stroke-width="${w * 0.8}" stroke-linejoin="round"/>`;
+  }
+
+  /** World-space AABB of a connector's resolved polyline (+ half-width pad) — the selection/hit box. */
+  private connectorWorldBBox(obj: ConnectorObject): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } {
+    const pts = this.connectorPolyline(obj.kind, obj.from, obj.to);
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (let i = 0; i + 1 < pts.length; i += 2) {
+      const x = pts[i] as number,
+        y = pts[i + 1] as number;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    if (minX > maxX) return { x: 0, y: 0, width: 0, height: 0 };
+    const pad = obj.width / 2 + 4;
+    return {
+      x: minX - pad,
+      y: minY - pad,
+      width: maxX - minX + pad * 2,
+      height: maxY - minY + pad * 2,
+    };
+  }
+
+  /** Paint a connector into its <svg>: shaft <path> + endpoint caps in local coords. Rebuilt each
+   *  call (connectors are few; a bound end's pull-in margin is camera-scale dependent). */
+  private paintConnector(el: SVGSVGElement, obj: ConnectorObject): void {
+    const scale = Math.max(this.opts.camera().scale, 1e-6);
+    const w = obj.width;
+    const selBox = this.connectorWorldBBox(obj); // AABB for hit-test + selection (NOT the cap-padded svg box)
+    this.sizes.set(obj.id, { w: selBox.width, h: selBox.height });
+    this.inkBBox.set(obj.id, selBox);
+    const pts = this.connectorPolyline(obj.kind, obj.from, obj.to);
+    const n = pts.length;
+    const pull = (tipI: number, prevI: number, bound: boolean): void => {
+      if (!bound) return;
+      const tx = pts[tipI] as number,
+        ty = pts[tipI + 1] as number,
+        qx = pts[prevI] as number,
+        qy = pts[prevI + 1] as number;
+      const seg = Math.hypot(tx - qx, ty - qy) || 1;
+      const t = Math.min((w / 2 + 2.5 / scale) / seg, 0.45);
+      pts[tipI] = tx - (tx - qx) * t;
+      pts[tipI + 1] = ty - (ty - qy) * t;
+    };
+    pull(n - 2, n - 4, !!obj.to.shapeId);
+    pull(0, 2, !!obj.from.shapeId);
+    const end = { x: pts[n - 2] as number, y: pts[n - 1] as number };
+    const endPrev = { x: pts[n - 4] as number, y: pts[n - 3] as number };
+    const start = { x: pts[0] as number, y: pts[1] as number };
+    const startNext = { x: pts[2] as number, y: pts[3] as number };
+    const endAngle = Math.atan2(end.y - endPrev.y, end.x - endPrev.x);
+    const startAngle = Math.atan2(start.y - startNext.y, start.x - startNext.x);
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (let i = 0; i + 1 < pts.length; i += 2) {
+      const x = pts[i] as number,
+        y = pts[i + 1] as number;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const capPad = w * 3.2 + w * 2 + 2; // arrow length + half-width + a hair
+    const bbox = {
+      x: minX - capPad,
+      y: minY - capPad,
+      width: maxX - minX + capPad * 2,
+      height: maxY - minY + capPad * 2,
+    };
+    const shaft = pts.slice();
+    const trim = (tipI: number, prevI: number, inset: number): void => {
+      if (inset <= 0) return;
+      const tx = pts[tipI] as number,
+        ty = pts[tipI + 1] as number,
+        qx = pts[prevI] as number,
+        qy = pts[prevI + 1] as number;
+      const seg = Math.hypot(tx - qx, ty - qy) || 1;
+      const t = Math.min(inset / seg, 0.95);
+      shaft[tipI] = tx - (tx - qx) * t;
+      shaft[tipI + 1] = ty - (ty - qy) * t;
+    };
+    trim(n - 2, n - 4, this.capInset(obj.endCap, w));
+    trim(0, 2, this.capInset(obj.startCap, w));
+    const lx = (x: number): string => (x - bbox.x).toFixed(2);
+    const ly = (y: number): string => (y - bbox.y).toFixed(2);
+    let d = `M ${lx(shaft[0] as number)} ${ly(shaft[1] as number)}`;
+    for (let i = 2; i + 1 < shaft.length; i += 2)
+      d += ` L ${lx(shaft[i] as number)} ${ly(shaft[i + 1] as number)}`;
+    const dash = obj.style === "dashed" ? ` stroke-dasharray="${w * 2.5} ${w * 2}"` : "";
+    let markup = `<path d="${d}" fill="none" stroke="${obj.color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`;
+    markup += this.capSvg(end, endAngle, obj.endCap, obj.color, w, lx, ly);
+    markup += this.capSvg(start, startAngle, obj.startCap, obj.color, w, lx, ly);
+    el.innerHTML = markup;
+    el.setAttribute("width", String(Math.max(bbox.width, 1)));
+    el.setAttribute("height", String(Math.max(bbox.height, 1)));
+    this.layoutInk(el, bbox);
+  }
+
+  /** Position an ink <svg> in screen space: left/top = its world-AABB origin × camera + one scale()
+   *  for zoom. The path coords are local, so only these two writes happen on a camera change. */
+  private layoutInk(
+    el: SVGSVGElement,
+    bbox: { x: number; y: number; width: number; height: number },
+  ): void {
+    const cam = this.opts.camera();
+    el.style.left = `${bbox.x * cam.scale + cam.x}px`;
+    el.style.top = `${bbox.y * cam.scale + cam.y}px`;
+    el.style.transform = `scale(${cam.scale})`;
+  }
+
+  /** Live resize preview for a stroke svg: map its local box [0,ow]×[0,oh] (the committed `d`) onto
+   *  the previewed world box (nx,ny,nw,nh) via one CSS matrix — no `d` rewrite. */
+  private previewInkResize(
+    id: string,
+    ow: number,
+    oh: number,
+    nx: number,
+    ny: number,
+    nw: number,
+    nh: number,
+  ): void {
+    const svg = this.inkEls.get(id);
+    if (!svg || !ow || !oh) return;
+    const cam = this.opts.camera();
+    const sx = (cam.scale * nw) / ow;
+    const sy = (cam.scale * nh) / oh;
+    svg.style.left = "0px";
+    svg.style.top = "0px";
+    svg.style.transform = `matrix(${sx}, 0, 0, ${sy}, ${nx * cam.scale + cam.x}, ${ny * cam.scale + cam.y})`;
+  }
+
+  /** Live rotate preview for a stroke svg: rotate its local box about the AABB world centre by `deg`
+   *  via one CSS matrix (camera scale folded in) — matches the chrome box's CSS rotate-about-centre. */
+  private previewInkRotate(id: string, deg: number): void {
+    const svg = this.inkEls.get(id);
+    const bb = this.inkBBox.get(id);
+    if (!svg || !bb) return;
+    const cam = this.opts.camera();
+    const rad = (deg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const wcx = bb.x + bb.width / 2;
+    const wcy = bb.y + bb.height / 2;
+    const dx0 = bb.x - wcx;
+    const dy0 = bb.y - wcy;
+    const tx = cam.scale * (cos * dx0 - sin * dy0 + wcx) + cam.x;
+    const ty = cam.scale * (sin * dx0 + cos * dy0 + wcy) + cam.y;
+    svg.style.left = "0px";
+    svg.style.top = "0px";
+    svg.style.transform = `matrix(${cam.scale * cos}, ${cam.scale * sin}, ${-cam.scale * sin}, ${cam.scale * cos}, ${tx}, ${ty})`;
+  }
+
+  /** Re-paint every DOM connector with a bound end so the VISIBLE svg tracks its shape live during a
+   *  drag/resize/peer-glide. paintConnector resolves bound ends via shapeWorldRect → effectiveGeom, so
+   *  it follows the shape's in-progress position. Called alongside onShapesMoved (which keeps the
+   *  opacity-0 Konva connectors — still the click hit-surface until Step 6 — in sync). ADR-0009 P3. */
+  private rerouteBoundConnectors(): void {
+    for (const [id, el] of this.inkEls) {
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (obj?.type !== "connector") continue;
+      if (!obj.from.shapeId && !obj.to.shapeId) continue; // only bound connectors follow a shape
+      if (this.moveState && this.selected.has(id)) continue; // itself being moved → keep its CSS translate
+      this.paintConnector(el, obj);
+    }
+  }
+
+  /** Repaint a connector's SVG with one end overridden — the live LOCAL preview while a canvas-driven
+   *  endpoint handle is being dragged. The doc commit (setConnectorEnds) re-renders authoritatively. */
+  previewConnector(id: string, override: { from?: ConnectorEnd; to?: ConnectorEnd }): void {
+    const el = this.inkEls.get(id);
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    if (!el || obj?.type !== "connector") return;
+    this.paintConnector(el, { ...obj, ...override });
   }
 
   /** Toggle the sticky-note look (coloured padded card) on a box element. */
@@ -596,9 +1024,17 @@ export class TextLayer {
   /** Re-lay-out + re-measure a single box — used when it's un-hidden after a peer's edit ends, so
    *  its size cache refreshes now that it's visible again (a render while hidden would have cached 0). */
   private relayoutBox(id: string): void {
-    const el = this.els.get(id);
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
+    const inkEl = this.inkEls.get(id);
+    if (inkEl && (obj?.type === "stroke" || obj?.type === "connector")) {
+      const deg = this.remoteRotate.get(id); // a peer's in-progress rotate of a stroke/connector
+      if (typeof deg === "number") this.previewInkRotate(id, deg);
+      else if (obj.type === "stroke") this.paintStroke(inkEl, obj);
+      else this.paintConnector(inkEl, obj);
+      return;
+    }
+    const el = this.els.get(id);
     if (!el || obj?.type !== "text") return;
     const g = this.effectiveGeom(id, obj);
     this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
@@ -629,6 +1065,14 @@ export class TextLayer {
       const g = this.effectiveGeom(id, obj);
       this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
     }
+    // Re-position ink on a camera change. paintStroke's signature guard skips the `d` rebuild, so a
+    // pan/zoom is just a left/top + scale() write per stroke; connectors rebuild (scale-dependent).
+    for (const [id, el] of this.inkEls) {
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (obj?.type === "stroke") this.paintStroke(el, obj);
+      else if (obj?.type === "connector") this.paintConnector(el, obj);
+    }
     if (this.edit) {
       const e = this.edit;
       this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align, e.height);
@@ -651,6 +1095,39 @@ export class TextLayer {
       if (!id) continue;
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
+      // Strokes hit-test precisely (their AABB is mostly empty): broad-phase the padded AABB, then
+      // the true distance to the polyline ≤ half the stroke width (matches Konva's hitStrokeWidth).
+      if (obj?.type === "stroke") {
+        const bbox = this.inkBBox.get(id);
+        if (!bbox) continue;
+        const w = obj.style.includes("highlight") ? obj.width * 1.6 : obj.width;
+        const tol = Math.max(w / 2, 7);
+        if (
+          world.x < bbox.x - tol ||
+          world.x > bbox.x + bbox.width + tol ||
+          world.y < bbox.y - tol ||
+          world.y > bbox.y + bbox.height + tol
+        )
+          continue;
+        if (this.pointToPolylineDist(world, obj.points) <= tol) return id;
+        continue;
+      }
+      // Connectors hit-test on their resolved polyline (broad-phase the AABB first), same as strokes.
+      if (obj?.type === "connector") {
+        const bbox = this.inkBBox.get(id);
+        if (!bbox) continue;
+        const tol = Math.max(obj.width / 2, 10);
+        if (
+          world.x < bbox.x - tol ||
+          world.x > bbox.x + bbox.width + tol ||
+          world.y < bbox.y - tol ||
+          world.y > bbox.y + bbox.height + tol
+        )
+          continue;
+        const poly = this.connectorPolyline(obj.kind, obj.from, obj.to);
+        if (this.pointToPolylineDist(world, poly) <= tol) return id;
+        continue;
+      }
       if (obj?.type !== "text" && obj?.type !== "stamp") continue;
       const size = this.sizes.get(id);
       if (!size) continue;
@@ -667,6 +1144,30 @@ export class TextLayer {
       }
     }
     return null;
+  }
+
+  /** Min distance (world units) from a point to a polyline `[x0,y0,x1,y1,…]` (nearest segment). */
+  private pointToPolylineDist(pt: { x: number; y: number }, points: number[]): number {
+    if (points.length < 2) return Infinity;
+    if (points.length === 2)
+      return Math.hypot(pt.x - (points[0] as number), pt.y - (points[1] as number));
+    let best = Infinity;
+    for (let i = 0; i + 3 < points.length; i += 2) {
+      const ax = points[i] as number,
+        ay = points[i + 1] as number;
+      const bx = points[i + 2] as number,
+        by = points[i + 3] as number;
+      const dx = bx - ax,
+        dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 ? ((pt.x - ax) * dx + (pt.y - ay) * dy) / len2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const cx = ax + t * dx,
+        cy = ay + t * dy;
+      const d = Math.hypot(pt.x - cx, pt.y - cy);
+      if (d < best) best = d;
+    }
+    return best;
   }
 
   // ---- editing ----
@@ -688,11 +1189,11 @@ export class TextLayer {
   ): void {
     if (this.edit) this.commit();
     const hit = this.hitTest(world);
-    if (hit && !this.isStampId(hit)) {
+    if (hit && !this.isStampId(hit) && !this.isInkId(hit)) {
       if (this.remoteEditIds.has(hit)) return; // a peer is editing this box — leave it to them
       this.beginEdit(hit, selectAll, caretAt);
     } else {
-      this.beginCreate(world.x, world.y); // empty space (or a non-editable stamp) → new text box
+      this.beginCreate(world.x, world.y); // empty space (or a non-editable stamp/stroke) → new text box
     }
   }
 
@@ -701,6 +1202,13 @@ export class TextLayer {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
     return obj?.type === "stamp";
+  }
+
+  /** True if `id` is a stroke or connector (SVG ink, never text-editable). */
+  isInkId(id: string): boolean {
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    return obj?.type === "stroke" || obj?.type === "connector";
   }
 
   private beginCreate(x: number, y: number): void {
@@ -1318,6 +1826,7 @@ export class TextLayer {
   selectAll(): void {
     const before = this.selected.size;
     for (const id of this.els.keys()) this.selected.add(id);
+    for (const id of this.inkEls.keys()) this.selected.add(id); // strokes + connectors (all SVG ink)
     if (this.selected.size !== before) {
       this.refreshSelectionChrome();
       this.opts.onSelectionChange?.();
@@ -1329,10 +1838,27 @@ export class TextLayer {
     for (const [id, size] of this.sizes) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      if (obj?.type !== "text" && obj?.type !== "stamp") continue;
-      // stamps are centre-anchored (x,y is the centre); text/shape/sticky use a top-left origin
-      const left = obj.type === "stamp" ? obj.x - size.w / 2 : obj.x;
-      const top = obj.type === "stamp" ? obj.y - size.h / 2 : obj.y;
+      if (
+        obj?.type !== "text" &&
+        obj?.type !== "stamp" &&
+        obj?.type !== "stroke" &&
+        obj?.type !== "connector"
+      )
+        continue;
+      // stamps are centre-anchored; ink uses its AABB origin; text/shape/sticky use top-left.
+      let left: number, top: number;
+      if (obj.type === "stamp") {
+        left = obj.x - size.w / 2;
+        top = obj.y - size.h / 2;
+      } else if (obj.type === "stroke" || obj.type === "connector") {
+        const bb = this.inkBBox.get(id);
+        if (!bb) continue;
+        left = bb.x;
+        top = bb.y;
+      } else {
+        left = obj.x;
+        top = obj.y;
+      }
       if (rectsIntersect(box, { x: left, y: top, width: size.w, height: size.h })) {
         this.selected.add(id);
       }
@@ -1382,6 +1908,16 @@ export class TextLayer {
     for (const id of this.selected) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
+      if (obj?.type === "stroke" || obj?.type === "connector") {
+        // The svg's `d`/position stay at the doc points; the live drag is a CSS translate on top of
+        // the camera scale() (no `d` rewrite). endMove bakes it (stroke → points; connector → ends).
+        const inkEl = this.inkEls.get(id);
+        if (inkEl) {
+          const cam = this.opts.camera();
+          inkEl.style.transform = `translate(${mv.dx * cam.scale}px, ${mv.dy * cam.scale}px) scale(${cam.scale})`;
+        }
+        continue;
+      }
       const el = this.els.get(id);
       if (!el) continue;
       if (obj?.type === "stamp") {
@@ -1404,6 +1940,7 @@ export class TextLayer {
     }
     this.updateResizeChrome(); // keep the handles glued to the box while it moves
     this.opts.onShapesMoved?.(); // re-route connectors bound to the moving shapes (live)
+    this.rerouteBoundConnectors(); // …and re-paint the visible DOM connectors so they follow too
     // Stream the live drag to peers (throttled) — ephemeral, the doc commits on release.
     const now = Date.now();
     if (broadcast && now - this.lastTextDragSent >= EDIT_BROADCAST_MS) {
@@ -1420,10 +1957,34 @@ export class TextLayer {
     const mv = this.moveState;
     this.moveState = null;
     if (mv && (Math.abs(mv.dx) >= 0.01 || Math.abs(mv.dy) >= 0.01)) {
-      translateObjects(this.opts.doc, [...this.selected], mv.dx, mv.dy); // observer re-lays-out at baked coords
+      // One transaction → one undo step for a mixed move. Connectors commit specially (a bound end
+      // detaches to a free point unless its shape moves too); everything else offsets via translateObjects.
+      this.opts.doc.transact(() => {
+        const others: string[] = [];
+        for (const id of this.selected) {
+          if (this.objects.get(id)?.get("type") === "connector")
+            this.commitConnectorMove(id, mv.dx, mv.dy);
+          else others.push(id);
+        }
+        if (others.length) translateObjects(this.opts.doc, others, mv.dx, mv.dy);
+      });
     }
     this.opts.awareness.setLocalStateField("drag", null);
     this.updateSelectionBar(); // moveState cleared → re-show the toolbar for the (still-selected) box
+  }
+  /** Commit a connector body-move: each end becomes a free point at its resolved start + the drag
+   *  delta, EXCEPT an end bound to a shape that's ALSO selected — that stays bound and re-routes with
+   *  the shape (matching the old canvas connector-move's skipBoundTo rule). */
+  private commitConnectorMove(id: string, dx: number, dy: number): void {
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    if (obj?.type !== "connector") return;
+    const mk = (end: ConnectorEnd): ConnectorEnd => {
+      if (end.shapeId && this.selected.has(end.shapeId)) return end; // shape moves too → stay bound
+      const r = this.resolveConnectorEnd(end);
+      return { x: r.x + dx, y: r.y + dy }; // free point (detached if it was bound)
+    };
+    setConnectorEnds(this.opts.doc, id, { from: mk(obj.from), to: mk(obj.to) });
   }
 
   /** Apply the effective drag offset to a box during render/sync — the local drag if I'm moving
@@ -1439,7 +2000,7 @@ export class TextLayer {
    *  `height` is only meaningful for shapes (fixed-height boxes); undefined = auto-height. */
   private effectiveGeom(
     id: string,
-    obj: TextObject | StampObject,
+    obj: TextObject | StampObject | StrokeObject | ConnectorObject,
   ): {
     x: number;
     y: number;
@@ -1448,6 +2009,54 @@ export class TextLayer {
     fontSize: number;
     rotation: number;
   } {
+    // A stroke/connector "box" is its world AABB (no stored x/y/size); fold in move/resize/rotate
+    // previews exactly like a stamp so the selection chrome + group transform stay type-agnostic.
+    if (obj.type === "stroke" || obj.type === "connector") {
+      const bbox = obj.type === "stroke" ? this.strokeWorldBBox(obj) : this.connectorWorldBBox(obj);
+      const rotation =
+        this.rotatePreview?.id === id
+          ? this.rotatePreview.rotation
+          : (this.remoteRotate.get(id) ?? 0);
+      const gp = this.groupPreview?.get(id);
+      if (gp)
+        return {
+          x: gp.x,
+          y: gp.y,
+          width: gp.width,
+          height: gp.height,
+          fontSize: gp.fontSize,
+          rotation: gp.rotation,
+        };
+      const pv = this.resizePreview;
+      if (pv?.id === id)
+        return {
+          x: pv.x,
+          y: pv.y,
+          width: pv.width ?? bbox.width,
+          height: pv.height ?? bbox.height,
+          fontSize: pv.fontSize,
+          rotation,
+        };
+      const rr = this.remoteResizeCurrent.get(id);
+      if (rr)
+        return {
+          x: rr.x,
+          y: rr.y ?? bbox.y,
+          width: rr.width ?? bbox.width,
+          height: rr.height ?? bbox.height,
+          fontSize: rr.fontSize,
+          rotation,
+        };
+      const off = this.moveOffset(id);
+      return {
+        x: bbox.x + off.dx,
+        y: bbox.y + off.dy,
+        width: bbox.width,
+        height: bbox.height,
+        fontSize: 0,
+        rotation,
+      };
+    }
     // A stamp is stored centre-anchored (x/y = centre, square `size`); normalise it into the same
     // top-left box model as text/shapes so every downstream consumer (render/hit-test/chrome/resize)
     // is type-agnostic. The previews below carry box geometry directly, matching text.
@@ -1574,7 +2183,13 @@ export class TextLayer {
     for (const id of this.selected) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      if (obj?.type !== "text" && obj?.type !== "stamp") continue;
+      if (
+        obj?.type !== "text" &&
+        obj?.type !== "stamp" &&
+        obj?.type !== "stroke" &&
+        obj?.type !== "connector"
+      )
+        continue;
       const g = this.effectiveGeom(id, obj);
       const sz = this.sizes.get(id);
       const width = g.width ?? (obj.type === "text" ? obj.width : undefined) ?? sz?.w ?? 0;
@@ -1589,7 +2204,13 @@ export class TextLayer {
   worldRectOf(id: string): { x: number; y: number; width: number; height: number } | null {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
-    if (obj?.type !== "text" && obj?.type !== "stamp") return null;
+    if (
+      obj?.type !== "text" &&
+      obj?.type !== "stamp" &&
+      obj?.type !== "stroke" &&
+      obj?.type !== "connector"
+    )
+      return null;
     const g = this.effectiveGeom(id, obj);
     const sz = this.sizes.get(id);
     const width = g.width ?? (obj.type === "text" ? obj.width : undefined) ?? sz?.w ?? 0;
@@ -1612,7 +2233,13 @@ export class TextLayer {
   } | null {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
-    if (obj?.type !== "text" && obj?.type !== "stamp") return null;
+    if (
+      obj?.type !== "text" &&
+      obj?.type !== "stamp" &&
+      obj?.type !== "stroke" &&
+      obj?.type !== "connector"
+    )
+      return null;
     const g = this.effectiveGeom(id, obj);
     const sz = this.sizes.get(id);
     return {
@@ -1714,12 +2341,31 @@ export class TextLayer {
   private updateResizeChrome(): void {
     const ids = [...this.selected];
     const id = ids.length === 1 ? ids[0] : undefined;
+    const m = id ? this.objects.get(id) : null;
+    const obj = m ? readObject(m) : null;
     const el = id ? this.els.get(id) : undefined;
+    const inkEl = id && obj?.type === "stroke" ? this.inkEls.get(id) : undefined;
     // Hidden for 0 / many / editing, AND when this box is one node inside a multi-node group — the
     // group's own transform box owns resize/rotate there, so no per-box handles.
-    if (!id || !el || this.edit || this.remoteEditIds.has(id) || this.groupSelected) {
+    if (!id || (!el && !inkEl) || this.edit || this.remoteEditIds.has(id) || this.groupSelected) {
       if (this.resizeEl) this.resizeEl.style.display = "none";
-    } else {
+    } else if (inkEl && obj?.type === "stroke") {
+      // A stroke's selection box is its world AABB (effectiveGeom) mapped to screen. It resizes
+      // free-aspect (8 handles) and rotates — so it uses the same chrome as a shape.
+      const box = this.ensureResizeEl();
+      box.style.display = "";
+      box.dataset.id = id;
+      const g = this.effectiveGeom(id, obj);
+      const cam = this.opts.camera();
+      box.style.left = `${g.x * cam.scale + cam.x}px`;
+      box.style.top = `${g.y * cam.scale + cam.y}px`;
+      box.style.width = `${(g.width ?? 0) * cam.scale}px`;
+      box.style.height = `${(g.height ?? 0) * cam.scale}px`;
+      box.classList.toggle("co-text-resize-shape", true); // free-aspect 8-handle chrome + rotate
+      box.classList.toggle("co-text-resize-stamp", false);
+      box.classList.toggle("co-text-resize-stroke", false);
+      this.applyRotation(box, g.rotation);
+    } else if (el) {
       const box = this.ensureResizeEl();
       box.style.display = "";
       box.dataset.id = id;
@@ -1729,10 +2375,9 @@ export class TextLayer {
       box.style.height = `${el.offsetHeight}px`;
       // A shape has free width×height → show the n/s (vertical) handles; text/sticky don't.
       box.classList.toggle("co-text-resize-shape", el.classList.contains("shape"));
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
       // A stamp resizes uniformly (square) → corner handles only (hide the w/e side handles too).
       box.classList.toggle("co-text-resize-stamp", obj?.type === "stamp");
+      box.classList.toggle("co-text-resize-stroke", false);
       const rotatable = obj?.type === "text" || obj?.type === "stamp";
       this.applyRotation(box, rotatable ? this.effectiveGeom(id, obj).rotation : 0);
     }
@@ -1849,6 +2494,30 @@ export class TextLayer {
       window.addEventListener("pointerup", this.onResizeUp);
       return;
     }
+    if (obj?.type === "stroke") {
+      // A stroke resizes free-aspect on its world AABB (no stored box); the affine is baked into its
+      // points on release. Anchor the box top-left; the opposite corner stays fixed during the drag.
+      const bb = this.inkBBox.get(id) ?? this.strokeWorldBBox(obj);
+      this.resizing = {
+        id,
+        handle,
+        startX: e.clientX,
+        startY: e.clientY,
+        ox: bb.x,
+        oy: bb.y,
+        ow: bb.width,
+        oh: bb.height,
+        ofs: 0,
+        baseW: bb.width,
+        isShape: false,
+        isStamp: false,
+        isStroke: true,
+      };
+      this.updateSelectionBar();
+      window.addEventListener("pointermove", this.onResizeMove);
+      window.addEventListener("pointerup", this.onResizeUp);
+      return;
+    }
     if (obj?.type !== "text") return;
     this.resizing = {
       id,
@@ -1878,6 +2547,44 @@ export class TextLayer {
     const wdy = (e.clientY - rs.startY) / scale;
     const m = this.objects.get(rs.id);
     const obj = m ? readObject(m) : null;
+    if (rs.isStroke) {
+      // Free-aspect AABB resize: each edge in the handle name moves, the opposite edge anchors. The
+      // svg previews via a CSS matrix (no `d` rewrite); endMove bakes the affine into the points.
+      const MIN_INK = 4;
+      const h = rs.handle;
+      const ow = rs.ow ?? rs.baseW;
+      const oh = rs.oh ?? MIN_INK;
+      let nw = ow;
+      let nh = oh;
+      let nx = rs.ox;
+      let ny = rs.oy;
+      if (h.includes("e")) nw = Math.max(MIN_INK, ow + wdx);
+      if (h.includes("w")) {
+        nw = Math.max(MIN_INK, ow - wdx);
+        nx = rs.ox + (ow - nw); // anchor the right edge
+      }
+      if (h.includes("s")) nh = Math.max(MIN_INK, oh + wdy);
+      if (h.includes("n")) {
+        nh = Math.max(MIN_INK, oh - wdy);
+        ny = rs.oy + (oh - nh); // anchor the bottom edge
+      }
+      this.resizePreview = { id: rs.id, x: nx, y: ny, width: nw, height: nh, fontSize: 0 };
+      this.previewInkResize(rs.id, ow, oh, nx, ny, nw, nh);
+      this.updateResizeChrome();
+      const now = Date.now();
+      if (now - this.lastResizeSent >= EDIT_BROADCAST_MS) {
+        this.lastResizeSent = now;
+        this.opts.awareness.setLocalStateField("textresize", {
+          id: rs.id,
+          x: nx,
+          y: ny,
+          width: nw,
+          height: nh,
+          fontSize: 0,
+        });
+      }
+      return;
+    }
     const el = this.els.get(rs.id);
     if (!el) return;
     if (rs.isStamp) {
@@ -2001,6 +2708,7 @@ export class TextLayer {
     );
     this.updateResizeChrome();
     this.opts.onShapesMoved?.(); // re-route connectors bound to the resizing shape (live)
+    this.rerouteBoundConnectors(); // …and re-paint the visible DOM connectors so they follow too
     // Stream the live resize to peers (throttled) — ephemeral; the doc commits on release.
     const now = Date.now();
     if (now - this.lastResizeSent >= EDIT_BROADCAST_MS) {
@@ -2033,6 +2741,23 @@ export class TextLayer {
             y: pv.y + size / 2,
             size,
           });
+        } else if (rs.isStroke) {
+          // Bake the box affine into the points: map the original AABB → the previewed AABB (this
+          // anchors the opposite corner and applies the free-aspect x/y scale).
+          const m2 = this.objects.get(pv.id);
+          const o2 = m2 ? readObject(m2) : null;
+          if (o2?.type === "stroke") {
+            const ow = rs.ow ?? rs.baseW;
+            const oh = rs.oh ?? 1;
+            const sx = (pv.width ?? ow) / (ow || 1);
+            const sy = (pv.height ?? oh) / (oh || 1);
+            const pts = o2.points.slice();
+            for (let i = 0; i + 1 < pts.length; i += 2) {
+              pts[i] = pv.x + ((pts[i] as number) - rs.ox) * sx;
+              pts[i + 1] = pv.y + ((pts[i + 1] as number) - rs.oy) * sy;
+            }
+            setObjectsPoints(this.opts.doc, [{ id: pv.id, points: pts }]);
+          }
         } else if (rs.isShape) {
           // A shape bakes its full box geometry (font unchanged).
           const geom: { x: number; y: number; width?: number; height?: number } = {
@@ -2062,19 +2787,31 @@ export class TextLayer {
     e.preventDefault();
     e.stopPropagation(); // a rotate drag is not a canvas marquee/move
     const id = this.resizeEl?.dataset.id;
-    const el = id ? this.els.get(id) : undefined;
     const m = id ? this.objects.get(id) : undefined;
     const obj = m ? readObject(m) : null;
-    if (!id || !el || (obj?.type !== "text" && obj?.type !== "stamp")) return;
-    const r = el.getBoundingClientRect(); // centre is rotation-invariant (CSS rotate about centre)
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
+    const el =
+      id && obj?.type === "stroke" ? this.inkEls.get(id) : id ? this.els.get(id) : undefined;
+    if (!id || !el || (obj?.type !== "text" && obj?.type !== "stamp" && obj?.type !== "stroke"))
+      return;
+    // Rotation centre: a stroke uses its world-AABB centre (mapped to screen); a div box uses its
+    // rendered rect centre (rotation-invariant under CSS rotate-about-centre).
+    let cx: number, cy: number;
+    if (obj.type === "stroke") {
+      const bb = this.inkBBox.get(id) ?? this.strokeWorldBBox(obj);
+      const cam = this.opts.camera();
+      cx = (bb.x + bb.width / 2) * cam.scale + cam.x;
+      cy = (bb.y + bb.height / 2) * cam.scale + cam.y;
+    } else {
+      const r = el.getBoundingClientRect();
+      cx = r.left + r.width / 2;
+      cy = r.top + r.height / 2;
+    }
     this.rotating = {
       id,
       cx,
       cy,
       startAngle: Math.atan2(e.clientY - cy, e.clientX - cx),
-      startRotation: obj.rotation ?? 0,
+      startRotation: obj.type === "stroke" ? 0 : (obj.rotation ?? 0),
     };
     this.updateSelectionBar(); // hide the floating toolbar while rotating
     window.addEventListener("pointermove", this.onRotateMove);
@@ -2090,9 +2827,13 @@ export class TextLayer {
     if (e.shiftKey) deg = Math.round(deg / 15) * 15; // Shift snaps to 15°
     deg = ((deg % 360) + 360) % 360;
     this.rotatePreview = { id: rs.id, rotation: deg };
-    const el = this.els.get(rs.id);
-    if (el) this.applyRotation(el, deg); // live: spin the box + its chrome without a full re-render
-    if (this.resizeEl) this.applyRotation(this.resizeEl, deg);
+    if (this.inkEls.has(rs.id)) {
+      this.previewInkRotate(rs.id, deg); // a stroke svg rotates via a CSS matrix about its AABB centre
+    } else {
+      const el = this.els.get(rs.id);
+      if (el) this.applyRotation(el, deg); // live: spin the box without a full re-render
+    }
+    if (this.resizeEl) this.applyRotation(this.resizeEl, deg); // the chrome box spins with it
     // Stream the live rotation to peers (throttled) — ephemeral; the doc commits on release.
     const now = Date.now();
     if (now - this.lastRotateSent >= EDIT_BROADCAST_MS) {
@@ -2111,7 +2852,23 @@ export class TextLayer {
     this.rotatePreview = null;
     const m = this.objects.get(rs.id);
     const obj = m ? readObject(m) : null;
-    if (obj?.type === "stamp") setStampGeom(this.opts.doc, rs.id, { rotation: deg });
+    if (obj?.type === "stroke") {
+      // Strokes carry no rotation field — bake the angle into the points about the AABB centre.
+      const rad = (deg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const bb = this.inkBBox.get(rs.id) ?? this.strokeWorldBBox(obj);
+      const wcx = bb.x + bb.width / 2;
+      const wcy = bb.y + bb.height / 2;
+      const pts = obj.points.slice();
+      for (let i = 0; i + 1 < pts.length; i += 2) {
+        const x = (pts[i] as number) - wcx;
+        const y = (pts[i + 1] as number) - wcy;
+        pts[i] = wcx + cos * x - sin * y;
+        pts[i + 1] = wcy + sin * x + cos * y;
+      }
+      setObjectsPoints(this.opts.doc, [{ id: rs.id, points: pts }]);
+    } else if (obj?.type === "stamp") setStampGeom(this.opts.doc, rs.id, { rotation: deg });
     else setTextGeometry(this.opts.doc, rs.id, { rotation: deg }); // commit (syncs the final angle)…
     this.opts.awareness.setLocalStateField("textrotate", null); // …then drop the live preview
     this.updateSelectionBar();
@@ -2148,7 +2905,10 @@ export class TextLayer {
         const dx = typeof d.dx === "number" ? d.dx : 0;
         const dy = typeof d.dy === "number" ? d.dy : 0;
         for (const id of d.ids) {
-          if (typeof id === "string" && this.els.has(id)) drag.set(id, { dx, dy });
+          // ink (strokes/connectors) live in inkEls, not els — include them so a peer's in-progress
+          // move/resize/rotate of a stroke or connector glides live too (ADR-0009 Phase 3 Step 5).
+          if (typeof id === "string" && (this.els.has(id) || this.inkEls.has(id)))
+            drag.set(id, { dx, dy });
         }
       }
       const tr = st.textresize as
@@ -2164,7 +2924,7 @@ export class TextLayer {
       if (
         tr &&
         typeof tr.id === "string" &&
-        this.els.has(tr.id) &&
+        (this.els.has(tr.id) || this.inkEls.has(tr.id)) &&
         typeof tr.x === "number" &&
         typeof tr.fontSize === "number"
       ) {
@@ -2181,7 +2941,7 @@ export class TextLayer {
       if (
         trot &&
         typeof trot.id === "string" &&
-        this.els.has(trot.id) &&
+        (this.els.has(trot.id) || this.inkEls.has(trot.id)) &&
         typeof trot.rotation === "number"
       ) {
         rotate.set(trot.id, trot.rotation);
@@ -2236,8 +2996,47 @@ export class TextLayer {
       // drag/resize glide (the box loses its fixed height on the other user's screen).
       this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
     }
+    // Glide ink (strokes/connectors) for a peer's in-progress move/resize — mirrors the local-move
+    // CSS translate / previewInkResize. (A peer's rotate is applied via relayoutBox.) ADR-0009 P3 S5.
+    const inkTouched = new Set<string>();
+    const cam = this.opts.camera();
+    for (const [id, dc] of this.remoteDragCurrent) {
+      const svg = this.inkEls.get(id);
+      const bb = this.inkBBox.get(id);
+      if (!svg || !bb) continue;
+      svg.style.left = `${bb.x * cam.scale + cam.x}px`;
+      svg.style.top = `${bb.y * cam.scale + cam.y}px`;
+      svg.style.transform = `translate(${dc.dx * cam.scale}px, ${dc.dy * cam.scale}px) scale(${cam.scale})`;
+      inkTouched.add(id);
+    }
+    for (const [id, g] of this.remoteResizeCurrent) {
+      if (inkTouched.has(id) || !this.inkEls.has(id)) continue;
+      const bb = this.inkBBox.get(id);
+      if (!bb) continue;
+      this.previewInkResize(
+        id,
+        bb.width,
+        bb.height,
+        g.x,
+        g.y ?? bb.y,
+        g.width ?? bb.width,
+        g.height ?? bb.height,
+      );
+      inkTouched.add(id);
+    }
+    // an ink object whose remote move/resize just ended → repaint at its committed geometry.
+    for (const id of this.prevInkRemote) {
+      if (inkTouched.has(id) || this.remoteRotate.has(id)) continue;
+      const svg = this.inkEls.get(id);
+      const o = this.objects.get(id);
+      const obj = o ? readObject(o) : null;
+      if (svg && obj?.type === "stroke") this.paintStroke(svg, obj);
+      else if (svg && obj?.type === "connector") this.paintConnector(svg, obj);
+    }
+    this.prevInkRemote = inkTouched;
     this.updateConnectorDots(); // dots follow a peer's dragged/resized shape
     this.opts.onShapesMoved?.(); // re-route connectors during a peer's drag/resize glide
+    this.rerouteBoundConnectors(); // …and re-paint the visible DOM connectors so they follow too
   }
 
   private ensureGlide(): void {
@@ -2272,11 +3071,14 @@ export class TextLayer {
     for (const [id, target] of this.remoteResize) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      if (obj?.type !== "text" && obj?.type !== "stamp") {
+      const isInk = obj?.type === "stroke" || obj?.type === "connector";
+      if (obj?.type !== "text" && obj?.type !== "stamp" && !isInk) {
         this.remoteResizeCurrent.delete(id);
         continue;
       }
-      // A stamp's committed start state is its box (centre−half-size → top-left, square size).
+      const inkBB = isInk ? this.inkBBox.get(id) : undefined;
+      // A stamp's committed start state is its box (centre−half-size → top-left, square size); ink's
+      // is its world AABB (cached in inkBBox).
       const startGeom =
         obj.type === "stamp"
           ? {
@@ -2286,7 +3088,15 @@ export class TextLayer {
               height: obj.size,
               fontSize: obj.size,
             }
-          : { x: obj.x, y: obj.y, width: obj.width, height: obj.height, fontSize: obj.fontSize };
+          : obj.type === "stroke" || obj.type === "connector"
+            ? {
+                x: inkBB?.x ?? 0,
+                y: inkBB?.y ?? 0,
+                width: inkBB?.width ?? 1,
+                height: inkBB?.height ?? 1,
+                fontSize: 0,
+              }
+            : { x: obj.x, y: obj.y, width: obj.width, height: obj.height, fontSize: obj.fontSize };
       const cur = this.remoteResizeCurrent.get(id) ?? startGeom;
       const nx = cur.x + (target.x - cur.x) * LERP;
       const nfs = cur.fontSize + (target.fontSize - cur.fontSize) * LERP;

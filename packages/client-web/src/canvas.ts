@@ -274,7 +274,7 @@ export class BoardCanvas {
   private widthPx = 8;
   private style: StrokeStyle = "solid";
   private opacity = 1; // fixed default — the pen panel has no opacity control yet
-  private drawing: { id: string; points: number[]; line: Konva.Line } | null = null;
+  private drawing: { id: string; points: number[] } | null = null;
   private marquee: Konva.Rect | null = null;
   private marqueeStart: { x: number; y: number } | null = null;
   private marqueeBase = new Set<string>();
@@ -479,6 +479,7 @@ export class BoardCanvas {
         // redraw the group box, fold the text selection into the count, and broadcast it so peers
         // see the text outline. reattachTransformer does all four (incl. notify + publish).
         this.reattachTransformer();
+        this.updateConnectorChrome(); // a connector is selected in the text layer now (ADR-0009 P3)
       },
       onCommitted: (keepTool) => {
         // Finishing a box placed with the text/sticky/shapes tool reverts to select (one-shot).
@@ -849,6 +850,7 @@ export class BoardCanvas {
         line.listening(true);
         line.points(np);
         line.hitStrokeWidth(Math.max(obj.width, 14));
+        line.opacity(0); // ADR-0009 P3 step1: the DOM <svg> is the visible paint; this node stays only for hit-testing
         if (!xf || committed) {
           line.position({ x: 0, y: 0 });
           line.scale({ x: 1, y: 1 });
@@ -875,6 +877,7 @@ export class BoardCanvas {
         line.listening(true);
         line.hitStrokeWidth(Math.max(obj.width, 14));
         line.setAttr(OBJ_ID_ATTR, obj.id);
+        line.opacity(0); // ADR-0009 P3 step1: DOM <svg> paints; node kept hittable-only
         this.content.add(line);
         this.nodeById.set(obj.id, line);
       }
@@ -901,16 +904,26 @@ export class BoardCanvas {
   }
 
   // ---- pen / drawing ----
+  /** The live StrokeObject for an in-progress draft preview, using the current pen style. */
+  private draftStroke(d: { id: string; points: number[] }): StrokeObject {
+    return {
+      id: d.id,
+      type: "stroke",
+      points: d.points,
+      color: this.color,
+      width: this.widthPx,
+      style: this.style,
+      opacity: this.opacity,
+      authorId: String(this.opts.awareness.clientID),
+    };
+  }
   private bindPointer(): void {
     this.stage.on("pointerdown", () => {
       if (this.tool !== "pen") return;
       const p = this.point();
-      const line = new Konva.Line({
-        points: [p.x, p.y],
-        ...this.lineConfig(this.color, this.widthPx, this.style, this.opacity),
-      });
-      this.content.add(line);
-      this.drawing = { id: randomId("st"), points: [p.x, p.y], line };
+      this.drawing = { id: randomId("st"), points: [p.x, p.y] };
+      // In-progress preview is a transient DOM <svg> on top of everything (ADR-0009 Phase 3 Step 6).
+      this.textLayer.upsertInkDraft("local", this.draftStroke(this.drawing));
     });
 
     this.stage.on("pointermove", () => {
@@ -926,8 +939,7 @@ export class BoardCanvas {
       if (this.tool === "stamp") this.updateStampGhost(p);
       if (!this.drawing) return;
       this.drawing.points.push(p.x, p.y);
-      this.drawing.line.points(this.drawing.points);
-      this.content.batchDraw();
+      this.textLayer.upsertInkDraft("local", this.draftStroke(this.drawing));
       // Stream the in-progress stroke to peers (throttled like cursors). It's ephemeral —
       // addStroke commits the finished stroke on finish(), so no doc/undo churn mid-draw.
       const now = Date.now();
@@ -948,7 +960,7 @@ export class BoardCanvas {
       const d = this.drawing;
       this.drawing = null;
       if (!d) return;
-      d.line.destroy(); // remove local preview; the doc observer re-adds it authoritatively
+      this.textLayer.removeInkDraft("local"); // drop the preview; the doc observer paints the committed svg
       if (d.points.length >= 4) {
         const stroke: StrokeObject = {
           id: d.id,
@@ -960,14 +972,10 @@ export class BoardCanvas {
           opacity: this.opacity,
           authorId: String(this.opts.awareness.clientID),
         };
-        addStroke(this.opts.doc, stroke); // commit first… (observer renders the node synchronously)
-        // …then draw the hit canvas NOW so the just-finished stroke is immediately clickable. The
-        // observer's content.batchDraw() defers the hit pass to the next animation frame, so without
-        // this an instant select-click after drawing resolves to the empty stage and misses the stroke.
-        this.content.drawHit();
+        // The committed stroke is hittable the instant the text-layer's observer populates `sizes`
+        // (geometry hit-test) — no Konva hit-graph priming needed (ADR-0009 Phase 3 Step 6).
+        addStroke(this.opts.doc, stroke);
         this.opts.onPlaced?.(); // a real stroke landed → collapse the mobile draw sheet
-      } else {
-        this.content.batchDraw();
       }
       this.opts.awareness.setLocalStateField("draw", null); // …then end the live preview
     };
@@ -1029,19 +1037,11 @@ export class BoardCanvas {
     this.stage.on("pointerleave", finishErase);
   }
 
-  /** Collect the object under one world point — the topmost Konva object (stroke / connector) and any
-   *  HTML text/shape box — into `batch` (a Set, so a point hit twice counts once). The caller deletes
-   *  the whole batch in a single transaction. */
+  /** Collect the topmost object under one world point into `batch` (a Set, so a point hit twice counts
+   *  once). `textLayer.hitTest` now resolves EVERY type — strokes, connectors, text, shapes, stickies,
+   *  stamps — by walking orderArray back-to-front (ADR-0009 Phase 3), so the eraser no longer needs the
+   *  Konva hit graph. The caller deletes the whole batch in a single transaction. */
   private eraseHits(world: { x: number; y: number }, batch: Set<string>): void {
-    const scale = this.stage.scaleX() || 1;
-    const node = this.stage.getIntersection({
-      x: world.x * scale + this.stage.x(),
-      y: world.y * scale + this.stage.y(),
-    });
-    if (node) {
-      const id = this.objIdOf(node);
-      if (id) batch.add(id);
-    }
     const tid = this.textLayer.hitTest(world);
     if (tid) batch.add(tid);
   }
@@ -1492,6 +1492,7 @@ export class BoardCanvas {
         this.connectorNodes.set(id, group);
       }
       this.drawConnector(group, obj, this.connectorSelColor(id));
+      group.opacity(0); // ADR-0009 P3 step1: DOM <svg> paints the connector; group kept hittable-only
       group.visible(!this.remoteConnectorIds.has(id)); // hidden while a peer is live-editing it
     });
     for (const [id, group] of this.connectorNodes) {
@@ -1595,12 +1596,9 @@ export class BoardCanvas {
             // draw mode for rapid diagramming (the observeDeep above already created its group, so the
             // selection chrome can attach). publishSelection goes out after the addConnector commit.
             this.selected.clear();
-            this.reattachTransformer();
-            this.selectedConnectors.clear();
-            this.selectedConnectors.add(d.id);
-            this.refreshConnectorSelection(); // re-tint + show the endpoint handles / edit bar
-            this.notifySelection();
-            this.publishSelection();
+            // ADR-0009 P3: select the new connector in the text layer (unified path). selectText →
+            // onSelectionChange → reattachTransformer (notify + publish) + updateConnectorChrome (handles/bar).
+            this.textLayer.selectText(d.id);
             this.opts.requestTool?.("select");
           } else {
             this.opts.onPlaced?.(); // bound → collapse the mobile sheet, keep the connector tool active
@@ -1637,9 +1635,14 @@ export class BoardCanvas {
 
   /** The single selected connector id, or null when the selection isn't exactly one connector. */
   private soleSelectedConnector(): string | null {
-    if (this.selectedConnectors.size !== 1 || this.selected.size || this.textLayer.selectedCount())
-      return null;
-    return [...this.selectedConnectors][0] ?? null;
+    // Connectors are selected in the text layer now (ADR-0009 P3): sole = exactly one text-layer
+    // selection that is a connector, with no Konva-stroke selection alongside.
+    if (this.selected.size) return null;
+    const ids = this.textLayer.selectedIds();
+    if (ids.length !== 1 || ids[0] == null) return null;
+    const m = this.objects.get(ids[0]);
+    const obj = m ? readObject(m) : null;
+    return obj?.type === "connector" ? ids[0] : null;
   }
 
   private clientToWorld(clientX: number, clientY: number): { x: number; y: number } {
@@ -1709,6 +1712,8 @@ export class BoardCanvas {
     const obj = m ? readObject(m) : null;
     if (obj?.type !== "connector") return;
     const draft: ConnectorObject = { ...obj, [which]: end };
+    // The visible connector is the DOM <svg> now (the Konva node is opacity 0) — repaint it live.
+    this.textLayer.previewConnector(id, which === "from" ? { from: end } : { to: end });
     const group = this.connectorNodes.get(id);
     if (group) this.drawConnector(group, draft, SELECT_BLUE);
     this.connectorLayer.batchDraw();
@@ -2084,6 +2089,7 @@ export class BoardCanvas {
           !shift &&
           this.selected.size === 0 &&
           !this.textLayer.isStampId(tid) && // a stamp isn't text-editable → no two-click-to-edit
+          !this.textLayer.isInkId(tid) && // nor is a stroke (ADR-0009 P3)
           this.textLayer.isSelected(tid) &&
           this.textLayer.selectedIds().length === 1;
         const recent =
@@ -2111,20 +2117,10 @@ export class BoardCanvas {
         this.clearConnectorSelection();
       }
       if (id && this.connectorNodes.has(id)) {
-        // Connector click → select it (shift toggles). v1 has no transformer/move-drag for connectors.
-        if (!shift) {
-          this.selected.clear();
-          this.reattachTransformer();
-          this.selectedConnectors.clear();
-        }
-        if (shift && this.selectedConnectors.has(id)) this.selectedConnectors.delete(id);
-        else this.selectedConnectors.add(id);
-        this.refreshConnectorSelection();
-        this.connectorLayer.batchDraw();
-        // Re-evaluate the transform box vs the union group box (a connector shift-added to a stroke
-        // selection makes it mixed) and redraw + notify + publish.
-        this.reattachTransformer();
-        if (this.selectedConnectors.has(id)) this.beginConnectorMove(); // drag the body to move it
+        // The DOM hit-test narrowly missed a connector that the Konva node caught → select it in the
+        // text layer (the unified path), same as a `tid` hit. ADR-0009 P3.
+        if (shift || !this.textLayer.isSelected(id)) this.textLayer.selectText(id, shift);
+        this.textLayer.beginMove(this.point());
         return;
       }
       if (id) {
@@ -2209,7 +2205,7 @@ export class BoardCanvas {
   }
   /** Select every object on the board (⌘A). */
   selectAll(): void {
-    this.setSelection([...this.nodeById.keys()]);
+    this.setSelection([]); // strokes select via the text-layer now (ADR-0009 P3); canvas.selected unused
     this.textLayer.selectAll();
     for (const id of this.connectorNodes.keys()) this.selectedConnectors.add(id);
     this.refreshConnectorSelection();
@@ -2973,15 +2969,11 @@ export class BoardCanvas {
     this.applyMarquee(box);
   }
   private applyMarquee(box: Rect): void {
+    // Strokes are text-layer objects now (ADR-0009 P3) → marquee-selected via selectInBox below, not
+    // the Konva hit graph; canvas.selected only carries marqueeBase (legacy, normally empty).
     const hits = new Set(this.marqueeBase);
-    if (box.width >= 2 || box.height >= 2) {
-      for (const [id, node] of this.nodeById) {
-        if (!node.visible()) continue; // culled (off-screen) → can't be inside an on-screen marquee
-        if (rectsIntersect(box, this.nodeRect(id, node))) hits.add(id);
-      }
-    }
     this.setSelection([...hits]);
-    this.textLayer.selectInBox(box, this.marqueeAdditive); // text isn't a Konva node — select it separately
+    this.textLayer.selectInBox(box, this.marqueeAdditive); // text/strokes aren't Konva nodes — select separately
     this.selectConnectorsInBox(box); // connectors aren't in nodeById — test their polyline bbox
     // All three subsystems are settled now — re-evaluate the transform box vs the union group box and
     // redraw it (setSelection ran before text/connectors were known, so its box pass was incomplete).
@@ -3557,10 +3549,9 @@ export class BoardCanvas {
   /** Abort any in-progress single-pointer gesture (used when a pinch begins). */
   private cancelGestures(): void {
     if (this.drawing) {
-      this.drawing.line.destroy();
+      this.textLayer.removeInkDraft("local"); // cancelled → drop the DOM preview
       this.drawing = null;
       this.opts.awareness.setLocalStateField("draw", null); // cancelled → stop the live preview
-      this.content.batchDraw();
     }
     if (this.marquee) this.cancelMarquee();
     if (this.moveState) {

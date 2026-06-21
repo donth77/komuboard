@@ -2291,6 +2291,20 @@ input[type="range"] {
   box-shadow: 0 0 0 1.5px #4a9eff;
   border-radius: 2px;
 }
+/* ── Ink (strokes + connectors) rendered as SVG, ADR-0009 Phase 3 ─────────────────────────────── */
+/* Each stroke/connector is its own <svg>, positioned in screen space (left/top) + scale() for zoom;
+   the path coords are in a local box. pointer-events:none → clicks pass to the canvas (hit-test). */
+.co-ink {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible; /* round caps / arrowheads draw past the AABB box */
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.co-ink * {
+  pointer-events: none;
+}
 /* ── Sticky notes — a text box with a `bg` renders as a coloured, padded, square card ─────────── */
 .co-text.sticky {
   padding: 1.2em;
@@ -2625,6 +2639,12 @@ input[type="range"] {
 /* A stamp resizes uniformly (square) → corner handles only; hide the w/e side handles too. */
 .co-text-resize-stamp .co-text-handle.h-w,
 .co-text-resize-stamp .co-text-handle.h-e {
+  display: none;
+}
+/* ADR-0009 P3 Step 2: a selected stroke shows only the outline box — resize/rotate handles arrive
+   in Step 3 (gating them off here keeps a handle-drag from mis-committing through the text path). */
+.co-text-resize-stroke .co-text-handle,
+.co-text-resize-stroke .co-text-rotate {
   display: none;
 }
 /* Rotation zones — invisible squares just OUTSIDE each corner. Hover shows a curved double-arrow
