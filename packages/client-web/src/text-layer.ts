@@ -17,6 +17,7 @@ import {
   DEFAULT_SHAPE_H,
   DEFAULT_SHAPE_W,
   DEFAULT_STICKY_SIZE,
+  DEFAULT_STICKY_TEXT_SIZE,
   DEFAULT_TEXT_FONT,
   DEFAULT_TEXT_SIZE,
   deleteObject,
@@ -49,6 +50,7 @@ import {
   toggleBulletRuns,
 } from "./text-runs";
 import { TextBar, type TextBarState } from "./text-bar";
+import { ROTATE_CURSORS } from "./cursors";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
@@ -204,6 +206,11 @@ function sameResizeMap(a: Map<string, ResizeGeom>, b: Map<string, ResizeGeom>): 
   }
   return true;
 }
+function sameNumMap(a: Map<string, number>, b: Map<string, number>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) if (b.get(k) !== v) return false;
+  return true;
+}
 
 export class TextLayer {
   private readonly root: HTMLDivElement;
@@ -250,6 +257,9 @@ export class TextLayer {
   private remoteResize = new Map<string, ResizeGeom>();
   private readonly remoteResizeCurrent = new Map<string, ResizeGeom>();
   private lastResizeSent = 0;
+  /** Peers' in-progress rotation (box id → degrees), applied straight to the render; cleared on release. */
+  private remoteRotate = new Map<string, number>();
+  private lastRotateSent = 0;
   /** Handle box for a single text selection (created lazily), + the in-progress resize. */
   private resizeEl: HTMLDivElement | null = null;
   /** Container for connector "dots" (the 4 side attach points) drawn on shapes; created lazily. */
@@ -283,6 +293,21 @@ export class TextLayer {
     /** Aspect ratio frozen the instant Shift goes down mid-resize (so the lock starts from the
      *  current in-progress shape, not the box's original proportions). Cleared when Shift lifts. */
     lock?: { w: number; h: number };
+  } | null = null;
+  /** Live rotation drag preview (degrees) for one box; effectiveGeom prefers it over the doc value. */
+  private rotatePreview: { id: string; rotation: number } | null = null;
+  /** Live geometry preview while the canvas resizes/rotates a multi-node GROUP that includes this box.
+   *  Keyed by id; effectiveGeom prefers it over everything (it's my own in-progress group gesture). */
+  private groupPreview: Map<
+    string,
+    { x: number; y: number; width: number; height: number; fontSize: number; rotation: number }
+  > | null = null;
+  private rotating: {
+    id: string;
+    cx: number; // box centre in screen px
+    cy: number;
+    startAngle: number; // pointer angle (rad) from the centre at drag start
+    startRotation: number; // the box's committed rotation when the drag began
   } | null = null;
 
   // --- selection + move (driven by the canvas's select tool; text keeps its own chrome) ---
@@ -352,6 +377,7 @@ export class TextLayer {
       this.root.appendChild(el); // (re)append in z-order — cheap for a handful of boxes
       const g = this.effectiveGeom(id, obj);
       this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
+      this.applyRotation(el, g.rotation); // CSS rotate about the box centre (after layout sets the box)
     }
     for (const [id, el] of this.els) {
       if (seen.has(id)) continue;
@@ -483,6 +509,31 @@ export class TextLayer {
     }
   }
 
+  /** Apply (or clear) a CSS rotation about the centre — used on a box and on its resize chrome so the
+   *  two stay aligned. transform-origin centre keeps the box's centre fixed as it spins. */
+  private applyRotation(el: HTMLElement, deg: number): void {
+    el.style.transformOrigin = "center";
+    el.style.transform = deg ? `rotate(${deg}deg)` : "";
+  }
+
+  /** Rotate every selected box by `delta`° about its own centre (keyboard nudge); one transaction.
+   *  Returns true when it rotated at least one box. */
+  rotateSelected(delta: number): boolean {
+    let any = false;
+    this.opts.doc.transact(() => {
+      for (const id of this.selected) {
+        const m = this.objects.get(id);
+        const obj = m ? readObject(m) : null;
+        if (obj?.type !== "text") continue;
+        setTextGeometry(this.opts.doc, id, {
+          rotation: ((((obj.rotation ?? 0) + delta) % 360) + 360) % 360,
+        });
+        any = true;
+      }
+    });
+    return any;
+  }
+
   /** Re-lay-out + re-measure a single box — used when it's un-hidden after a peer's edit ends, so
    *  its size cache refreshes now that it's visible again (a render while hidden would have cached 0). */
   private relayoutBox(id: string): void {
@@ -492,6 +543,7 @@ export class TextLayer {
     if (!el || obj?.type !== "text") return;
     const g = this.effectiveGeom(id, obj);
     this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
+    this.applyRotation(el, g.rotation);
   }
 
   /** Swap in a new set of peer-edited ids: hide/un-hide the affected copies, then re-measure any
@@ -619,7 +671,7 @@ export class TextLayer {
       world.x - DEFAULT_STICKY_SIZE / 2,
       world.y - DEFAULT_STICKY_SIZE / 2,
       DEFAULT_STICKY_SIZE,
-      DEFAULT_TEXT_SIZE,
+      DEFAULT_STICKY_TEXT_SIZE,
       DEFAULT_TEXT_FONT,
       "center",
     );
@@ -684,7 +736,7 @@ export class TextLayer {
         x: world.x - DEFAULT_STICKY_SIZE / 2,
         y: world.y - DEFAULT_STICKY_SIZE / 2,
         width: DEFAULT_STICKY_SIZE,
-        fontSize: DEFAULT_TEXT_SIZE,
+        fontSize: DEFAULT_STICKY_TEXT_SIZE,
         fontFamily: DEFAULT_TEXT_FONT,
         align: "left",
         bg: color,
@@ -1090,7 +1142,12 @@ export class TextLayer {
     const id = ids.length === 1 ? ids[0]! : null;
     const obj = id ? this.boxObj(id) : null;
     const show =
-      !!obj && !this.moveState && !this.resizing && id != null && !this.remoteEditIds.has(id);
+      !!obj &&
+      !this.moveState &&
+      !this.resizing &&
+      !this.groupSelected && // in a multi-node group the box has no individual toolbar
+      id != null &&
+      !this.remoteEditIds.has(id);
     if (!show) {
       if (this.barSelId !== null) {
         this.barSelId = null;
@@ -1237,8 +1294,10 @@ export class TextLayer {
     this.moveState = { startX: world.x, startY: world.y, dx: 0, dy: 0 };
     this.updateSelectionBar(); // hide the floating toolbar while dragging (re-shows on release)
   }
-  /** Live drag: offset the selected boxes in the overlay (committed to the doc on release). */
-  moveTo(world: { x: number; y: number }): void {
+  /** Live drag: offset the selected boxes in the overlay (committed to the doc on release).
+   *  `broadcast` is false during a canvas-driven group move — the canvas sends ONE unified "drag"
+   *  awareness field for all stroke + text ids, so the per-layer broadcast must not overwrite it. */
+  moveTo(world: { x: number; y: number }, broadcast = true): void {
     const mv = this.moveState;
     if (!mv) return;
     mv.dx = world.x - mv.startX;
@@ -1263,7 +1322,7 @@ export class TextLayer {
     this.opts.onShapesMoved?.(); // re-route connectors bound to the moving shapes (live)
     // Stream the live drag to peers (throttled) — ephemeral, the doc commits on release.
     const now = Date.now();
-    if (now - this.lastTextDragSent >= EDIT_BROADCAST_MS) {
+    if (broadcast && now - this.lastTextDragSent >= EDIT_BROADCAST_MS) {
       this.lastTextDragSent = now;
       this.opts.awareness.setLocalStateField("drag", {
         ids: [...this.selected],
@@ -1303,7 +1362,25 @@ export class TextLayer {
     width: number | undefined;
     height: number | undefined;
     fontSize: number;
+    rotation: number;
   } {
+    // A local group transform (canvas-driven resize/rotate of the whole selection) wins over all.
+    const gp = this.groupPreview?.get(id);
+    if (gp) {
+      return {
+        x: gp.x,
+        y: gp.y,
+        width: gp.width,
+        height: gp.height,
+        fontSize: gp.fontSize,
+        rotation: gp.rotation,
+      };
+    }
+    // My live drag wins, then a peer's live rotation, else the committed doc value.
+    const rotation =
+      this.rotatePreview?.id === id
+        ? this.rotatePreview.rotation
+        : (this.remoteRotate.get(id) ?? obj.rotation ?? 0);
     const pv = this.resizePreview;
     if (pv?.id === id) {
       return {
@@ -1312,6 +1389,7 @@ export class TextLayer {
         width: pv.width,
         height: pv.height ?? obj.height,
         fontSize: pv.fontSize,
+        rotation,
       };
     }
     const rr = this.remoteResizeCurrent.get(id); // a peer's in-progress resize (glided)
@@ -1322,6 +1400,7 @@ export class TextLayer {
         width: rr.width,
         height: rr.height ?? obj.height,
         fontSize: rr.fontSize,
+        rotation,
       };
     }
     const off = this.moveOffset(id);
@@ -1331,6 +1410,7 @@ export class TextLayer {
       width: obj.width,
       height: obj.height,
       fontSize: obj.fontSize,
+      rotation,
     };
   }
 
@@ -1356,6 +1436,108 @@ export class TextLayer {
     return { x: g.x, y: g.y, width, height };
   }
 
+  /** Live world AABBs of every currently-selected text/sticky/shape box, so the canvas can fold
+   *  them into one union selection box spanning all node types (strokes + text + connectors).
+   *  Tracks in-progress moves/resizes via effectiveGeom. */
+  selectedWorldRects(): { x: number; y: number; width: number; height: number }[] {
+    const out: { x: number; y: number; width: number; height: number }[] = [];
+    for (const id of this.selected) {
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (obj?.type !== "text") continue;
+      const g = this.effectiveGeom(id, obj);
+      const sz = this.sizes.get(id);
+      const width = g.width ?? obj.width ?? sz?.w ?? 0;
+      const height = g.height ?? obj.height ?? sz?.h ?? 0;
+      out.push({ x: g.x, y: g.y, width, height });
+    }
+    return out;
+  }
+
+  /** Live world rect of ANY text / sticky / shape box by id (regardless of local selection) — for
+   *  the canvas to fold a *peer's* selection into a group box. null if `id` isn't a text box. */
+  worldRectOf(id: string): { x: number; y: number; width: number; height: number } | null {
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    if (obj?.type !== "text") return null;
+    const g = this.effectiveGeom(id, obj);
+    const sz = this.sizes.get(id);
+    const width = g.width ?? obj.width ?? sz?.w ?? 0;
+    const height = g.height ?? obj.height ?? sz?.h ?? 0;
+    return { x: g.x, y: g.y, width, height };
+  }
+
+  // ---- group transform: the canvas resizes/rotates a whole multi-node selection as one unit and
+  //      drives each text/sticky/shape box's geometry through here (live preview + doc commit) ----
+
+  /** Full live geometry of a box (x/y top-left, w/h, rotation°, fontSize) — start state for a group
+   *  transform. Includes any in-progress preview. null if `id` isn't a text box. */
+  boxGeomOf(id: string): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation: number;
+    fontSize: number;
+  } | null {
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    if (obj?.type !== "text") return null;
+    const g = this.effectiveGeom(id, obj);
+    const sz = this.sizes.get(id);
+    return {
+      x: g.x,
+      y: g.y,
+      width: g.width ?? obj.width ?? sz?.w ?? 0,
+      height: g.height ?? obj.height ?? sz?.h ?? 0,
+      rotation: g.rotation,
+      fontSize: g.fontSize,
+    };
+  }
+
+  /** Live-preview the boxes under a group transform (re-lays them out at the previewed geometry). */
+  setGroupPreview(
+    preview: Map<
+      string,
+      { x: number; y: number; width: number; height: number; fontSize: number; rotation: number }
+    >,
+  ): void {
+    this.groupPreview = preview;
+    for (const id of preview.keys()) {
+      const el = this.els.get(id);
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (!el || obj?.type !== "text") continue;
+      const g = this.effectiveGeom(id, obj);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
+      this.applyRotation(el, g.rotation);
+    }
+  }
+  clearGroupPreview(): void {
+    this.groupPreview = null;
+  }
+  /** Commit one box's group-transformed geometry to the doc (call inside the canvas's transaction). */
+  commitGroupTransform(
+    id: string,
+    geom: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+      fontSize: number;
+    },
+  ): void {
+    setTextGeometry(this.opts.doc, id, {
+      x: geom.x,
+      y: geom.y,
+      width: geom.width,
+      height: geom.height,
+      rotation: geom.rotation,
+    });
+    setTextStyle(this.opts.doc, id, { fontSize: geom.fontSize });
+  }
+
   // ---- resize (a handle box around a single selected box — text isn't a Konva node, so the
   //      Konva transformer can't bound it; side handles change width, corners scale the font) ----
 
@@ -1363,6 +1545,15 @@ export class TextLayer {
     if (this.resizeEl) return this.resizeEl;
     const box = document.createElement("div");
     box.className = "co-text-resize";
+    // Rotation zones just OUTSIDE each corner (appended first → under the resize handles, so the
+    // corner itself still resizes while the area just beyond it rotates). Hover → rotate cursor.
+    for (const c of ["nw", "ne", "sw", "se"] as const) {
+      const rd = document.createElement("div");
+      rd.className = `co-text-rotate r-${c}`;
+      rd.style.cursor = ROTATE_CURSORS[c]; // shared rotate cursor (same one strokes/stamps use)
+      rd.addEventListener("pointerdown", (e) => this.beginRotate(e));
+      box.appendChild(rd);
+    }
     // n/s handles only matter for shapes (free height); they're hidden for text/sticky (auto-height).
     for (const h of ["nw", "ne", "sw", "se", "w", "e", "n", "s"]) {
       const hd = document.createElement("div");
@@ -1380,7 +1571,9 @@ export class TextLayer {
     const ids = [...this.selected];
     const id = ids.length === 1 ? ids[0] : undefined;
     const el = id ? this.els.get(id) : undefined;
-    if (!id || !el || this.edit || this.remoteEditIds.has(id)) {
+    // Hidden for 0 / many / editing, AND when this box is one node inside a multi-node group — the
+    // group's own transform box owns resize/rotate there, so no per-box handles.
+    if (!id || !el || this.edit || this.remoteEditIds.has(id) || this.groupSelected) {
       if (this.resizeEl) this.resizeEl.style.display = "none";
     } else {
       const box = this.ensureResizeEl();
@@ -1392,8 +1585,20 @@ export class TextLayer {
       box.style.height = `${el.offsetHeight}px`;
       // A shape has free width×height → show the n/s (vertical) handles; text/sticky don't.
       box.classList.toggle("co-text-resize-shape", el.classList.contains("shape"));
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      this.applyRotation(box, obj?.type === "text" ? this.effectiveGeom(id, obj).rotation : 0);
     }
     this.updateConnectorDots(); // dots also show in connector mode with no/multi selection
+  }
+
+  /** True while the board-wide selection spans 2+ nodes (a group). The canvas drives this; in a group
+   *  a selected shape hides its connector snap dots (you're moving the group, not drawing connectors). */
+  private groupSelected = false;
+  setGroupSelected(on: boolean): void {
+    if (this.groupSelected === on) return;
+    this.groupSelected = on;
+    this.refreshSelectionChrome(); // re-evaluate resize handles + toolbar + snap dots for the new state
   }
 
   /** Show every shape's connector dots while the line/arrow tool is active (not just the selected
@@ -1419,10 +1624,13 @@ export class TextLayer {
   private updateConnectorDots(): void {
     const ids = new Set<string>();
     if (this.connectorMode) for (const id of this.shapeIds()) ids.add(id);
-    for (const id of this.selected) {
-      const m = this.objects.get(id);
-      if (m?.get("type") === "text" && m.get("shape") != null) ids.add(id);
-    }
+    // A selected shape shows its snap dots only when it's the SOLE selection — in a multi-node group
+    // you're dragging the group, so the dots are just clutter overlapping the union box.
+    if (!this.groupSelected)
+      for (const id of this.selected) {
+        const m = this.objects.get(id);
+        if (m?.get("type") === "text" && m.get("shape") != null) ids.add(id);
+      }
     if (this.edit?.id) ids.delete(this.edit.id); // not while editing the box's text
     if (!this.dotsEl) {
       this.dotsEl = document.createElement("div");
@@ -1643,6 +1851,63 @@ export class TextLayer {
     this.updateSelectionBar(); // resizing cleared → re-show the toolbar for the selected box
   };
 
+  // ---- rotation (drag a corner rotate-zone to spin the box about its centre) ----
+  private beginRotate(e: PointerEvent): void {
+    e.preventDefault();
+    e.stopPropagation(); // a rotate drag is not a canvas marquee/move
+    const id = this.resizeEl?.dataset.id;
+    const el = id ? this.els.get(id) : undefined;
+    const m = id ? this.objects.get(id) : undefined;
+    const obj = m ? readObject(m) : null;
+    if (!id || !el || obj?.type !== "text") return;
+    const r = el.getBoundingClientRect(); // centre is rotation-invariant (CSS rotate about centre)
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    this.rotating = {
+      id,
+      cx,
+      cy,
+      startAngle: Math.atan2(e.clientY - cy, e.clientX - cx),
+      startRotation: obj.rotation ?? 0,
+    };
+    this.updateSelectionBar(); // hide the floating toolbar while rotating
+    window.addEventListener("pointermove", this.onRotateMove);
+    window.addEventListener("pointerup", this.onRotateUp);
+  }
+
+  private readonly onRotateMove = (e: PointerEvent): void => {
+    const rs = this.rotating;
+    if (!rs) return;
+    this.publishCursorAt(e.clientX, e.clientY); // keep peers' view of my cursor on the handle
+    const angle = Math.atan2(e.clientY - rs.cy, e.clientX - rs.cx);
+    let deg = rs.startRotation + ((angle - rs.startAngle) * 180) / Math.PI;
+    if (e.shiftKey) deg = Math.round(deg / 15) * 15; // Shift snaps to 15°
+    deg = ((deg % 360) + 360) % 360;
+    this.rotatePreview = { id: rs.id, rotation: deg };
+    const el = this.els.get(rs.id);
+    if (el) this.applyRotation(el, deg); // live: spin the box + its chrome without a full re-render
+    if (this.resizeEl) this.applyRotation(this.resizeEl, deg);
+    // Stream the live rotation to peers (throttled) — ephemeral; the doc commits on release.
+    const now = Date.now();
+    if (now - this.lastRotateSent >= EDIT_BROADCAST_MS) {
+      this.lastRotateSent = now;
+      this.opts.awareness.setLocalStateField("textrotate", { id: rs.id, rotation: deg });
+    }
+  };
+
+  private readonly onRotateUp = (): void => {
+    const rs = this.rotating;
+    this.rotating = null;
+    window.removeEventListener("pointermove", this.onRotateMove);
+    window.removeEventListener("pointerup", this.onRotateUp);
+    if (!rs) return;
+    const deg = this.rotatePreview?.rotation ?? rs.startRotation;
+    this.rotatePreview = null;
+    setTextGeometry(this.opts.doc, rs.id, { rotation: deg }); // commit (syncs the final angle)…
+    this.opts.awareness.setLocalStateField("textrotate", null); // …then drop the live preview
+    this.updateSelectionBar();
+  };
+
   // ---- remote selection + drag (peers' presence on committed text boxes) ----
 
   /** Mirror peers' text selection (colour rings) + in-progress text drags (offsets), read from the
@@ -1653,12 +1918,14 @@ export class TextLayer {
     const sel = new Map<string, string>();
     const drag = new Map<string, { dx: number; dy: number }>();
     const resize = new Map<string, ResizeGeom>();
+    const rotate = new Map<string, number>();
     for (const [cid, raw] of states) {
       if (cid === local) continue;
       const st = raw as {
         selection?: unknown;
         drag?: unknown;
         textresize?: unknown;
+        textrotate?: unknown;
         color?: unknown;
       };
       const color = typeof st.color === "string" ? st.color : "#2563eb";
@@ -1701,15 +1968,26 @@ export class TextLayer {
         if (typeof tr.height === "number") g.height = tr.height;
         resize.set(tr.id, g);
       }
+      const trot = st.textrotate as { id?: unknown; rotation?: unknown } | undefined;
+      if (
+        trot &&
+        typeof trot.id === "string" &&
+        this.els.has(trot.id) &&
+        typeof trot.rotation === "number"
+      ) {
+        rotate.set(trot.id, trot.rotation);
+      }
     }
     // Idle fast-path: nothing remote now or before → skip the chrome/layout passes.
     if (
       !sel.size &&
       !drag.size &&
       !resize.size &&
+      !rotate.size &&
       !this.remoteSelColor.size &&
       !this.remoteDrag.size &&
-      !this.remoteResize.size
+      !this.remoteResize.size &&
+      !this.remoteRotate.size
     ) {
       return;
     }
@@ -1721,6 +1999,16 @@ export class TextLayer {
     this.remoteResize = resize;
     if (selChanged) this.refreshSelectionChrome();
     if (dragChanged || resizeChanged) this.ensureGlide(); // glide toward the new target
+    // Peers' live rotation is applied straight to the box (no glide — 30 Hz is smooth enough); relayout
+    // each box that just gained or lost a remote rotation.
+    if (!sameNumMap(rotate, this.remoteRotate)) {
+      const affected = new Set([...rotate.keys(), ...this.remoteRotate.keys()]);
+      this.remoteRotate = rotate;
+      for (const id of affected) this.relayoutBox(id);
+      this.updateResizeChrome();
+    } else {
+      this.remoteRotate = rotate;
+    }
   }
 
   /** Re-lay-out every committed box at its effective (local or remote) drag offset. */

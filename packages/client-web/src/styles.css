@@ -1493,6 +1493,318 @@ input[type="range"] {
   background: var(--border, #e4e7ec);
 }
 
+/* ── Stamp wheel (<co-stamp-wheel>) — FigJam-style radial picker shown with the Stamp tool.
+   Outer ring = 8 gray pie-wedge slots (7 colour mark stickers + the user avatar), inner light-blue
+   disc = recent emojis around a "+". The wedge <path>s are the click/hover targets; the mark icons
+   + avatar ride on top (pointer-events:none) so the whole wedge is hot. Items are centred on their
+   ring anchor with negative margins, leaving `transform` free for the entrance animation. */
+.co-stamp-wheel {
+  position: absolute;
+  left: 84px; /* mirrors the other sheets — just right of the dock */
+  top: calc(56px + (100vh - 56px) / 2);
+  transform: translateY(-50%);
+  z-index: 40;
+  width: 280px;
+  height: 280px;
+  contain: layout paint; /* isolate the wheel's repaints from app-wide transitions (theme switch) */
+}
+.co-stamp-wheel.hidden {
+  display: none;
+}
+.sw-disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+/* the 8-wedge ring */
+.sw-wedges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* only the painted wedges are hot (so the inner disc stays clickable) */
+}
+.sw-wedge {
+  fill: var(--surface-2);
+  stroke: var(--surface); /* crisp white separators between wedges */
+  stroke-width: 2;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: fill 60ms linear;
+}
+.sw-wedge:hover {
+  fill: color-mix(in srgb, var(--accent) 13%, var(--surface-2));
+}
+.sw-wedge.on {
+  fill: color-mix(in srgb, var(--accent) 24%, var(--surface-2));
+}
+/* colour mark stickers — the colour + white outline is baked into the SVG asset; here we just size
+   it and add a soft drop shadow for depth (so it reads as a sticker sitting in the wheel). */
+.sw-ico {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  margin: -25px 0 0 -25px;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgba(16, 17, 22, 0.3));
+}
+/* avatar slot — photo (cover) or colour + initials, ringed white like the other stickers */
+.sw-avatar {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background-color: var(--av, #8a90a2);
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+  font:
+    600 17px Inter,
+    system-ui,
+    sans-serif;
+  border: 2px solid var(--surface);
+  box-shadow: 0 2px 5px rgba(16, 17, 22, 0.3);
+}
+/* inner recents disc (light-blue, like FigJam) */
+.sw-inner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 132px;
+  height: 132px;
+  margin: -66px 0 0 -66px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.co-stamp-wheel button {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.sw-emoji {
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  transition: transform 130ms var(--ease, ease-out);
+  will-change: transform; /* own layer → hover scale composites without re-rasterising the filter */
+}
+.sw-emoji img {
+  width: 26px;
+  height: 26px;
+  pointer-events: none;
+  /* The white sticker outline is baked into the image (emojiStickerUrl); just a cheap depth shadow
+     here — the old 9-pass white-outline filter re-rasterised on every repaint and tanked the wheel. */
+  filter: drop-shadow(0 1px 1px rgba(16, 17, 22, 0.28));
+}
+.sw-emoji:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  transform: scale(1.22);
+}
+.sw-emoji.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.sw-plus {
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  color: var(--accent);
+  background: var(--surface) !important;
+  box-shadow: 0 1px 4px rgba(16, 17, 22, 0.2);
+  transition: transform 130ms var(--ease, ease-out);
+  will-change: transform;
+}
+.sw-plus svg {
+  width: 18px;
+  height: 18px;
+}
+.sw-plus:hover {
+  background: var(--surface-2) !important;
+  transform: scale(1.13);
+}
+
+/* Entrance: the wedge ring + sticker icons scale in first, then the inner emoji disc + "+" pop in
+   just after — gated behind `.sw-intro` (added by main.ts when the Stamp tool opens) so the wheel
+   only animates on open, not on every recents re-render. */
+@keyframes sw-disc-in {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes sw-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.co-stamp-wheel.sw-intro .sw-disc,
+.co-stamp-wheel.sw-intro .sw-wedges,
+.co-stamp-wheel.sw-intro .sw-ico,
+.co-stamp-wheel.sw-intro .sw-avatar,
+.co-stamp-wheel.sw-intro .sw-inner,
+.co-stamp-wheel.sw-intro .sw-emoji,
+.co-stamp-wheel.sw-intro .sw-plus {
+  will-change: transform, opacity; /* promote to GPU layers for the duration of the entrance */
+}
+.co-stamp-wheel.sw-intro .sw-disc,
+.co-stamp-wheel.sw-intro .sw-wedges {
+  animation: sw-disc-in 280ms var(--ease, ease-out) both;
+}
+.co-stamp-wheel.sw-intro .sw-ico,
+.co-stamp-wheel.sw-intro .sw-avatar {
+  animation: sw-pop-in 320ms var(--ease, ease-out) both;
+}
+.co-stamp-wheel.sw-intro .sw-inner {
+  animation: sw-disc-in 300ms var(--ease, ease-out) 160ms both;
+}
+.co-stamp-wheel.sw-intro .sw-emoji,
+.co-stamp-wheel.sw-intro .sw-plus {
+  animation: sw-pop-in 280ms var(--ease, ease-out) 200ms both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .co-stamp-wheel.sw-intro .sw-disc,
+  .co-stamp-wheel.sw-intro .sw-wedges,
+  .co-stamp-wheel.sw-intro .sw-ico,
+  .co-stamp-wheel.sw-intro .sw-avatar,
+  .co-stamp-wheel.sw-intro .sw-inner,
+  .co-stamp-wheel.sw-intro .sw-emoji,
+  .co-stamp-wheel.sw-intro .sw-plus {
+    animation: none;
+  }
+}
+
+/* ── Emoji picker (<co-emoji-picker>) — full Noto grid opened from the wheel's "+" ── */
+.co-emoji-picker {
+  position: absolute;
+  left: 340px; /* clears the wheel (left 84 + width 244 = 328) */
+  top: calc(56px + (100vh - 56px) / 2);
+  transform: translateY(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  height: 384px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.co-emoji-picker.hidden {
+  display: none;
+}
+.ep-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  border-bottom: 1px solid var(--surface-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ep-tabs::-webkit-scrollbar {
+  display: none;
+}
+.ep-tab {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.65;
+}
+.ep-tab img {
+  width: 20px;
+  height: 20px;
+}
+.ep-tab:hover {
+  background: var(--surface-2);
+  opacity: 1;
+}
+.ep-tab.on {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  opacity: 1;
+}
+.ep-search {
+  padding: 8px 8px 6px;
+}
+.ep-search input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.ep-search input:focus {
+  border-color: var(--accent);
+}
+.ep-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  align-content: start;
+}
+.ep-emoji {
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.ep-emoji img {
+  width: 26px;
+  height: 26px;
+}
+.ep-emoji:hover {
+  background: var(--surface-2);
+}
+.ep-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--muted);
+  padding: 28px 0;
+  font-size: 13px;
+}
+
 /* the button row: a vertical stack on desktop (becomes a horizontal row on the mobile sheet) */
 .db-row {
   display: flex;
@@ -1784,6 +2096,24 @@ input[type="range"] {
   /* the handle spans the full grid width as its own top row */
   .shape-menu > .sheet-handle {
     grid-column: 1 / -1;
+  }
+  /* Stamp wheel + emoji picker float centred above the bottom dock (they're not mini-sheets — a
+     radial wheel doesn't fit the slide-up clip). The picker overlays the wheel while open. */
+  /* The wheel's containing block (#app) ends at the dock's top edge, so `bottom` is measured from
+     there — a small value sits it right above the toolbar. */
+  .co-stamp-wheel {
+    left: 50%;
+    top: auto;
+    bottom: 8px;
+    transform: translateX(-50%);
+  }
+  .co-emoji-picker {
+    left: 50%;
+    top: auto;
+    bottom: 8px;
+    transform: translateX(-50%);
+    width: min(340px, calc(100vw - 20px));
+    height: min(60vh, 384px);
   }
   /* On a phone, B/I/U/S collapse into ONE toggle (below) so the toolbar fits a single row with no
      overflow + no dead space. Clamp to the viewport; wrap is only a safety net for very long labels.
@@ -2263,6 +2593,37 @@ input[type="range"] {
 .co-text-resize-shape .co-text-handle.h-n,
 .co-text-resize-shape .co-text-handle.h-s {
   display: block;
+}
+/* Rotation zones — invisible squares just OUTSIDE each corner. Hover shows a curved double-arrow
+   rotate cursor ORIENTED to wrap that corner (the convex side faces outward); drag spins the box.
+   They sit under the resize handles (DOM order) so the corner itself still resizes. */
+.co-text-rotate {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  pointer-events: auto;
+}
+/* Positioning only — the rotate cursor itself is set inline from the shared ROTATE_CURSORS (cursors.ts),
+   the single source used by both these HTML boxes and the Konva strokes/stamps. */
+.co-text-rotate.r-nw {
+  left: 0;
+  top: 0;
+  transform: translate(-100%, -100%);
+}
+.co-text-rotate.r-ne {
+  left: 100%;
+  top: 0;
+  transform: translate(0, -100%);
+}
+.co-text-rotate.r-sw {
+  left: 0;
+  top: 100%;
+  transform: translate(-100%, 0);
+}
+.co-text-rotate.r-se {
+  left: 100%;
+  top: 100%;
+  transform: translate(0, 0);
 }
 
 /* ── Floating rich-text toolbar (above the active text editor) ─────────────── */

@@ -24,6 +24,9 @@ import type { PresencePerson } from "./avatar-presence-row";
 import "./tool-dock";
 import "./sticky-bar";
 import "./shape-menu";
+import "./stamp-wheel";
+import "./emoji-picker";
+import { pushStampRecent } from "./stamp-wheel";
 import type { PenChange } from "./draw-bar";
 import "./zoombar";
 import type { ZoomDetail } from "./zoombar";
@@ -149,7 +152,10 @@ app.innerHTML = `
     <co-draw-bar></co-draw-bar>
     <co-sticky-bar class="hidden"></co-sticky-bar>
     <co-shape-menu class="hidden"></co-shape-menu>
+    <co-stamp-wheel class="hidden"></co-stamp-wheel>
   </div>
+
+  <co-emoji-picker class="hidden"></co-emoji-picker>
 
   <co-zoombar></co-zoombar>
 
@@ -174,6 +180,12 @@ const canvas = new BoardCanvas({
   // canvas space (desktop has no collapse — the sheets are floating panels).
   onPlaced: () => {
     if (mobileMql.matches) sheetForTool(currentTool)?.classList.add("collapsed");
+  },
+  // A placed emoji becomes the most-recent (front of the 5, i.e. top-of-wheel going clockwise).
+  onStampPlaced: (src) => {
+    if (!src.startsWith("emoji:")) return;
+    pushStampRecent(src.slice("emoji:".length));
+    wheel?.render();
   },
 });
 if (window.__coboard) window.__coboard.canvas = canvas; // e2e hook: introspect remote presence
@@ -208,6 +220,8 @@ if (stickyBarEl) {
   canvas.setStickyColor(DEFAULT_STICKY_COLOR);
 }
 const shapeMenuEl = document.querySelector("co-shape-menu");
+const stampWheelEl = document.querySelector("co-stamp-wheel");
+const emojiPickerEl = document.querySelector("co-emoji-picker");
 // The "Shapes and lines" menu has two groups: shape boxes (placed) and connectors (drawn as arrows).
 const DRAWABLE_SHAPES = new Set(["rectangle", "ellipse", "rhombus", "triangle"]);
 const CONNECTOR_KINDS = new Set(["line", "arrow", "elbow", "block"]);
@@ -221,8 +235,10 @@ const sheetForTool = (tool: ToolId): Element | null =>
       ? stickyBarEl
       : tool === "shapes"
         ? shapeMenuEl
-        : null;
-const ALL_SHEETS = [drawBarEl, stickyBarEl, shapeMenuEl];
+        : tool === "stamp"
+          ? stampWheelEl
+          : null;
+const ALL_SHEETS = [drawBarEl, stickyBarEl, shapeMenuEl, stampWheelEl];
 // Apply a tool to the canvas + sheet visibility (does NOT touch the dock highlight).
 function applyTool(tool: ToolId): void {
   currentTool = tool;
@@ -233,19 +249,39 @@ function applyTool(tool: ToolId): void {
     if (el !== active) el?.classList.remove("collapsed");
   }
   active?.classList.remove("collapsed"); // newly shown → fully expanded
-  app?.classList.toggle("sheet-open", !!active); // dock top merges with the open sheet
+  // The mini-sheets (draw/sticky/shape) sit flush atop the dock so its top merges with them; the
+  // stamp wheel floats free, so it must NOT trigger that merge.
+  app?.classList.toggle("sheet-open", !!active && tool !== "stamp");
+  if (tool !== "stamp") emojiPickerEl?.classList.add("hidden"); // leaving stamp closes the picker
+  // Replay the wheel's entrance (outer ring in first, inner emoji disc just after) each time it opens.
+  if (tool === "stamp" && stampWheelEl) {
+    const w = stampWheelEl as HTMLElement;
+    w.classList.remove("sw-intro");
+    void w.offsetWidth; // reflow → restart the animation
+    w.classList.add("sw-intro");
+    window.setTimeout(() => w.classList.remove("sw-intro"), 900);
+  }
 }
-// Re-clicking the active tool toggles its sheet (the tool stays selected) — same for all three.
+// Re-clicking the active tool toggles its sheet (the tool stays selected).
 function toggleSheet(el: Element | null): void {
   if (!el) return;
-  if (mobileMql.matches) {
+  // The stamp wheel isn't a sliding mini-sheet (it's a free-floating panel that closes on pick), so
+  // it toggles its visibility outright on every platform — letting a re-tap of the Stamp tool reopen it.
+  if (mobileMql.matches && el.classList.contains("mini-sheet")) {
     el.classList.toggle("collapsed"); // mobile: collapse to the pull-tab / re-expand
     return;
   }
-  // Desktop: toggle the floating panel's visibility entirely (no tab affordance there).
   const open = !el.classList.contains("hidden");
   el.classList.toggle("hidden", open);
-  app?.classList.toggle("sheet-open", !open);
+  if (el.classList.contains("mini-sheet")) app?.classList.toggle("sheet-open", !open);
+  // Reopening the wheel replays its entrance animation.
+  if (!open && el === stampWheelEl) {
+    const w = el as HTMLElement;
+    w.classList.remove("sw-intro");
+    void w.offsetWidth;
+    w.classList.add("sw-intro");
+    window.setTimeout(() => w.classList.remove("sw-intro"), 900);
+  }
 }
 // Programmatic selection (keyboard) also drives the dock's own highlight.
 function selectTool(tool: ToolId): void {
@@ -282,6 +318,40 @@ app?.addEventListener("shape-change", (e) => {
     canvas.setConnector(kind as Parameters<typeof canvas.setConnector>[0]);
 });
 
+// --------------------------------------------------------------------------
+// Stamp tool (<co-stamp-wheel> radial picker + <co-emoji-picker> popover).
+// --------------------------------------------------------------------------
+const wheel = stampWheelEl as import("./stamp-wheel").CoStampWheel | null;
+wheel?.setProfile({ name: identity.name, color: identity.color, photo: identity.photo });
+// Picking a mark / recent emoji / avatar from the wheel arms it and closes the wheel — the armed
+// stamp now rides the cursor, so the canvas is clear to place on (re-tap the Stamp tool to reopen).
+app?.addEventListener("stamp-pick", (e) => {
+  canvas.setStamp((e as CustomEvent<{ src: string }>).detail.src);
+  stampWheelEl?.classList.add("hidden");
+});
+// The wheel's "+" opens the full emoji picker.
+app?.addEventListener("stamp-picker-open", () => {
+  emojiPickerEl?.classList.toggle("hidden");
+});
+// Picking from the full grid: remember it (front of recents), refresh the wheel, arm + highlight it,
+// then close the picker.
+app?.addEventListener("emoji-pick", (e) => {
+  const cp = (e as CustomEvent<{ cp: string }>).detail.cp;
+  pushStampRecent(cp);
+  wheel?.render();
+  canvas.setStamp(`emoji:${cp}`);
+  if (wheel) wheel.active = `emoji:${cp}`;
+  emojiPickerEl?.classList.add("hidden");
+  stampWheelEl?.classList.add("hidden"); // armed → close the wheel (re-tap Stamp to reopen)
+});
+// Click anywhere outside the picker (and not on the wheel's "+") dismisses it.
+document.addEventListener("pointerdown", (e) => {
+  if (emojiPickerEl?.classList.contains("hidden")) return;
+  const t = e.target as HTMLElement;
+  if (emojiPickerEl?.contains(t) || t.closest("[data-plus]")) return;
+  emojiPickerEl?.classList.add("hidden");
+});
+
 // Shortcuts overlay (reusable <co-dialog>).
 const shortcutsDialog = createDialog({
   title: "Keyboard shortcuts",
@@ -290,11 +360,15 @@ const shortcutsDialog = createDialog({
     '<div class="kbd-row"><span>Select</span><kbd class="kbd">V</kbd></div>' +
     '<div class="kbd-row"><span>Hand / pan</span><kbd class="kbd">H</kbd></div>' +
     '<div class="kbd-row"><span>Pen</span><kbd class="kbd">P</kbd></div>' +
+    '<div class="kbd-row"><span>Eraser</span><kbd class="kbd">E</kbd></div>' +
+    '<div class="kbd-row"><span>Sticky note</span><kbd class="kbd">S</kbd></div>' +
     '<div class="kbd-row"><span>Text</span><kbd class="kbd">T</kbd></div>' +
+    '<div class="kbd-row"><span>Shapes and lines</span><kbd class="kbd">R</kbd></div>' +
+    '<div class="kbd-row"><span>Stamp</span><kbd class="kbd">K</kbd></div>' +
     `<div class="kbd-row"><span>Select all</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">A</kbd></span></div>` +
     `<div class="kbd-row"><span>Copy</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">C</kbd></span></div>` +
     `<div class="kbd-row"><span>Paste</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">V</kbd></span></div>` +
-    '<div class="kbd-row"><span>Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">⌫</kbd></span></div>' +
+    '<div class="kbd-row"><span>Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">Backspace</kbd></span></div>' +
     `<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     `<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     '<div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
@@ -312,9 +386,11 @@ const KEY_TOOL: Record<string, ToolId> = {
   v: "select",
   h: "hand",
   p: "pen",
+  e: "eraser",
   t: "text",
   s: "sticky",
   r: "shapes",
+  k: "stamp",
 };
 let spacePanning = false;
 window.addEventListener("keydown", (e) => {
@@ -351,6 +427,15 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Delete" || e.key === "Backspace") {
     canvas.deleteSelection();
     e.preventDefault();
+    return;
+  }
+  // [ / ] rotate the selection by ±15° about its centre; Shift = ±90°. Uses e.code so Shift+[ (which
+  // yields "{") still registers as the left bracket.
+  if (e.code === "BracketLeft" || e.code === "BracketRight") {
+    if (canvas.hasSelection()) {
+      canvas.rotateSelection((e.code === "BracketLeft" ? -1 : 1) * (e.shiftKey ? 90 : 15));
+      e.preventDefault();
+    }
     return;
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
@@ -578,6 +663,7 @@ const profile = createProfileDialog({
     renderPresenceRow();
     if (drawer)
       drawer.profile = { name: identity.name, color: identity.color, photo: identity.photo };
+    wheel?.setProfile({ name: identity.name, color: identity.color, photo: identity.photo });
   },
 });
 // Clicking your own avatar (the row's `rename` intent) opens the profile editor.

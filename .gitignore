@@ -37,3 +37,6 @@ Thumbs.db
 # Root-level PNGs are scratch (dropped reference screenshots + verification
 # captures); canonical images live in mockups/img/ and docs/.
 /*.png
+
+# Noto emoji SVGs — fetched offline via scripts/fetch-emoji.sh (not committed)
+packages/client-web/public/emoji/

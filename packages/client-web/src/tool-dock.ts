@@ -13,9 +13,11 @@ const TOOLS: ReadonlyArray<readonly [string, string, string, ToolId | null]> = [
   ["select", "v", "Select", "select"],
   ["hand", "h", "Hand", "hand"],
   ["pen", "p", "Draw", "pen"],
+  ["eraser", "e", "Eraser", "eraser"],
   ["sticky", "s", "Sticky note", "sticky"],
   ["text", "t", "Text", "text"],
   ["shapes", "r", "Shapes and lines", "shapes"],
+  ["stamp", "k", "Stamp", "stamp"],
 ];
 
 export class CoToolDock extends HTMLElement {

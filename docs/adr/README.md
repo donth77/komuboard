@@ -26,6 +26,7 @@ Written and accepted (decisions taken during implementation, beyond the planned 
 | [ADR-0006](0006-selection-ownership-last-writer-wins.md) | Selection ownership is last-writer-wins on the awareness channel (clock-free) |
 | [ADR-0007](0007-crdt-library-yjs-over-loro.md)           | Stay on Yjs as the CRDT; Loro evaluated and deferred (revisit triggers noted) |
 | [ADR-0008](0008-ui-framework-adoption-ladder.md)         | UI stays framework-free now; framework/Lit adoption ladder & triggers defined |
+| [ADR-0009](0009-render-model-dom-unification.md)         | Unify the 2D render on the DOM for per-object z-order (FigJam stacking); PixiJS/WebGL deferred with triggers |
 
 > **Format:** one file per ADR, `NNNN-short-title.md`, with sections
 > **Context · Decision · Status · Consequences**. Status ∈ {Proposed, Accepted,

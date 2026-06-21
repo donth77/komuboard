@@ -128,6 +128,8 @@ export interface TextObject {
   width?: number;
   /** Fixed box height (canvas units) — only set for shape boxes. */
   height?: number;
+  /** Rotation in degrees (clockwise) about the box centre. Absent/0 = upright. */
+  rotation?: number;
   /** When set, the box renders as a shape outline (rectangle/ellipse/…) with a centred label and a
    *  `bg` fill. Drawn by the "Shapes and lines" tool. */
   shape?: ShapeKind;
@@ -148,12 +150,32 @@ export interface TextObject {
   authorId: string;
 }
 
-export type BoardObject = StrokeObject | TextObject | ConnectorObject;
+/** A FigJam-style stamp/sticker: an emoji or mark image placed on the board. `src` is `mark:<name>`
+ *  (a bundled SVG in src/assets/stamps) or `emoji:<codepoint>` (a Noto SVG at /emoji/<codepoint>.svg).
+ *  Square; `x,y` is its CENTRE; it rotates about that centre. */
+export interface StampObject {
+  id: string;
+  type: "stamp";
+  x: number;
+  y: number;
+  /** Width = height, in canvas units. */
+  size: number;
+  src: string;
+  /** Rotation in degrees (clockwise) about the centre. Absent/0 = upright. */
+  rotation?: number;
+  authorId: string;
+}
+/** Default placed-stamp size in canvas units (≈64 px at the 100% default zoom). */
+export const DEFAULT_STAMP_SIZE = 64;
+
+export type BoardObject = StrokeObject | TextObject | ConnectorObject | StampObject;
 
 /** Defaults for a freshly-created text box (shared so the renderer + schema can't drift).
  *  Size 24 = the "Medium" preset in the text toolbar. */
 export const DEFAULT_TEXT_FONT = "Inter, system-ui, -apple-system, sans-serif";
 export const DEFAULT_TEXT_SIZE = 24;
+/** Sticky notes default to smaller text than plain text/shapes — the "Small" (16) preset. */
+export const DEFAULT_STICKY_TEXT_SIZE = 16;
 
 /** Sticky-note palette (soft pastels) — mirrors the FigJam sticky colours. */
 export const STICKY_COLORS: readonly string[] = [
@@ -250,6 +272,7 @@ export function addText(doc: Y.Doc, t: TextObject): void {
     m.set("y", t.y);
     if (t.width != null) m.set("width", t.width);
     if (t.height != null) m.set("height", t.height);
+    if (t.rotation != null) m.set("rotation", t.rotation);
     if (t.shape != null) m.set("shape", t.shape);
     m.set("runs", t.runs);
     m.set("fontFamily", t.fontFamily);
@@ -299,6 +322,7 @@ export function addConnector(doc: Y.Doc, c: ConnectorObject): void {
 export function addObject(doc: Y.Doc, obj: BoardObject): void {
   if (obj.type === "stroke") addStroke(doc, obj);
   else if (obj.type === "text") addText(doc, obj);
+  else if (obj.type === "stamp") addStamp(doc, obj);
   else addConnector(doc, obj);
 }
 
@@ -333,6 +357,9 @@ export function cloneObject(
       y: obj.y + dy,
       runs: obj.runs.map((r) => ({ ...r })),
     };
+  }
+  if (obj.type === "stamp") {
+    return { ...obj, id, authorId, x: obj.x + dx, y: obj.y + dy };
   }
   const remap = (e: ConnectorEnd): ConnectorEnd => {
     const out: ConnectorEnd = { ...e, x: e.x + dx, y: e.y + dy };
@@ -395,7 +422,7 @@ export function setTextRuns(doc: Y.Doc, id: string, runs: TextRun[]): void {
 export function setTextGeometry(
   doc: Y.Doc,
   id: string,
-  geom: { x?: number; y?: number; width?: number; height?: number },
+  geom: { x?: number; y?: number; width?: number; height?: number; rotation?: number },
 ): void {
   doc.transact(() => {
     const m = objectsMap(doc).get(id);
@@ -404,6 +431,7 @@ export function setTextGeometry(
     if (geom.y != null) m.set("y", geom.y);
     if (geom.width != null) m.set("width", geom.width);
     if (geom.height != null) m.set("height", geom.height);
+    if (geom.rotation != null) m.set("rotation", geom.rotation);
   });
 }
 
@@ -500,11 +528,68 @@ export function setObjectsPoints(
   });
 }
 
+/** Add a stamp/sticker to the document (atomic: object + z-order). */
+export function addStamp(doc: Y.Doc, s: StampObject): void {
+  doc.transact(() => {
+    const m = new Y.Map<unknown>();
+    m.set("id", s.id);
+    m.set("type", "stamp");
+    m.set("x", s.x);
+    m.set("y", s.y);
+    m.set("size", s.size);
+    m.set("src", s.src);
+    if (s.rotation != null) m.set("rotation", s.rotation);
+    m.set("authorId", s.authorId);
+    objectsMap(doc).set(s.id, m);
+    orderArray(doc).push([s.id]);
+  });
+}
+
+/** Update a stamp's geometry (centre / size / rotation). Used by drag + resize + rotate. */
+export function setStampGeom(
+  doc: Y.Doc,
+  id: string,
+  geom: { x?: number; y?: number; size?: number; rotation?: number },
+): void {
+  doc.transact(() => {
+    const m = objectsMap(doc).get(id);
+    if (!m || m.get("type") !== "stamp") return;
+    if (geom.x != null) m.set("x", geom.x);
+    if (geom.y != null) m.set("y", geom.y);
+    if (geom.size != null) m.set("size", geom.size);
+    if (geom.rotation != null) m.set("rotation", geom.rotation);
+  });
+}
+
+function readStamp(m: Y.Map<unknown>): StampObject | null {
+  const x = m.get("x");
+  const y = m.get("y");
+  const size = m.get("size");
+  const src = m.get("src");
+  if (typeof x !== "number" || !Number.isFinite(x)) return null;
+  if (typeof y !== "number" || !Number.isFinite(y)) return null;
+  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return null;
+  if (typeof src !== "string" || !src) return null;
+  const stamp: StampObject = {
+    id: String(m.get("id")),
+    type: "stamp",
+    x,
+    y,
+    size,
+    src,
+    authorId: String(m.get("authorId") ?? ""),
+  };
+  const rotation = m.get("rotation");
+  if (typeof rotation === "number" && Number.isFinite(rotation)) stamp.rotation = rotation;
+  return stamp;
+}
+
 /** Read a typed object out of its Y.Map — returns null for unknown types or malformed data. */
 export function readObject(m: Y.Map<unknown>): BoardObject | null {
   const type = m.get("type");
   if (type === "text") return readText(m);
   if (type === "connector") return readConnector(m);
+  if (type === "stamp") return readStamp(m);
   if (type !== "stroke") return null;
   // CRDT/peer data is untrusted: points must be a flat [x0,y0,x1,y1,…] array of finite
   // numbers. Reject anything malformed rather than fabricating a default (which would
@@ -643,6 +728,8 @@ function readText(m: Y.Map<unknown>): TextObject | null {
   if (typeof width === "number" && Number.isFinite(width) && width > 0) text.width = width;
   const height = m.get("height");
   if (typeof height === "number" && Number.isFinite(height) && height > 0) text.height = height;
+  const rotation = m.get("rotation");
+  if (typeof rotation === "number" && Number.isFinite(rotation)) text.rotation = rotation;
   const bg = m.get("bg");
   if (typeof bg === "string" && bg) text.bg = bg;
   const shape = m.get("shape");

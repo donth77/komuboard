@@ -2976,15 +2976,15 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [x] Build the infinite **pan/zoom** canvas (Konva stage; wheel/pinch zoom, drag/space-pan).
 - [x] Bind a Konva render layer **directly to the Yjs doc** (reconcile shapes ↔ Y.Map/Y.Array on change).
 - [x] Implement **freehand pen/marker** (color + thickness) writing stroke points into Yjs.
-- [ ] Implement **sticky notes** (color + editable text).
-- [ ] Implement **basic shapes**: rectangle, ellipse, line, arrow.
-- [ ] Implement the **text tool**.
-- [ ] Implement **select / move / resize / delete** (transformer handles; multi-select marquee).
-- [ ] Wire **undo/redo** to `Y.UndoManager` (scoped to local-origin changes).
+- [x] Implement **sticky notes** (color + editable text).
+- [x] Implement **basic shapes**: rectangle, ellipse, line, arrow.
+- [x] Implement the **text tool**.
+- [x] Implement **select / move / resize / delete** (transformer handles; multi-select marquee).
+- [x] Wire **undo/redo** to `Y.UndoManager` (scoped to local-origin changes).
 - [x] Implement responsive input: **mouse** (desktop) + **touch** (mobile/tablet) pointer abstraction.
-- [ ] Render the infinite **dotted-paper grid backdrop** — _done when:_ the canvas fills the viewport with a fixed-density radial dot grid that pans/zooms with content and stays crisp at all zoom levels.
+- [x] Render the infinite **dotted-paper grid backdrop** — _done when:_ the canvas fills the viewport with a fixed-density radial dot grid that pans/zooms with content and stays crisp at all zoom levels.
 - [ ] Add explicit **pan affordances** (Hand tool, space-drag, middle-mouse, trackpad two-finger) — _done when:_ each path moves the viewport without mutating content and the cursor changes to grab/grabbing.
-- [ ] Add **zoom-to-cursor** scroll/`Cmd/Ctrl`+scroll and `Cmd/Ctrl`+`+`/`-` zoom within the 10%–400% range — _done when:_ scroll zooms toward the pointer and the zoom % readout updates live.
+- [x] Add **zoom-to-cursor** scroll/`Cmd/Ctrl`+scroll and `Cmd/Ctrl`+`+`/`-` zoom within the 10%–400% range — _done when:_ scroll zooms toward the pointer and the zoom % readout updates live.
 - [ ] **Rotate** objects (sticky/shape) via a rotation handle — _done when:_ a selected object rotates to an arbitrary angle and the angle persists/syncs.
 - [ ] **Copy / cut / paste / duplicate** objects with offset — _done when:_ `Cmd/Ctrl`+C/X/V and `Cmd/Ctrl`+D (and Alt-drag) create offset copies that sync to peers.
 - [ ] **Group / ungroup** and **lock / unlock** objects — _done when:_ `Cmd/Ctrl`+G/Shift+G group/ungroup and `Cmd/Ctrl`+L locks/unlocks the selection.
@@ -2997,7 +2997,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 
 **Client (presence)**
 - [x] Publish local cursor + selection + user label/color via **awareness**.
-- [ ] Render **live labeled cursors** for remote peers + a presence avatar stack with join/leave.
+- [x] Render **live labeled cursors** for remote peers + a presence avatar stack with join/leave.
 - [x] Throttle/coalesce cursor publishes to **~20–30 Hz** and binary-encode (per architecture invariant).
 
 **Client (chrome: top bar, dock, panels, zoom, minimap)**
@@ -3006,13 +3006,13 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Render the floating **tool dock** with `role=toolbar` and idle auto-dim — _done when:_ the dock floats (left or bottom-center per design), dims to ~70% after 3s idle, and returns to full on hover/focus.
 - [ ] Show **single-active-tool** highlighting with `aria-pressed` — _done when:_ exactly one tool shows the accent active style with `aria-pressed=true` and switching moves the highlight.
 - [ ] Add **tool dock separators / grouping** — _done when:_ hairline separators group nav, draw, shape, and media tools per the mockup.
-- [ ] Add **tool tooltips** with name + shortcut — _done when:_ hovering a tool shows a tooltip (e.g. "Pen (P)") whose text matches the bound key and the control's `aria-label`.
+- [x] Add **tool tooltips** with name + shortcut — _done when:_ hovering a tool shows a tooltip (e.g. "Pen (P)") whose text matches the bound key and the control's `aria-label`.
 - [ ] Add a dock **overflow "more" menu** for secondary tools + settings — _done when:_ the more control reveals Connector/Frame/Image/Stamp plus undo/redo and settings without crowding the primary row.
 - [ ] Implement a **sticky/lock tool modifier** (double/long-press) with a lock glyph — _done when:_ locking keeps a tool active after a draw (shown by a lock glyph) while a single activation reverts to Select after one shape.
 - [ ] Per-tool **memory** of last fill/stroke/width/color — _done when:_ reselecting a tool restores its last-used style.
 - [ ] Render the contextual **Properties panel** that reflects the active tool/selection — _done when:_ selecting ≥1 object slides in the right panel and clearing selection collapses it, with only selection-relevant controls shown.
-- [ ] **Color swatch picker** + selected-ring + **custom color** input — _done when:_ choosing a swatch sets the active color (one selected ring) and a custom-hex control adds/uses any color, applied to new/selected items.
-- [ ] **Stroke-width slider** with live `px` readout — _done when:_ dragging updates the "Stroke width · Npx" label and changes new/selected stroke width.
+- [x] **Color swatch picker** + selected-ring + **custom color** input — _done when:_ choosing a swatch sets the active color (one selected ring) and a custom-hex control adds/uses any color, applied to new/selected items.
+- [x] **Stroke-width slider** with live `px` readout — _done when:_ dragging updates the "Stroke width · Npx" label and changes new/selected stroke width.
 - [ ] **Stroke-style** segmented control (Solid/Dashed/Highlight) — _done when:_ selecting a segment changes new strokes and Highlight renders a semi-transparent wide stroke.
 - [ ] **Opacity slider** with percentage readout — _done when:_ dragging updates the "Opacity · N%" label and changes alpha of new/selected items.
 - [ ] **Font, text-alignment, and layer-order** controls in Properties for text/sticky — _done when:_ font changes typeface/size, alignment sets left/center/right, and layer controls reorder z-index matching the bring/send shortcuts.
@@ -3157,7 +3157,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] **Profile photo / avatar upload** with glyph/emoji fallback — _done when:_ a user can upload an image (cropped to a circle) used as their avatar in the facepile/cursor for all peers, falling back to an initial/emoji glyph, persisting across reloads.
 
 **Client (canvas polish)**
-- [ ] **Connectors** that snap to shape anchors and re-route on move.
+- [x] **Connectors** that snap to shape anchors and re-route on move.
 - [ ] **Frames/sections** (grouping + clipping).
 - [ ] **Templates** picker that seeds a board.
 - [ ] **Image upload** → R2 → render image node for all peers.

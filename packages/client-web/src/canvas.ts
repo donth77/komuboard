@@ -6,10 +6,12 @@ import {
   addObject,
   addStroke,
   cloneObject,
+  addStamp,
   CONNECTOR_SIDES,
   DEFAULT_CONNECTOR_COLOR,
   DEFAULT_CONNECTOR_WIDTH,
   DEFAULT_SHAPE_FILL,
+  DEFAULT_STAMP_SIZE,
   DEFAULT_STICKY_COLOR,
   defaultCapsFor,
   deleteObjects,
@@ -17,9 +19,11 @@ import {
   orderArray,
   randomId,
   readObject,
+  readUserProfile,
   setConnectorEnds,
   setConnectorStyle,
   setObjectsPoints,
+  setStampGeom,
   sideMidpoint,
   translateObjects,
   type BoardObject,
@@ -35,8 +39,9 @@ import {
 import { ViewportController } from "./viewport";
 import { TextLayer } from "./text-layer";
 import { ConnectorBar } from "./connector-bar";
+import { ROTATE_CURSORS, type RotateCorner } from "./cursors";
 
-export type ToolId = "select" | "hand" | "pen" | "text" | "sticky" | "shapes";
+export type ToolId = "select" | "hand" | "pen" | "eraser" | "stamp" | "text" | "sticky" | "shapes";
 
 export interface CanvasOptions {
   container: HTMLElement;
@@ -49,6 +54,8 @@ export interface CanvasOptions {
   /** Fired after a stroke is drawn or a sticky/shape is placed — the host collapses the mobile
    *  mini-sheet so the canvas reclaims space. */
   onPlaced?: () => void;
+  /** Fired after a stamp is placed, with its src — the host can bump the emoji recents. */
+  onStampPlaced?: (src: string) => void;
 }
 
 const CURSOR_HZ = 30;
@@ -74,6 +81,20 @@ const CURSOR_URL = `url("data:image/svg+xml,${encodeURIComponent(
 const PEN_CURSOR_URL = `url("data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#ffffff" stroke="#1e1e1e" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>`,
 )}") 2 22, auto`;
+// Eraser tool: a solid eraser glyph as the cursor (source: src/assets/eraser.svg), white-filled with a
+// dark outline so it reads on both light and dark canvases; hotspot near its lower-left erasing corner.
+const ERASER_CURSOR_URL = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32" fill="#ffffff" stroke="#1e1e1e" stroke-width="1.5" stroke-linejoin="round"><path d="M29.061 9.29 22.71 2.939a3 3 0 0 0-4.242 0L2.939 18.468a3 3 0 0 0 0 4.242l6.351 6.351a3 3 0 0 0 4.242 0l15.529-15.529a3 3 0 0 0 0-4.242ZM12.118 27.647a1 1 0 0 1-1.414 0L4.353 21.3a1 1 0 0 1 0-1.414l4.558-4.557 7.764 7.764Zm15.529-15.529-9.558 9.557-7.764-7.764 9.557-9.558a1 1 0 0 1 1.414 0l6.351 6.347a1 1 0 0 1 0 1.418Z"/></svg>`,
+)}") 6 18, auto`;
+// Stamp tool: the stamp glyph (toolbar icon), white-filled with a dark outline, hotspot centred on
+// the drop point so the translucent ghost preview lands where you click.
+const STAMP_CURSOR_URL = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="-4 -4 32 32"><g transform="rotate(18 12 12)"><g fill="#ffffff" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"><path d="M20.809,16.492c0.146,-0.802 -0.072,-1.628 -0.594,-2.254c-0.523,-0.626 -1.296,-0.988 -2.111,-0.988l-12.208,-0c-0.815,0 -1.588,0.362 -2.111,0.988c-0.522,0.626 -0.74,1.452 -0.594,2.254c0.188,1.036 0.39,2.149 0.496,2.732c0.109,0.594 0.626,1.026 1.23,1.026l14.166,-0c0.604,-0 1.121,-0.432 1.23,-1.026l0.496,-2.732Zm-1.935,2.258l-13.748,0l-0.459,-2.526c-0.067,-0.365 0.032,-0.74 0.27,-1.025c0.237,-0.284 0.589,-0.449 0.959,-0.449c0,-0 12.208,-0 12.208,-0c0.37,0 0.722,0.165 0.959,0.449c0.238,0.285 0.337,0.66 0.27,1.025l-0.459,2.526Z"/><path d="M19.235 19.647c.045-.22-.012-.449-.155-.622-.142-.174-.355-.275-.58-.275l-13 0c-.225 0-.438.101-.58.275-.143.173-.2.402-.155.622l.339 1.693c.163.818.882 1.407 1.716 1.407 2.191 0 8.169 0 10.36 0 .834 0 1.553-.589 1.716-1.407l.339-1.693zm-1.65.603l-.159.796c-.024.117-.126.201-.246.201l-10.36 0c-.12 0-.222-.084-.246-.201 0 0-.159-.796-.159-.796l11.17 0zM8.298 13.736c-.087.23-.055.488.085.691.14.202.371.323.617.323l6 0c.246 0 .477-.121.617-.323.14-.203.172-.461.085-.691 0 0-1.005-2.633-.013-4.94.407-.947 1.048-2.079 1.372-3.136.267-.872.32-1.705.03-2.405-.257-.618-.771-1.165-1.715-1.53-.763-.295-1.853-.478-3.376-.475-1.523-.003-2.613.18-3.376.475-.944.365-1.458.912-1.715 1.53-.29.7-.237 1.533.03 2.405.324 1.057.965 2.189 1.372 3.136.992 2.307-.013 4.94-.013 4.94zm1.687-.486c.261-1.178.499-3.197-.296-5.046-.388-.903-1.007-1.977-1.316-2.984-.155-.505-.246-.985-.078-1.39.125-.302.409-.528.869-.706.64-.247 1.558-.376 2.835-.374.001 0 .001 0 .002 0 1.277-.002 2.195.127 2.835.374.46.178.744.404.869.706.168.405.077.885-.078 1.39-.309 1.007-.928 2.081-1.316 2.984-.795 1.849-.557 3.868-.296 5.046l-4.03 0z"/></g><g fill="#1e1e1e" fill-rule="evenodd"><path d="M20.809,16.492c0.146,-0.802 -0.072,-1.628 -0.594,-2.254c-0.523,-0.626 -1.296,-0.988 -2.111,-0.988l-12.208,-0c-0.815,0 -1.588,0.362 -2.111,0.988c-0.522,0.626 -0.74,1.452 -0.594,2.254c0.188,1.036 0.39,2.149 0.496,2.732c0.109,0.594 0.626,1.026 1.23,1.026l14.166,-0c0.604,-0 1.121,-0.432 1.23,-1.026l0.496,-2.732Zm-1.935,2.258l-13.748,0l-0.459,-2.526c-0.067,-0.365 0.032,-0.74 0.27,-1.025c0.237,-0.284 0.589,-0.449 0.959,-0.449c0,-0 12.208,-0 12.208,-0c0.37,0 0.722,0.165 0.959,0.449c0.238,0.285 0.337,0.66 0.27,1.025l-0.459,2.526Z"/><path d="M19.235 19.647c.045-.22-.012-.449-.155-.622-.142-.174-.355-.275-.58-.275l-13 0c-.225 0-.438.101-.58.275-.143.173-.2.402-.155.622l.339 1.693c.163.818.882 1.407 1.716 1.407 2.191 0 8.169 0 10.36 0 .834 0 1.553-.589 1.716-1.407l.339-1.693zm-1.65.603l-.159.796c-.024.117-.126.201-.246.201l-10.36 0c-.12 0-.222-.084-.246-.201 0 0-.159-.796-.159-.796l11.17 0zM8.298 13.736c-.087.23-.055.488.085.691.14.202.371.323.617.323l6 0c.246 0 .477-.121.617-.323.14-.203.172-.461.085-.691 0 0-1.005-2.633-.013-4.94.407-.947 1.048-2.079 1.372-3.136.267-.872.32-1.705.03-2.405-.257-.618-.771-1.165-1.715-1.53-.763-.295-1.853-.478-3.376-.475-1.523-.003-2.613.18-3.376.475-.944.365-1.458.912-1.715 1.53-.29.7-.237 1.533.03 2.405.324 1.057.965 2.189 1.372 3.136.992 2.307-.013 4.94-.013 4.94zm1.687-.486c.261-1.178.499-3.197-.296-5.046-.388-.903-1.007-1.977-1.316-2.984-.155-.505-.246-.985-.078-1.39.125-.302.409-.528.869-.706.64-.247 1.558-.376 2.835-.374.001 0 .001 0 .002 0 1.277-.002 2.195.127 2.835.374.46.178.744.404.869.706.168.405.077.885-.078 1.39-.309 1.007-.928 2.081-1.316 2.984-.795 1.849-.557 3.868-.296 5.046l-4.03 0z"/></g></g></svg>`,
+)}") 15 15, auto`;
+// The rotate cursor lives in ./cursors (shared per-corner ROTATE_CURSORS — same one the HTML boxes use).
+const ERASER_GHOST_W = 12; // eraser ghost-trail width on screen (px)
+const ERASER_TAIL_MS = 450; // a swept ghost point lingers ~450 ms, then the trail shrinks + fades away
+const ERASER_UNDO_MERGE_MS = 60_000; // during one swipe, merge every live delete into a single undo step
 
 interface Rect {
   x: number;
@@ -84,6 +105,16 @@ interface Rect {
 
 function rectsIntersect(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+/** Whether point `p` lies inside `r`, expanded by `pad` on every side. */
+function pointInRect(p: { x: number; y: number }, r: Rect, pad = 0): boolean {
+  return (
+    p.x >= r.x - pad &&
+    p.x <= r.x + r.width + pad &&
+    p.y >= r.y - pad &&
+    p.y <= r.y + r.height + pad
+  );
 }
 
 /** A *remote* peer's in-progress stroke, streamed over awareness while they draw. */
@@ -103,6 +134,7 @@ interface ResizeNode {
   y: number;
   sx: number;
   sy: number;
+  rotation: number;
 }
 
 const MAX_PREVIEW_VERTS = 128; // cap broadcast live-stroke vertices (cost); the committed stroke is full-res
@@ -148,8 +180,24 @@ export class BoardCanvas {
   /** Outline rects reused across renders, keyed `clientId:objId` — avoids per-frame Konva churn
    *  while a peer's selection glides during an interpolated drag/resize. */
   private readonly remoteSelRects = new Map<string, Konva.Rect>();
+  /** One group box per peer (keyed by clientId) drawn around a peer's multi-node selection, in their
+   *  colour — mirrors the local group/transform box so others see the grouping in realtime. */
+  private readonly remoteSelGroupRects = new Map<number, Konva.Rect>();
+  /** Floating tooltip (avatar + name) shown when hovering another user's selection on the canvas. */
+  private peerTip: HTMLElement | null = null;
   /** Live map of object id → its rendered Konva node (rebuilt every render). */
   private readonly nodeById = new Map<string, Konva.Line>();
+  /** Placed stamps/stickers (emoji + mark images), rendered separately from the stroke pipeline. */
+  private readonly stampNodeById = new Map<string, Konva.Image>();
+  /** The stamp the next canvas tap places (`mark:<name>` | `emoji:<codepoint>`), or null. */
+  private currentStamp: string | null = null;
+  /** Translucent placement preview of the armed stamp, tracking the cursor (overlay layer). */
+  private stampGhost: Konva.Image | null = null;
+  private stampGhostSrc: string | null = null;
+  /** Random ±15° tilt previewed by the ghost — placed stamps land at exactly this angle. */
+  private stampGhostRot = 0;
+  /** Decoded stamp images keyed by url — re-arming a used stamp swaps instantly (no reload flash). */
+  private readonly stampImgCache = new Map<string, HTMLImageElement | HTMLCanvasElement>();
   private readonly selected = new Set<string>();
   /** Local copy/paste buffer (in-app, not the system clipboard): a snapshot of the objects copied
    *  with ⌘/Ctrl+C; ⌘/Ctrl+V clones them with a cascading offset. */
@@ -160,9 +208,15 @@ export class BoardCanvas {
   private readonly connectorLayer = new Konva.Layer();
   /** Each connector is a Konva group (shaft Line + start/end cap shapes), so any cap combo renders. */
   private readonly connectorNodes = new Map<string, Konva.Group>();
+  /** Stamps live on their OWN layer (not `content`), so the stroke renderer's destroyChildren() on a
+   *  z-order change can never wipe them — that was making placed stamps vanish until a refresh. */
+  private readonly stampLayer = new Konva.Layer();
   /** shapeId → ids of connectors with an end bound to it (for live re-routing during a shape drag). */
   private readonly connectorsByShape = new Map<string, Set<string>>();
   private readonly selectedConnectors = new Set<string>();
+  private readonly selectedStamps = new Set<string>();
+  /** Per-stamp centre captured at drag start (a stamp stores an absolute centre, not a delta). */
+  private readonly stampMoveOrigins = new Map<string, { x: number; y: number }>();
   /** Chrome for a single selected connector: the two draggable endpoint handles (HTML, screen-space)
    *  + the in-progress endpoint drag. */
   private connectorHandlesEl: HTMLDivElement | null = null;
@@ -212,6 +266,14 @@ export class BoardCanvas {
   private readonly textLayer: TextLayer;
 
   private tool: ToolId = "select";
+  /** Eraser gesture: objects are deleted from the doc LIVE as the path crosses them (so peers see the
+   *  erasure in realtime); the whole swipe merges into ONE undo step via a raised UndoManager
+   *  captureTimeout. The faint ghost trail is a separate, self-fading overlay (eraserTail). */
+  private erasing = false;
+  private lastErasePoint: { x: number; y: number } | null = null;
+  private eraserTail: { ghost: Konva.Line; trail: { x: number; y: number; t: number }[] } | null =
+    null;
+  private eraserRaf = 0;
   private color = "#0e1116";
   private stickyColor: string = DEFAULT_STICKY_COLOR;
   /** The shape/line kind the "Shapes and lines" tool draws next (driven by the shape menu). */
@@ -227,6 +289,30 @@ export class BoardCanvas {
   private marqueeBase = new Set<string>();
   private marqueeAdditive = false;
   private moveState: { startX: number; startY: number; dx: number; dy: number } | null = null;
+  /** Active while dragging a multi-node selection as one unit (strokes + text + connectors together).
+   *  Coordinates the three per-type move subsystems; `start` is the grab point for the shared delta. */
+  private groupMoving = false;
+  private groupMoveStart: { x: number; y: number } | null = null;
+  /** Active while rotating a group by dragging just outside a corner (no rotate handle). Records the
+   *  group centre and the pointer's start angle; the proxy is spun by the angle delta each tick. */
+  private rotateGesture: {
+    center: { x: number; y: number };
+    startAngle: number;
+    angle: number;
+  } | null = null;
+  /** Invisible Konva rect the transformer drives when resizing/rotating a MIXED group (strokes + text
+   *  + connectors): the Konva transformer can only attach to Konva nodes, so the proxy stands in for
+   *  the whole group and its transform is replayed onto every selected node of every type. */
+  private groupProxy: Konva.Rect | null = null;
+  /** Start state captured at transformstart of a group transform: the proxy's inverse start matrix
+   *  (to derive the live delta) plus each node's pre-transform geometry, applied forward each tick. */
+  private groupXform: {
+    startInv: Konva.Transform;
+    strokes: Map<string, number[]>; // id → start world points
+    texts: Map<string, { cx: number; cy: number; w: number; h: number; rot: number; font: number }>;
+    connectors: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
+    stamps: Map<string, { cx: number; cy: number; size: number; rot: number }>;
+  } | null = null;
   /** A tap on an already-sole-selected text/sticky box → edit it on release (FigJam two-click:
    *  first click selects the box, second click enters its text). Cleared if the tap becomes a drag. */
   private textTapEdit: { id: string; x: number; y: number } | null = null;
@@ -244,7 +330,7 @@ export class BoardCanvas {
    *  per object id. A drag carries scale 1; a resize carries the scale too. */
   private readonly remoteXforms = new Map<
     string,
-    { x: number; y: number; sx: number; sy: number }
+    { x: number; y: number; sx: number; sy: number; rotation: number }
   >();
   /** Ids whose remote drag/resize has already committed to the doc — guards against the
    *  (briefly) still-present awareness re-applying the transform on top of the baked geometry. */
@@ -278,7 +364,9 @@ export class BoardCanvas {
     this.opts.awareness.setLocalStateField("cursor", null);
   };
   private readonly onWindowPointerUp = (): void => {
-    if (this.textLayer.isMoving()) this.textLayer.endMove();
+    if (this.rotateGesture) this.endGroupRotate();
+    else if (this.groupMoving) this.endGroupMove();
+    else if (this.textLayer.isMoving()) this.textLayer.endMove();
     else if (this.moveState) this.endMove();
     else if (this.connectorMove) this.endConnectorMove();
     else if (this.marquee) this.endMarquee();
@@ -316,6 +404,7 @@ export class BoardCanvas {
     });
     this.stage.add(this.content);
     this.stage.add(this.connectorLayer); // above strokes, below the overlay (cursors/selections)
+    this.stage.add(this.stampLayer); // stamps above drawings/connectors, below the overlay chrome
     this.stage.add(this.overlay);
     this.stage.add(this.uiLayer);
     // Peers' selection outlines sit in the overlay, in world space (so they pan/zoom
@@ -325,7 +414,13 @@ export class BoardCanvas {
     this.overlay.add(this.remoteSelections);
 
     this.transformer = new Konva.Transformer({
-      rotateEnabled: false,
+      rotateEnabled: true,
+      rotationSnaps: [0, 90, 180, 270], // light snap to the right angles (hold to fine-tune between)
+      // Keep the selection box axis-aligned even for a single ROTATED node (stamp/stroke). Otherwise
+      // the box tilts with the node, its corners fall inside the AABB that rotationCornerOf() tests,
+      // and the rotate cursor stops appearing — so you can't rotate it again. Also makes the box match
+      // what peers draw for it (their box is the axis-aligned union of the same nodes).
+      useSingleNodeRotation: false,
       enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
       borderStroke: SELECT_BLUE,
       borderStrokeWidth: 1.5,
@@ -340,8 +435,14 @@ export class BoardCanvas {
     });
     this.transformer.on("transformstart", () => {
       this.resizing = true;
+      if (this.transformerOnProxy()) this.beginGroupTransform();
     });
     this.transformer.on("transform", () => {
+      if (this.transformerOnProxy()) {
+        this.updateGroupTransform(); // replay the proxy's transform onto every node of the group
+        this.publishCursor(this.point());
+        return;
+      }
       this.renderSelectionBoxes();
       // A transformer-anchor drag captures the pointer, so the stage's normal pointermove (which
       // publishes the cursor) doesn't fire — publish here too, else the resizer's cursor freezes
@@ -356,6 +457,10 @@ export class BoardCanvas {
     });
     this.transformer.on("transformend", () => {
       this.resizing = false;
+      if (this.transformerOnProxy()) {
+        this.endGroupTransform(); // bake the group transform into every node (one undo step)
+        return;
+      }
       this.commitTransform(); // bake the scale into points (→ doc) first…
       this.opts.awareness.setLocalStateField("resize", null); // …then end the live preview
     });
@@ -381,8 +486,10 @@ export class BoardCanvas {
       awareness: opts.awareness,
       camera: () => ({ scale: this.stage.scaleX(), x: this.stage.x(), y: this.stage.y() }),
       onSelectionChange: () => {
-        this.notifySelection(); // fold the text selection into the count…
-        this.publishSelection(); // …and broadcast it so peers see the text outline
+        // Re-evaluate the transform box vs the union group box for the new combined selection,
+        // redraw the group box, fold the text selection into the count, and broadcast it so peers
+        // see the text outline. reattachTransformer does all four (incl. notify + publish).
+        this.reattachTransformer();
       },
       onCommitted: (keepTool) => {
         // Finishing a box placed with the text/sticky/shapes tool reverts to select (one-shot).
@@ -393,7 +500,10 @@ export class BoardCanvas {
         if (this.tool === "text" || this.tool === "sticky" || this.tool === "shapes")
           this.opts.requestTool?.("select");
       },
-      onShapesMoved: () => this.rerouteConnectors(), // a shape moved/resized → re-route its arrows live
+      onShapesMoved: () => {
+        this.rerouteConnectors(); // a shape moved/resized → re-route its arrows live
+        this.renderSelectionBoxes(); // …and keep the union group box tracking the shape's new bounds
+      },
     });
 
     // The dark edit bar for a selected connector — each control writes to the sole-selected connector.
@@ -419,9 +529,11 @@ export class BoardCanvas {
     this.syncCursorStage();
 
     this.renderObjects();
+    this.renderStamps();
     this.objects.observeDeep(() => {
       this.renderObjects();
       this.renderConnectors();
+      this.renderStamps();
     });
 
     this.bindPointer();
@@ -438,7 +550,9 @@ export class BoardCanvas {
     this.bindText();
     this.bindSticky();
     this.bindShapes();
+    this.bindStamp();
     this.bindConnectors();
+    this.bindEraser();
 
     opts.awareness.setLocalStateField("user", opts.user.name);
     opts.awareness.setLocalStateField("color", opts.user.color);
@@ -460,6 +574,7 @@ export class BoardCanvas {
       this.suppressAutoSelect = false;
     }
     if (tool !== "sticky" && tool !== "shapes") this.textLayer.hideStickyGhost(); // ghost rides the place tools
+    if (tool !== "stamp") this.hideStampGhost();
     if (tool !== "shapes") {
       // Leaving the shapes tool drops connector-draw mode (so other shapes stop showing their dots).
       this.currentConnector = null;
@@ -472,9 +587,13 @@ export class BoardCanvas {
         ? "grab"
         : tool === "pen"
           ? PEN_CURSOR_URL
-          : tool === "text"
-            ? "text"
-            : CURSOR_URL;
+          : tool === "eraser"
+            ? ERASER_CURSOR_URL
+            : tool === "text"
+              ? "text"
+              : tool === "stamp"
+                ? STAMP_CURSOR_URL
+                : CURSOR_URL;
   }
   /** The colour the next dropped sticky note gets (driven by the sticky palette). */
   setStickyColor(color: string): void {
@@ -491,6 +610,118 @@ export class BoardCanvas {
   setConnector(kind: ConnectorKind): void {
     this.currentConnector = kind;
     this.textLayer.setConnectorMode(true); // show every shape's connector dots while drawing
+  }
+  /** The stamp/sticker the next canvas tap places (`mark:<name>` | `emoji:<codepoint>`). */
+  setStamp(src: string): void {
+    this.currentStamp = src;
+    this.stampGhostSrc = null; // force the cursor preview to reload the new sticker
+    this.stampGhostRot = Math.round((Math.random() * 30 - 15) * 10) / 10;
+  }
+  /** Resolve a stamp src to its SVG url — emoji → /emoji/<cp>.svg, mark → /stamps/<name>.svg. */
+  private stampUrl(src: string): string {
+    const i = src.indexOf(":");
+    const kind = src.slice(0, i);
+    const val = src.slice(i + 1);
+    if (kind === "img") return val; // a data URL (e.g. the placed avatar)
+    if (kind === "emoji") return `/emoji/${val}.svg`;
+    return `/stamps/${val}.svg`;
+  }
+  private loadStampImage(src: string, node: Konva.Image): void {
+    const url = this.stampUrl(src);
+    const set = (img: HTMLImageElement | HTMLCanvasElement): void => {
+      node.image(img);
+      node.getLayer()?.batchDraw();
+    };
+    const cached = this.stampImgCache.get(url);
+    if (cached) {
+      if (cached instanceof HTMLCanvasElement || (cached.complete && cached.naturalWidth > 0))
+        set(cached);
+      else cached.addEventListener("load", () => set(cached), { once: true });
+      return;
+    }
+    const isEmoji = src.startsWith("emoji:");
+    const img = new window.Image();
+    if (!isEmoji) this.stampImgCache.set(url, img); // marks/avatar: border already baked / circular
+    img.addEventListener(
+      "load",
+      () => {
+        const out = isEmoji ? this.emojiSticker(img) : img;
+        this.stampImgCache.set(url, out);
+        set(out);
+      },
+      { once: true },
+    );
+    img.src = url;
+  }
+
+  /** Render an emoji as a white-outlined sticker (canvas) so a placed emoji reads like the colour
+   *  marks on the board. The Konva drop shadow behind it makes the white edge pop on a light board. */
+  private emojiSticker(img: HTMLImageElement): HTMLCanvasElement {
+    const S = 120;
+    const pad = 7;
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = S + pad * 2;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return cv;
+    // a white silhouette of the emoji, stamped around a ring of offsets → a uniform white outline
+    const sil = document.createElement("canvas");
+    sil.width = sil.height = S;
+    const sctx = sil.getContext("2d");
+    if (sctx) {
+      sctx.drawImage(img, 0, 0, S, S);
+      sctx.globalCompositeOperation = "source-in";
+      sctx.fillStyle = "#ffffff";
+      sctx.fillRect(0, 0, S, S);
+    }
+    const t = 3.5;
+    for (let a = 0; a < Math.PI * 2 - 0.01; a += Math.PI / 8) {
+      ctx.drawImage(sil, pad + Math.cos(a) * t, pad + Math.sin(a) * t, S, S);
+    }
+    ctx.drawImage(img, pad, pad, S, S);
+    return cv;
+  }
+  /** Reconcile placed-stamp Konva.Images with the doc (kept out of renderObjects, which is stroke /
+   *  points-specific). Each stamp is an emoji/mark image with a soft drop shadow → a placed sticker. */
+  private renderStamps(): void {
+    const seen = new Set<string>();
+    this.objects.forEach((m, id) => {
+      const obj = readObject(m);
+      if (obj?.type !== "stamp") return;
+      seen.add(id);
+      let node = this.stampNodeById.get(id);
+      if (!node) {
+        node = new Konva.Image({ image: undefined, listening: true, shadowOpacity: 1 });
+        node.setAttr(OBJ_ID_ATTR, id);
+        node.setAttr("stampSrc", obj.src);
+        this.stampLayer.add(node);
+        this.stampNodeById.set(id, node);
+        this.loadStampImage(obj.src, node);
+      } else if (node.getAttr("stampSrc") !== obj.src) {
+        node.setAttr("stampSrc", obj.src);
+        this.loadStampImage(obj.src, node);
+      }
+      // While a local or remote drag/resize owns this stamp, its live node transform (driven by the
+      // gesture or the rAF glide) is authoritative — a doc re-render must not snap it back.
+      const owned =
+        this.remoteXforms.has(id) ||
+        ((this.moveState != null || this.resizing) && this.selectedStamps.has(id));
+      if (!owned) {
+        node.size({ width: obj.size, height: obj.size });
+        node.offset({ x: obj.size / 2, y: obj.size / 2 }); // x,y is the stamp's CENTRE
+        node.position({ x: obj.x, y: obj.y });
+        node.rotation(obj.rotation ?? 0);
+        node.scale({ x: 1, y: 1 });
+      }
+      node.shadowColor("rgba(16,17,22,0.28)"); // soft drop shadow (depth) — scales with the stamp
+      node.shadowBlur(obj.size * 0.1);
+      node.shadowOffset({ x: 0, y: obj.size * 0.05 });
+    });
+    for (const [id, node] of this.stampNodeById) {
+      if (seen.has(id)) continue;
+      node.destroy();
+      this.stampNodeById.delete(id);
+    }
+    this.stampLayer.batchDraw();
   }
   setColor(color: string): void {
     this.color = color;
@@ -533,10 +764,12 @@ export class BoardCanvas {
   }
 
   /** Content-relative client rect of an object's node, cached until renderObjects clears it. */
-  private nodeRect(id: string, node: Konva.Line): Rect {
+  private nodeRect(id: string, node: Konva.Node): Rect {
     let r = this.rectCache.get(id);
     if (!r) {
-      r = node.getClientRect({ relativeTo: this.content });
+      // skipShadow: the selection box should hug the node, not its drop shadow — a stamp's soft shadow
+      // otherwise inflates the box (and the inflation grows/shifts as the stamp rotates).
+      r = node.getClientRect({ relativeTo: node.getLayer() ?? this.content, skipShadow: true });
       this.rectCache.set(id, r);
     }
     return r;
@@ -673,6 +906,7 @@ export class BoardCanvas {
         if (!xf || committed) {
           line.position({ x: 0, y: 0 });
           line.scale({ x: 1, y: 1 });
+          line.rotation(0); // committed points already bake any rotation — drop the live spin too
           if (xf) {
             this.remoteXforms.delete(id);
             this.committedXforms.add(id); // until the lagging awareness clears
@@ -743,6 +977,7 @@ export class BoardCanvas {
         // I-beam over an existing text box (click to edit it); the default cursor over empty board.
         this.stage.container().style.cursor = this.textLayer.hitTest(p) ? "text" : CURSOR_URL;
       }
+      if (this.tool === "stamp") this.updateStampGhost(p);
       if (!this.drawing) return;
       this.drawing.points.push(p.x, p.y);
       this.drawing.line.points(this.drawing.points);
@@ -779,7 +1014,11 @@ export class BoardCanvas {
           opacity: this.opacity,
           authorId: String(this.opts.awareness.clientID),
         };
-        addStroke(this.opts.doc, stroke); // commit first…
+        addStroke(this.opts.doc, stroke); // commit first… (observer renders the node synchronously)
+        // …then draw the hit canvas NOW so the just-finished stroke is immediately clickable. The
+        // observer's content.batchDraw() defers the hit pass to the next animation frame, so without
+        // this an instant select-click after drawing resolves to the empty stage and misses the stroke.
+        this.content.drawHit();
         this.opts.onPlaced?.(); // a real stroke landed → collapse the mobile draw sheet
       } else {
         this.content.batchDraw();
@@ -790,6 +1029,7 @@ export class BoardCanvas {
     this.stage.on("pointerleave", () => {
       finish(); // a connector/stroke dragged off the canvas edge still commits
       this.textLayer.hideStickyGhost(); // pointer left the canvas → drop the placement preview
+      this.hideStampGhost();
     });
     // Hide my cursor for peers only on a *real* board exit — when the pointer leaves the whole canvas
     // container — NOT when it merely moves from the canvas onto one of the board's own HTML overlays
@@ -800,9 +1040,128 @@ export class BoardCanvas {
     // on a true exit — including leaving via an overlay, which the stage's own leave never saw.
     this.opts.container.addEventListener("pointerleave", () => {
       this.opts.awareness.setLocalStateField("cursor", null);
+      this.hidePeerTip();
     });
     window.addEventListener("blur", this.onWindowBlur);
   }
+
+  // ---- eraser: a click deletes the object under the pointer; a drag deletes everything its path
+  //      crosses. Each pointer event commits its hits to the doc immediately (one transaction → peers
+  //      see the erasure in realtime); the raised captureTimeout merges the whole swipe into ONE undo
+  //      step. A faint ghost trail follows the cursor and fades/shrinks away on its own (eraserTail). ----
+  private bindEraser(): void {
+    this.stage.on("pointerdown", () => {
+      if (this.tool !== "eraser") return;
+      const p = this.point();
+      this.erasing = true;
+      this.lastErasePoint = p;
+      this.undoManager.captureTimeout = ERASER_UNDO_MERGE_MS; // merge the swipe's deletes into one step…
+      this.undoManager.stopCapturing(); // …but start fresh — don't merge into the preceding edit (a draw)
+      this.pushEraserTrail(p);
+      const batch = new Set<string>();
+      this.eraseHits(p, batch); // a plain click already erases the node under it
+      if (batch.size) deleteObjects(this.opts.doc, [...batch]);
+      this.ensureEraserTail();
+    });
+    this.stage.on("pointermove", () => {
+      if (!this.erasing || !this.lastErasePoint) return;
+      const p = this.point();
+      const batch = new Set<string>();
+      this.eraseAlongSegment(this.lastErasePoint.x, this.lastErasePoint.y, p.x, p.y, batch);
+      this.lastErasePoint = p;
+      this.pushEraserTrail(p);
+      if (batch.size) deleteObjects(this.opts.doc, [...batch]); // commit live → realtime for peers
+    });
+    const finishErase = (): void => {
+      if (!this.erasing) return;
+      this.erasing = false;
+      this.lastErasePoint = null;
+      this.undoManager.captureTimeout = 0; // back to one-step-per-edit for everything else…
+      this.undoManager.stopCapturing(); // …and don't let the next edit merge into the erase step
+    };
+    this.stage.on("pointerup", finishErase);
+    this.stage.on("pointerleave", finishErase);
+  }
+
+  /** Collect the object under one world point — the topmost Konva object (stroke / connector) and any
+   *  HTML text/shape box — into `batch` (a Set, so a point hit twice counts once). The caller deletes
+   *  the whole batch in a single transaction. */
+  private eraseHits(world: { x: number; y: number }, batch: Set<string>): void {
+    const scale = this.stage.scaleX() || 1;
+    const node = this.stage.getIntersection({
+      x: world.x * scale + this.stage.x(),
+      y: world.y * scale + this.stage.y(),
+    });
+    if (node) {
+      const id = this.objIdOf(node);
+      if (id) batch.add(id);
+    }
+    const tid = this.textLayer.hitTest(world);
+    if (tid) batch.add(tid);
+  }
+
+  /** Sample the segment between two world points (≈ every 4 px on screen) so a fast drag erases
+   *  everything it sweeps over instead of skipping objects between pointermove events. */
+  private eraseAlongSegment(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    batch: Set<string>,
+  ): void {
+    const scale = this.stage.scaleX() || 1;
+    const steps = Math.max(1, Math.ceil((Math.hypot(x2 - x1, y2 - y1) * scale) / 4));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      this.eraseHits({ x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }, batch);
+    }
+  }
+
+  /** Append a world point to the fading ghost trail (lazily creating the overlay line). */
+  private pushEraserTrail(p: { x: number; y: number }): void {
+    if (!this.eraserTail) {
+      const ghost = new Konva.Line({
+        stroke: "#9aa3af",
+        strokeWidth: ERASER_GHOST_W / (this.stage.scaleX() || 1), // ~constant px at any zoom
+        opacity: 0.32,
+        lineCap: "round",
+        lineJoin: "round",
+        listening: false,
+      });
+      this.overlay.add(ghost);
+      this.eraserTail = { ghost, trail: [] };
+    }
+    this.eraserTail.trail.push({ x: p.x, y: p.y, t: Date.now() });
+  }
+
+  private ensureEraserTail(): void {
+    if (!this.eraserRaf) this.eraserRaf = requestAnimationFrame(this.eraserTailStep);
+  }
+  /** Age the ghost trail each frame: drop points older than ERASER_TAIL_MS and fade the line as its
+   *  newest point ages — so the trail shrinks + fades out shortly after the cursor stops (or the
+   *  gesture ends), instead of lingering as a solid line. */
+  private readonly eraserTailStep = (): void => {
+    this.eraserRaf = 0;
+    const tail = this.eraserTail;
+    if (tail) {
+      const now = Date.now();
+      while (tail.trail.length && now - tail.trail[0]!.t > ERASER_TAIL_MS) tail.trail.shift();
+      if (!tail.trail.length && !this.erasing) {
+        tail.ghost.destroy();
+        this.eraserTail = null;
+      } else {
+        const pts: number[] = [];
+        for (const q of tail.trail) pts.push(q.x, q.y);
+        tail.ghost.points(pts);
+        const newestAge = tail.trail.length
+          ? now - tail.trail[tail.trail.length - 1]!.t
+          : ERASER_TAIL_MS;
+        tail.ghost.opacity(0.32 * Math.max(0, 1 - newestAge / ERASER_TAIL_MS));
+      }
+      this.overlay.batchDraw();
+    }
+    if (this.eraserTail || this.erasing) this.ensureEraserTail();
+  };
 
   // ---- text + sticky (tap to place) ----
   /** Shared tap-to-place binding for the text + sticky tools. Movement is tracked across
@@ -848,6 +1207,100 @@ export class BoardCanvas {
       this.textLayer.stickyAt(at, this.stickyColor);
       this.opts.onPlaced?.(); // collapse the mobile sticky sheet while you type the label
     });
+  }
+
+  private bindStamp(): void {
+    this.bindTapPlace("stamp", (at) => {
+      if (!this.currentStamp) return; // no stamp picked yet → the wheel is just open
+      addStamp(this.opts.doc, {
+        id: randomId("sp"),
+        type: "stamp",
+        x: at.x,
+        y: at.y,
+        size: DEFAULT_STAMP_SIZE,
+        src: this.currentStamp,
+        rotation: this.stampGhostRot, // land at exactly the previewed tilt
+        authorId: String(this.opts.awareness.clientID),
+      });
+      this.stampBurst(at.x, at.y, DEFAULT_STAMP_SIZE); // celebratory pop where it lands
+      this.stampGhostRot = Math.round((Math.random() * 30 - 15) * 10) / 10; // fresh tilt for the next
+      this.opts.onStampPlaced?.(this.currentStamp); // host bumps the emoji recents
+      this.opts.onPlaced?.(); // (mobile) collapse the sheet — the tool stays active to stamp more
+    });
+  }
+
+  /** A quick celebratory pop when a stamp lands: 6 evenly-spaced spokes shoot outward from the
+   *  centre and fade. Drawn on the overlay (world space), self-destructs when the tween completes. */
+  private stampBurst(cx: number, cy: number, size: number): void {
+    const N = 6;
+    const inner = size * 0.5;
+    const spread = size * 0.6;
+    const len = size * 0.17;
+    // Theme-aware ink: dark spokes on a light board, light spokes on a dark board (not the accent).
+    const color =
+      getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#0e1116";
+    const group = new Konva.Group({ x: cx, y: cy, listening: false });
+    const spokes: { line: Konva.Line; ux: number; uy: number }[] = [];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2; // start straight up, evenly around
+      const line = new Konva.Line({
+        stroke: color,
+        strokeWidth: Math.max(2, size * 0.05),
+        lineCap: "round",
+      });
+      group.add(line);
+      spokes.push({ line, ux: Math.cos(a), uy: Math.sin(a) });
+    }
+    this.overlay.add(group);
+    const start = performance.now();
+    const DUR = 460;
+    const ease = (t: number): number => 1 - Math.pow(1 - t, 3); // easeOutCubic
+    const tick = (now: number): void => {
+      const t = Math.min(1, (now - start) / DUR);
+      const r = inner + spread * ease(t);
+      group.opacity(1 - t);
+      for (const sp of spokes)
+        sp.line.points([sp.ux * r, sp.uy * r, sp.ux * (r + len), sp.uy * (r + len)]);
+      this.overlay.batchDraw();
+      if (t < 1) requestAnimationFrame(tick);
+      else {
+        group.destroy();
+        this.overlay.batchDraw();
+      }
+    };
+    requestAnimationFrame(tick);
+  }
+
+  /** Translucent preview of the armed stamp, centred on the cursor while the stamp tool is active. */
+  private updateStampGhost(p: { x: number; y: number }): void {
+    if (!this.currentStamp) return this.hideStampGhost();
+    if (!this.stampGhost) {
+      this.stampGhost = new Konva.Image({ image: undefined, listening: false, opacity: 0.5 });
+      this.overlay.add(this.stampGhost);
+    }
+    const g = this.stampGhost;
+    const size = DEFAULT_STAMP_SIZE;
+    if (this.stampGhostSrc !== this.currentStamp) {
+      this.stampGhostSrc = this.currentStamp;
+      const cached = this.stampImgCache.get(this.stampUrl(this.currentStamp));
+      const ready =
+        cached instanceof HTMLCanvasElement ||
+        (!!cached && cached.complete && cached.naturalWidth > 0);
+      if (!ready) g.image(undefined); // don't show the previous stamp while the new one loads
+      this.loadStampImage(this.currentStamp, g);
+    }
+    g.size({ width: size, height: size });
+    g.offset({ x: size / 2, y: size / 2 }); // centred on the drop point
+    g.position({ x: p.x, y: p.y });
+    g.rotation(this.stampGhostRot);
+    g.visible(true);
+    this.overlay.batchDraw();
+  }
+  private hideStampGhost(): void {
+    if (this.stampGhost?.visible()) {
+      this.stampGhost.visible(false);
+      this.overlay.batchDraw();
+    }
   }
 
   private bindShapes(): void {
@@ -991,6 +1444,24 @@ export class BoardCanvas {
     const scale = this.stage.scaleX() || 1;
     const pts = this.connectorPolyline(conn.kind, conn.from, conn.to);
     const n = pts.length;
+    // A bound end attaches at the shape's side mid-edge — on its border. The connector layer paints
+    // UNDER the HTML shape overlay, so an endpoint sitting on the border gets clipped: an arrowhead
+    // reads as "cut off" and a round line cap pokes past the edge into the shape. Pull a bound end
+    // inward by half the stroke (clears the round cap) + a small margin, so the drawn cap/arrowhead
+    // stops just OUTSIDE the shape. The logical endpoint (handles, re-routing) stays on the border.
+    const pullBoundIn = (tipI: number, prevI: number, bound: boolean): void => {
+      if (!bound) return;
+      const tx = pts[tipI]!,
+        ty = pts[tipI + 1]!,
+        qx = pts[prevI]!,
+        qy = pts[prevI + 1]!;
+      const seg = Math.hypot(tx - qx, ty - qy) || 1;
+      const t = Math.min((w / 2 + 2.5 / scale) / seg, 0.45); // never cross a short connector's middle
+      pts[tipI] = tx - (tx - qx) * t;
+      pts[tipI + 1] = ty - (ty - qy) * t;
+    };
+    pullBoundIn(n - 2, n - 4, !!conn.to.shapeId);
+    pullBoundIn(0, 2, !!conn.from.shapeId);
     const end = { x: pts[n - 2]!, y: pts[n - 1]! };
     const endPrev = { x: pts[n - 4]!, y: pts[n - 3]! };
     const start = { x: pts[0]!, y: pts[1]! };
@@ -1387,7 +1858,10 @@ export class BoardCanvas {
   // ---- connector body move: drag a selected connector to reposition it (rigid; detaches bound ends
   //      so it can actually move — a connector bound on both ends would otherwise be pinned) ----
 
-  private beginConnectorMove(): void {
+  /** Begin dragging the selected connectors as free bodies. During a GROUP move, `skipBoundTo` holds
+   *  the selected shape ids: a connector bound to one of them is left out — it follows that shape via
+   *  live re-routing instead, so it stays attached rather than being detached into free points. */
+  private beginConnectorMove(skipBoundTo?: Set<string>): void {
     const origins = new Map<
       string,
       { a: { x: number; y: number }; b: { x: number; y: number }; conn: ConnectorObject }
@@ -1396,12 +1870,19 @@ export class BoardCanvas {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
       if (obj?.type !== "connector") continue;
+      if (
+        skipBoundTo &&
+        ((obj.from.shapeId != null && skipBoundTo.has(obj.from.shapeId)) ||
+          (obj.to.shapeId != null && skipBoundTo.has(obj.to.shapeId)))
+      )
+        continue; // bound to a moving shape → re-routes with it; don't move (and free) it here
       origins.set(id, {
         a: this.resolveConnectorEnd(obj.from),
         b: this.resolveConnectorEnd(obj.to),
         conn: obj,
       });
     }
+    if (!origins.size) return; // nothing to move as a free body (all bound connectors re-route)
     const p = this.point();
     this.connectorMove = { startX: p.x, startY: p.y, origins, moved: false };
   }
@@ -1621,11 +2102,32 @@ export class BoardCanvas {
   private bindSelection(): void {
     this.stage.on("pointerdown", (e) => {
       if (this.tool !== "select") return;
+      this.hidePeerTip(); // a press starts an interaction → drop the hover tooltip
       if (this.isOnTransformer(e.target)) return; // a handle drag → let the transformer resize
       this.cancelMarquee(); // drop any marquee orphaned by a missed pointerup before starting fresh
       const shift = (e.evt as PointerEvent).shiftKey;
       // Text lives in the HTML overlay (not the Konva hit graph), so hit-test it first.
       const tid = this.textLayer.hitTest(this.point());
+      // Group rotate: pressing just outside a group corner rotates the whole selection (no handle).
+      if (!shift && this.rotationCornerOf(this.point())) {
+        this.beginGroupRotate();
+        return;
+      }
+      // Group move: a multi-node selection drags as one unit. Pressing on a SELECTED member, or on the
+      // empty space inside the selection box, moves every selected node (strokes + text + connectors)
+      // together. A press on an unselected node, or outside the box, falls through to normal select.
+      // (Shift extends the selection; transform handles were already intercepted above.)
+      if (!shift && this.isGroupSelection()) {
+        const hitId = tid ?? this.objIdOf(e.target);
+        const u = this.selectionUnionRect();
+        const onSelected = hitId != null && this.isSelectedAny(hitId);
+        const inEmptySpace =
+          hitId == null && !!u && pointInRect(this.point(), u, this.viewport.screenPx(6));
+        if (onSelected || inEmptySpace) {
+          this.beginGroupMove();
+          return;
+        }
+      }
       if (tid) {
         // Two-click: a QUICK second tap on the already-sole-selected box edits it (fired on release
         // if it stayed a tap — a drag instead moves the box). A slow click just re-selects, so you
@@ -1672,9 +2174,22 @@ export class BoardCanvas {
         else this.selectedConnectors.add(id);
         this.refreshConnectorSelection();
         this.connectorLayer.batchDraw();
-        this.notifySelection();
-        this.publishSelection();
+        // Re-evaluate the transform box vs the union group box (a connector shift-added to a stroke
+        // selection makes it mixed) and redraw + notify + publish.
+        this.reattachTransformer();
         if (this.selectedConnectors.has(id)) this.beginConnectorMove(); // drag the body to move it
+        return;
+      }
+      if (id && this.stampNodeById.has(id)) {
+        if (shift) {
+          if (this.selectedStamps.has(id)) this.selectedStamps.delete(id);
+          else this.selectedStamps.add(id);
+          this.reattachTransformer();
+          if (this.selectedStamps.has(id)) this.beginMove();
+        } else {
+          if (!this.selectedStamps.has(id)) this.setSelection([id]);
+          this.beginMove();
+        }
         return;
       }
       if (id) {
@@ -1698,10 +2213,17 @@ export class BoardCanvas {
         const d = Math.hypot(p.x - this.textTapEdit.x, p.y - this.textTapEdit.y);
         if (d > this.textLayer.tapSlop()) this.textTapEdit = null; // became a drag → move, don't edit
       }
-      if (this.textLayer.isMoving()) this.textLayer.moveTo(this.point());
+      if (this.rotateGesture) this.updateGroupRotate();
+      else if (this.groupMoving) this.updateGroupMove();
+      else if (this.textLayer.isMoving()) this.textLayer.moveTo(this.point());
       else if (this.moveState) this.updateMove();
       else if (this.connectorMove) this.updateConnectorMove();
       else if (this.marquee) this.updateMarquee();
+      else if (this.tool === "select" && !this.resizing) {
+        // Idle hover: a "who selected this" tooltip over another user's selection + the cursor
+        // (rotate near a group corner, normal otherwise).
+        this.updateSelectHover(this.point());
+      } else this.hidePeerTip();
     });
     this.stage.on("pointerup", this.onWindowPointerUp);
     // A release that lands outside the stage still ends the gesture.
@@ -1732,7 +2254,11 @@ export class BoardCanvas {
 
   private setSelection(ids: string[]): void {
     this.selected.clear();
-    for (const id of ids) if (this.nodeById.has(id)) this.selected.add(id);
+    this.selectedStamps.clear();
+    for (const id of ids) {
+      if (this.nodeById.has(id)) this.selected.add(id);
+      else if (this.stampNodeById.has(id)) this.selectedStamps.add(id);
+    }
     this.cull(); // keep selected (possibly off-screen) nodes visible so the transform box bounds them
     this.reattachTransformer();
   }
@@ -1743,24 +2269,31 @@ export class BoardCanvas {
       this.refreshConnectorSelection();
       this.connectorLayer.batchDraw();
     }
-    if (!this.selected.size) return;
+    if (!this.selected.size && !this.selectedStamps.size) return;
     this.selected.clear();
+    this.selectedStamps.clear();
     this.cull(); // re-hide any off-screen nodes that were kept visible only because selected
     this.reattachTransformer();
   }
   /** Select every object on the board (⌘A). */
   selectAll(): void {
-    this.setSelection([...this.nodeById.keys()]);
+    this.setSelection([...this.nodeById.keys(), ...this.stampNodeById.keys()]);
     this.textLayer.selectAll();
     for (const id of this.connectorNodes.keys()) this.selectedConnectors.add(id);
     this.refreshConnectorSelection();
     this.connectorLayer.batchDraw();
+    // All subsystems settled — re-evaluate the transform box vs the union group box (a board with any
+    // non-stroke object makes ⌘A a mixed selection → union box, transform box detached) and redraw it.
+    this.reattachTransformer();
   }
   deleteSelection(): void {
     this.textLayer.deleteSelected();
     const connIds = [...this.selectedConnectors];
     this.selectedConnectors.clear();
     if (connIds.length) deleteObjects(this.opts.doc, connIds); // observer re-renders without them
+    const stampIds = [...this.selectedStamps];
+    this.selectedStamps.clear();
+    if (stampIds.length) deleteObjects(this.opts.doc, stampIds);
     if (!this.selected.size) return;
     const ids = [...this.selected];
     this.selected.clear();
@@ -1769,7 +2302,12 @@ export class BoardCanvas {
 
   /** Copy the current selection (strokes + connectors + text/shapes) into the in-app clipboard. */
   copySelection(): void {
-    const ids = [...this.selected, ...this.selectedConnectors, ...this.textLayer.selectedIds()];
+    const ids = [
+      ...this.selected,
+      ...this.selectedStamps,
+      ...this.selectedConnectors,
+      ...this.textLayer.selectedIds(),
+    ];
     if (!ids.length) return; // nothing selected → keep whatever's already on the clipboard
     const objs: BoardObject[] = [];
     for (const id of ids) {
@@ -1827,6 +2365,56 @@ export class BoardCanvas {
       this.selected.size > 0 || this.selectedConnectors.size > 0 || this.textLayer.hasSelection()
     );
   }
+
+  /** Rotate the current selection by `delta` degrees about each object's own centre (the [ / ] keyboard
+   *  nudge). Shapes/stickies/text spin via a stored angle (text layer); strokes bake the rotation into
+   *  their points and connectors into their endpoints (a rotated connector detaches from any shape). */
+  rotateSelection(delta: number): void {
+    this.textLayer.rotateSelected(delta);
+    const rad = (delta * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const spin = (px: number, py: number, cx: number, cy: number): { x: number; y: number } => ({
+      x: cx + (px - cx) * cos - (py - cy) * sin,
+      y: cy + (px - cx) * sin + (py - cy) * cos,
+    });
+    const strokeUpdates: { id: string; points: number[] }[] = [];
+    for (const id of this.selected) {
+      const obj = readObject(this.objects.get(id)!);
+      if (obj?.type !== "stroke") continue;
+      const b = this.strokeBBox(obj);
+      const cx = b.x + b.width / 2;
+      const cy = b.y + b.height / 2;
+      const pts: number[] = [];
+      for (let i = 0; i + 1 < obj.points.length; i += 2) {
+        const p = spin(obj.points[i]!, obj.points[i + 1]!, cx, cy);
+        pts.push(p.x, p.y);
+      }
+      strokeUpdates.push({ id, points: pts });
+    }
+    const connUpdates: {
+      id: string;
+      from: { x: number; y: number };
+      to: { x: number; y: number };
+    }[] = [];
+    for (const id of this.selectedConnectors) {
+      const obj = readObject(this.objects.get(id)!);
+      if (obj?.type !== "connector") continue;
+      if (obj.from.shapeId || obj.to.shapeId) continue; // snapped to a shape → rotating it (and thus
+      // detaching it) makes no sense; leave it anchored.
+      const a = this.resolveConnectorEnd(obj.from);
+      const z = this.resolveConnectorEnd(obj.to);
+      const cx = (a.x + z.x) / 2;
+      const cy = (a.y + z.y) / 2;
+      connUpdates.push({ id, from: spin(a.x, a.y, cx, cy), to: spin(z.x, z.y, cx, cy) });
+    }
+    if (!strokeUpdates.length && !connUpdates.length) return;
+    this.opts.doc.transact(() => {
+      if (strokeUpdates.length) setObjectsPoints(this.opts.doc, strokeUpdates);
+      for (const u of connUpdates)
+        setConnectorEnds(this.opts.doc, u.id, { from: u.from, to: u.to });
+    });
+  }
   /** Test/debug hook: how many remote-peer selection outlines are currently drawn. */
   remoteSelectionCount(): number {
     return this.remoteSelections.getChildren().length;
@@ -1846,7 +2434,7 @@ export class BoardCanvas {
   /** Test/debug hook: a rendered object's content-relative bounding rect (null if not drawn). */
   nodeContentRect(id: string): Rect | null {
     const node = this.nodeById.get(id);
-    return node ? node.getClientRect({ relativeTo: this.content }) : null;
+    return node ? node.getClientRect({ relativeTo: node.getLayer() ?? this.content }) : null;
   }
   /** Test/debug hook: total object nodes vs. how many are currently drawn (viewport-culling check). */
   drawnNodeCount(): { total: number; visible: number } {
@@ -1866,9 +2454,13 @@ export class BoardCanvas {
     this.notifySelection();
   }
   private notifySelection(): void {
-    this.selectionListener?.(
-      this.selected.size + this.selectedConnectors.size + this.textLayer.selectedCount(),
-    );
+    const count =
+      this.selected.size +
+      this.selectedStamps.size +
+      this.selectedConnectors.size +
+      this.textLayer.selectedCount();
+    this.textLayer.setGroupSelected(count >= 2); // hide a shape's snap dots inside a multi-node group
+    this.selectionListener?.(count);
   }
 
   /**
@@ -1878,7 +2470,12 @@ export class BoardCanvas {
    */
   private publishSelection(): void {
     // strokes + connectors + text so peers outline everything I've selected
-    const ids = [...this.selected, ...this.selectedConnectors, ...this.textLayer.selectedIds()];
+    const ids = [
+      ...this.selected,
+      ...this.selectedStamps,
+      ...this.selectedConnectors,
+      ...this.textLayer.selectedIds(),
+    ];
     const key = ids.slice().sort().join(",");
     if (key === this.lastPublishedSelection) return;
     // A live marquee resolves the selection on every pointermove; cap that broadcast
@@ -1897,14 +2494,83 @@ export class BoardCanvas {
   /** Point the transformer at the currently-selected nodes (called after every render). */
   private reattachTransformer(): void {
     for (const id of [...this.selected]) if (!this.nodeById.has(id)) this.selected.delete(id);
-    const nodes = [...this.selected]
+    for (const id of [...this.selectedStamps])
+      if (!this.stampNodeById.has(id)) this.selectedStamps.delete(id);
+    const strokeNodes = [...this.selected]
       .map((id) => this.nodeById.get(id))
       .filter((n): n is Konva.Line => !!n);
-    this.transformer.nodes(nodes);
+    const stampNodes = [...this.selectedStamps]
+      .map((id) => this.stampNodeById.get(id))
+      .filter((n): n is Konva.Image => !!n);
+    const konvaNodes = [...strokeNodes, ...stampNodes];
+    const nonStroke = this.textLayer.selectedCount() + this.selectedConnectors.size;
+    // No floating rotate handle (the "5th node") on anything — every Konva selection, lone or group,
+    // rotates by dragging just outside a corner (rotationCornerAt + beginGroupRotate), matching the
+    // HTML text/shape boxes. The native rotater is never shown.
+    this.transformer.rotateEnabled(false);
+    // A group that includes non-stroke nodes can't go in the Konva transformer (text/connectors aren't
+    // Konva nodes), so the transformer drives an invisible proxy sized to the whole union instead; its
+    // transform is replayed onto every node by begin/update/endGroupTransform. Pure-stroke selections
+    // (and single nodes) attach the transformer natively. Never re-home the proxy mid-gesture.
+    const useProxy = konvaNodes.length + nonStroke >= 2 && nonStroke > 0;
+    if (useProxy && !this.resizing) {
+      const u = this.selectionUnionRect();
+      if (u) {
+        const proxy = this.ensureGroupProxy();
+        proxy.setAttrs({
+          x: u.x + u.width / 2,
+          y: u.y + u.height / 2,
+          width: u.width,
+          height: u.height,
+          offsetX: u.width / 2, // origin at the centre → resize/rotate pivots on the group centre
+          offsetY: u.height / 2,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+        });
+        this.transformer.nodes([proxy]);
+      } else {
+        this.transformer.nodes([]);
+      }
+    } else if (!this.resizing) {
+      this.transformer.nodes(konvaNodes);
+    }
     this.refreshTransformer();
     this.renderSelectionBoxes();
     this.notifySelection();
     this.publishSelection();
+  }
+
+  private ensureGroupProxy(): Konva.Rect {
+    if (!this.groupProxy) {
+      // No fill/stroke → invisible, but a real sized node so the transformer renders handles on it.
+      this.groupProxy = new Konva.Rect({ listening: false });
+      this.uiLayer.add(this.groupProxy);
+    }
+    return this.groupProxy;
+  }
+  /** True while the transformer is driving the group proxy (a mixed/non-stroke group), not real nodes. */
+  private transformerOnProxy(): boolean {
+    return this.groupProxy != null && this.transformer.nodes()[0] === this.groupProxy;
+  }
+  /** Re-size the group proxy (and its transform box) to the selection's current union — call while the
+   *  group moves so the mixed-group box tracks the nodes (a transform resets it via reattach instead). */
+  private repositionGroupProxy(): void {
+    if (!this.groupProxy || !this.transformerOnProxy()) return;
+    const u = this.selectionUnionRect();
+    if (!u) return;
+    this.groupProxy.setAttrs({
+      x: u.x + u.width / 2,
+      y: u.y + u.height / 2,
+      width: u.width,
+      height: u.height,
+      offsetX: u.width / 2,
+      offsetY: u.height / 2,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+    });
+    this.transformer.forceUpdate();
   }
 
   /**
@@ -1922,6 +2588,11 @@ export class BoardCanvas {
   private beginMove(): void {
     const p = this.point();
     this.moveState = { startX: p.x, startY: p.y, dx: 0, dy: 0 };
+    this.stampMoveOrigins.clear();
+    for (const id of this.selectedStamps) {
+      const n = this.stampNodeById.get(id);
+      if (n) this.stampMoveOrigins.set(id, { x: n.x(), y: n.y() });
+    }
     this.stage.container().style.cursor = "move";
   }
   private updateMove(): void {
@@ -1932,16 +2603,24 @@ export class BoardCanvas {
     for (const id of this.selected) {
       this.nodeById.get(id)?.position({ x: this.moveState.dx, y: this.moveState.dy });
     }
+    for (const id of this.selectedStamps) {
+      const o = this.stampMoveOrigins.get(id);
+      this.stampNodeById
+        .get(id)
+        ?.position({ x: (o?.x ?? 0) + this.moveState.dx, y: (o?.y ?? 0) + this.moveState.dy });
+    }
     this.transformer.forceUpdate();
     this.renderSelectionBoxes();
     this.content.batchDraw();
+    this.stampLayer.batchDraw(); // live (stamps on their own layer)
     // Stream the in-progress move to peers (throttled like cursors). The doc only commits
-    // on release (endMove), so this preview is ephemeral — no undo/persistence churn.
+    // on release (endMove), so this preview is ephemeral — no undo/persistence churn. Suppressed
+    // during a group move: updateGroupMove sends ONE unified "drag" for all stroke + text ids.
     const now = Date.now();
-    if (now - this.lastDragSent >= 1000 / CURSOR_HZ) {
+    if (!this.groupMoving && now - this.lastDragSent >= 1000 / CURSOR_HZ) {
       this.lastDragSent = now;
       this.opts.awareness.setLocalStateField("drag", {
-        ids: [...this.selected],
+        ids: [...this.selected, ...this.selectedStamps],
         dx: this.moveState.dx,
         dy: this.moveState.dy,
       });
@@ -1954,9 +2633,79 @@ export class BoardCanvas {
     // Commit the move to the doc first (peers re-render at the baked coords), then stop the
     // live preview — this ordering lets the committed geometry land before the offset clears.
     if (m && (Math.abs(m.dx) >= 0.01 || Math.abs(m.dy) >= 0.01)) {
-      translateObjects(this.opts.doc, [...this.selected], m.dx, m.dy);
+      this.opts.doc.transact(() => {
+        if (this.selected.size) translateObjects(this.opts.doc, [...this.selected], m.dx, m.dy);
+        for (const id of this.selectedStamps) {
+          const o = this.stampMoveOrigins.get(id);
+          if (o) setStampGeom(this.opts.doc, id, { x: o.x + m.dx, y: o.y + m.dy });
+        }
+      });
     }
+    this.stampMoveOrigins.clear();
     this.opts.awareness.setLocalStateField("drag", null);
+  }
+
+  // ---- group move: drag a whole multi-node selection (any mix of types) as one unit ----
+  /** Whether the current selection spans 2+ nodes across all subsystems (so it has a group box). */
+  private isGroupSelection(): boolean {
+    return (
+      this.selected.size +
+        this.selectedStamps.size +
+        this.textLayer.selectedCount() +
+        this.selectedConnectors.size >=
+      2
+    );
+  }
+  /** Whether `id` belongs to the current selection, whatever its type. */
+  private isSelectedAny(id: string): boolean {
+    return (
+      this.selected.has(id) ||
+      this.selectedStamps.has(id) ||
+      this.textLayer.isSelected(id) ||
+      this.selectedConnectors.has(id)
+    );
+  }
+  private beginGroupMove(): void {
+    const p = this.point();
+    this.groupMoving = true;
+    this.groupMoveStart = { x: p.x, y: p.y };
+    if (this.selected.size || this.selectedStamps.size) this.beginMove(); // strokes + stamps
+    if (this.textLayer.selectedCount()) this.textLayer.beginMove(p); // text / sticky / shape
+    // Connectors move as free bodies, EXCEPT those bound to a selected shape — they re-route with it.
+    if (this.selectedConnectors.size)
+      this.beginConnectorMove(new Set(this.textLayer.selectedIds()));
+    this.stage.container().style.cursor = "move";
+  }
+  private updateGroupMove(): void {
+    const p = this.point();
+    if (this.moveState) this.updateMove(); // strokes (its own peer broadcast is suppressed)
+    if (this.textLayer.isMoving()) this.textLayer.moveTo(p, false); // text (broadcast suppressed)
+    if (this.connectorMove) this.updateConnectorMove(); // connectors (own awareness field)
+    this.renderSelectionBoxes(); // faint per-stroke outlines follow the moving strokes
+    this.repositionGroupProxy(); // and the mixed-group transform box tracks the moving union
+    // One unified live "drag" for every stroke + text id (same shared delta) so peers move the whole
+    // group together — the per-subsystem broadcasts above are suppressed so they don't overwrite it.
+    if (!this.groupMoveStart) return;
+    const dx = p.x - this.groupMoveStart.x;
+    const dy = p.y - this.groupMoveStart.y;
+    const now = Date.now();
+    if (now - this.lastDragSent >= 1000 / CURSOR_HZ) {
+      this.lastDragSent = now;
+      const ids = [...this.selected, ...this.selectedStamps, ...this.textLayer.selectedIds()];
+      this.opts.awareness.setLocalStateField("drag", ids.length ? { ids, dx, dy } : null);
+    }
+  }
+  private endGroupMove(): void {
+    this.groupMoving = false;
+    this.groupMoveStart = null;
+    // Commit every subsystem in ONE transaction so undo reverts the whole group move in a single step.
+    this.opts.doc.transact(() => {
+      if (this.moveState) this.endMove();
+      if (this.textLayer.isMoving()) this.textLayer.endMove();
+      if (this.connectorMove) this.endConnectorMove();
+    });
+    this.opts.awareness.setLocalStateField("drag", null); // clear the unified live preview
+    this.stage.container().style.cursor = this.tool === "select" ? CURSOR_URL : "grab";
   }
 
   // ---- resize bake: fold the transformer's scale/translate into the points ----
@@ -1967,7 +2716,26 @@ export class BoardCanvas {
     for (const id of this.selected) {
       const node = this.nodeById.get(id);
       if (!node) continue;
-      nodes.push({ id, x: node.x(), y: node.y(), sx: node.scaleX(), sy: node.scaleY() });
+      nodes.push({
+        id,
+        x: node.x(),
+        y: node.y(),
+        sx: node.scaleX(),
+        sy: node.scaleY(),
+        rotation: node.rotation(),
+      });
+    }
+    for (const id of this.selectedStamps) {
+      const node = this.stampNodeById.get(id);
+      if (!node) continue;
+      nodes.push({
+        id,
+        x: node.x(),
+        y: node.y(),
+        sx: node.scaleX(),
+        sy: node.scaleY(),
+        rotation: node.rotation(),
+      });
     }
     this.opts.awareness.setLocalStateField("resize", nodes.length ? { nodes } : null);
   }
@@ -1977,23 +2745,369 @@ export class BoardCanvas {
     for (const id of this.selected) {
       const node = this.nodeById.get(id);
       if (!node) continue;
-      const tr = node.getTransform();
+      const tr = node.getTransform(); // full local matrix — position + rotation + scale, all baked in
       const pts = node.points();
       const out: number[] = [];
       for (let i = 0; i < pts.length; i += 2) {
         const moved = tr.point({ x: pts[i] ?? 0, y: pts[i + 1] ?? 0 });
         out.push(moved.x, moved.y);
       }
+      // Reset the live transform now that the points encode it, so a re-render that reuses this node
+      // (the incremental path) doesn't apply the rotation/scale a second time on top of baked coords.
+      node.position({ x: 0, y: 0 });
+      node.rotation(0);
+      node.scale({ x: 1, y: 1 });
       updates.push({ id, points: out });
     }
     if (updates.length) setObjectsPoints(this.opts.doc, updates); // → re-render at baked coords
+    for (const id of this.selectedStamps) {
+      const node = this.stampNodeById.get(id);
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (!node || obj?.type !== "stamp") continue;
+      const scale = (Math.abs(node.scaleX()) + Math.abs(node.scaleY())) / 2;
+      setStampGeom(this.opts.doc, id, {
+        x: node.x(),
+        y: node.y(),
+        size: Math.max(8, obj.size * scale),
+        rotation: node.rotation(),
+      });
+      node.scale({ x: 1, y: 1 }); // the doc re-render applies the baked size
+    }
+  }
+
+  // ---- group transform: replay the proxy's resize/rotate onto every node of a mixed selection ----
+  /** Capture each node's pre-transform geometry + the proxy's start matrix, so each tick maps the
+   *  proxy's delta forward onto strokes (points), text/shape boxes, and connector endpoints. */
+  private beginGroupTransform(): void {
+    const proxy = this.groupProxy;
+    if (!proxy) return;
+    const startInv = proxy.getTransform().copy().invert();
+    const strokes = new Map<string, number[]>();
+    for (const id of this.selected) {
+      const node = this.nodeById.get(id);
+      if (node) strokes.set(id, [...node.points()]); // strokes render at world points (position 0)
+    }
+    const texts = new Map<
+      string,
+      { cx: number; cy: number; w: number; h: number; rot: number; font: number }
+    >();
+    for (const id of this.textLayer.selectedIds()) {
+      const g = this.textLayer.boxGeomOf(id);
+      if (g)
+        texts.set(id, {
+          cx: g.x + g.width / 2,
+          cy: g.y + g.height / 2,
+          w: g.width,
+          h: g.height,
+          rot: g.rotation,
+          font: g.fontSize,
+        });
+    }
+    const connectors = new Map<
+      string,
+      { a: { x: number; y: number }; b: { x: number; y: number } }
+    >();
+    for (const id of this.selectedConnectors) {
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (obj?.type !== "connector") continue;
+      connectors.set(id, {
+        a: this.resolveConnectorEnd(obj.from),
+        b: this.resolveConnectorEnd(obj.to),
+      });
+    }
+    const stamps = new Map<string, { cx: number; cy: number; size: number; rot: number }>();
+    for (const id of this.selectedStamps) {
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (obj?.type === "stamp")
+        stamps.set(id, { cx: obj.x, cy: obj.y, size: obj.size, rot: obj.rotation ?? 0 });
+    }
+    this.groupXform = { startInv, strokes, texts, connectors, stamps };
+  }
+
+  /** The proxy's live delta: a world→world matrix `D` for points, plus scalar scale (started at 1)
+   *  and rotation° (started at 0) for box width/height/font/rotation. null if no transform is active. */
+  private groupDelta(): {
+    D: Konva.Transform;
+    sx: number;
+    sy: number;
+    s: number;
+    rotDeg: number;
+  } | null {
+    const gx = this.groupXform;
+    const proxy = this.groupProxy;
+    if (!gx || !proxy) return null;
+    // A corner ROTATE drives D from the gesture angle about the group centre (the proxy box is kept
+    // axis-aligned so it matches the union box peers draw). A handle RESIZE drives D from the proxy.
+    const rg = this.rotateGesture;
+    if (rg) {
+      const rad = (rg.angle * Math.PI) / 180;
+      const D = new Konva.Transform()
+        .translate(rg.center.x, rg.center.y)
+        .rotate(rad)
+        .translate(-rg.center.x, -rg.center.y);
+      return { D, sx: 1, sy: 1, s: 1, rotDeg: rg.angle };
+    }
+    const D = proxy.getTransform().copy().multiply(gx.startInv.copy()); // D = nowMatrix · startMatrix⁻¹
+    const sx = Math.abs(proxy.scaleX());
+    const sy = Math.abs(proxy.scaleY());
+    return { D, sx, sy, s: (sx + sy) / 2, rotDeg: proxy.rotation() };
+  }
+
+  private updateGroupTransform(): void {
+    const gx = this.groupXform;
+    const d = this.groupDelta();
+    if (!gx || !d) return;
+    for (const [id, pts] of gx.strokes) {
+      const node = this.nodeById.get(id);
+      if (!node) continue;
+      const out: number[] = [];
+      for (let i = 0; i + 1 < pts.length; i += 2) {
+        const p = d.D.point({ x: pts[i]!, y: pts[i + 1]! });
+        out.push(p.x, p.y);
+      }
+      node.points(out);
+    }
+    for (const [id, g] of gx.stamps) {
+      const node = this.stampNodeById.get(id);
+      if (!node) continue;
+      const c = d.D.point({ x: g.cx, y: g.cy });
+      const sz = g.size * d.s;
+      node.position({ x: c.x, y: c.y });
+      node.rotation(g.rot + d.rotDeg);
+      node.size({ width: sz, height: sz });
+      node.offset({ x: sz / 2, y: sz / 2 });
+    }
+    this.content.batchDraw();
+    this.stampLayer.batchDraw(); // live
+    if (gx.texts.size) {
+      const preview = new Map<
+        string,
+        { x: number; y: number; width: number; height: number; fontSize: number; rotation: number }
+      >();
+      for (const [id, g] of gx.texts) {
+        const c = d.D.point({ x: g.cx, y: g.cy });
+        const w = g.w * d.sx;
+        const h = g.h * d.sy;
+        preview.set(id, {
+          x: c.x - w / 2,
+          y: c.y - h / 2,
+          width: w,
+          height: h,
+          fontSize: g.font * d.s,
+          rotation: g.rot + d.rotDeg,
+        });
+      }
+      this.textLayer.setGroupPreview(preview);
+    }
+    for (const [id, ends] of gx.connectors) {
+      const group = this.connectorNodes.get(id);
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (!group || obj?.type !== "connector") continue;
+      const a = d.D.point(ends.a);
+      const b = d.D.point(ends.b);
+      this.drawConnector(
+        group,
+        { ...obj, from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } },
+        SELECT_BLUE,
+      );
+    }
+    this.connectorLayer.batchDraw();
+    this.renderSelectionBoxes();
+    this.broadcastGroupXform(d, gx); // stream the live transform to peers (strokes + stamps)
+  }
+
+  /** Stream a live group transform to peers via the shared "resize" channel — the matrix `D` is the
+   *  same node transform for every stroke (offset 0), and each stamp's centre maps through `D`. Text
+   *  and connectors converge on the doc commit (no live preview). Throttled like cursors. */
+  private broadcastGroupXform(
+    d: { D: Konva.Transform; sx: number; sy: number; s: number; rotDeg: number },
+    gx: {
+      strokes: Map<string, number[]>;
+      stamps: Map<string, { cx: number; cy: number; size: number; rot: number }>;
+    },
+  ): void {
+    const now = Date.now();
+    if (now - this.lastResizeSent < 1000 / CURSOR_HZ) return;
+    this.lastResizeSent = now;
+    const tr = d.D.getTranslation();
+    const nodes: ResizeNode[] = [];
+    for (const id of gx.strokes.keys())
+      nodes.push({ id, x: tr.x, y: tr.y, sx: d.sx, sy: d.sy, rotation: d.rotDeg });
+    for (const [id, g] of gx.stamps) {
+      const c = d.D.point({ x: g.cx, y: g.cy });
+      nodes.push({ id, x: c.x, y: c.y, sx: d.s, sy: d.s, rotation: g.rot + d.rotDeg });
+    }
+    this.opts.awareness.setLocalStateField("resize", nodes.length ? { nodes } : null);
+  }
+
+  private endGroupTransform(): void {
+    const gx = this.groupXform;
+    const d = this.groupDelta();
+    this.groupXform = null;
+    if (gx && d) {
+      // Bake the whole group transform into the doc in ONE transaction → a single undo step.
+      this.opts.doc.transact(() => {
+        const sUpd: { id: string; points: number[] }[] = [];
+        for (const [id, pts] of gx.strokes) {
+          const out: number[] = [];
+          for (let i = 0; i + 1 < pts.length; i += 2) {
+            const p = d.D.point({ x: pts[i]!, y: pts[i + 1]! });
+            out.push(p.x, p.y);
+          }
+          sUpd.push({ id, points: out });
+        }
+        if (sUpd.length) setObjectsPoints(this.opts.doc, sUpd);
+        for (const [id, g] of gx.texts) {
+          const c = d.D.point({ x: g.cx, y: g.cy });
+          const w = g.w * d.sx;
+          const h = g.h * d.sy;
+          this.textLayer.commitGroupTransform(id, {
+            x: c.x - w / 2,
+            y: c.y - h / 2,
+            width: w,
+            height: h,
+            rotation: g.rot + d.rotDeg,
+            fontSize: g.font * d.s,
+          });
+        }
+        for (const [id, ends] of gx.connectors) {
+          const a = d.D.point(ends.a);
+          const b = d.D.point(ends.b);
+          setConnectorEnds(this.opts.doc, id, { from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } });
+        }
+        for (const [id, g] of gx.stamps) {
+          const c = d.D.point({ x: g.cx, y: g.cy });
+          setStampGeom(this.opts.doc, id, {
+            x: c.x,
+            y: c.y,
+            size: Math.max(8, g.size * d.s),
+            rotation: g.rot + d.rotDeg,
+          });
+        }
+      });
+    }
+    // Doc committed above → now end the live peer preview (peers apply the committed geometry, then
+    // drop the transform; the committedXforms guard bridges any ordering, like the native resize).
+    this.opts.awareness.setLocalStateField("resize", null);
+    this.textLayer.clearGroupPreview();
+    this.reattachTransformer(); // reset the proxy to the new union bounds + redraw chrome
+  }
+
+  // ---- group rotate: drag just outside a corner to rotate the whole selection (no rotate handle) ----
+  /** Whether `world` sits in a rotation zone — just outside one of the group selection's corners. */
+  private rotationCornerOf(world: { x: number; y: number }): RotateCorner | null {
+    // Any selection that includes a Konva node (stroke/stamp) — lone or grouped — rotates by a
+    // corner-drag; a lone HTML box (text/sticky/shape) keeps the text layer's own rotate handles.
+    if (this.selected.size + this.selectedStamps.size === 0 && !this.isGroupSelection())
+      return null;
+    const u = this.selectionUnionRect();
+    if (!u) return null;
+    // Start the rotate band just BEYOND the resize anchors (~11px out) so the two don't fight, and
+    // give it a generous reach so it's easy to grab.
+    const pad = this.viewport.screenPx(11);
+    if (
+      world.x > u.x - pad &&
+      world.x < u.x + u.width + pad &&
+      world.y > u.y - pad &&
+      world.y < u.y + u.height + pad
+    )
+      return null;
+    const reach = this.viewport.screenPx(38);
+    const corners: [RotateCorner, number, number][] = [
+      ["nw", u.x, u.y],
+      ["ne", u.x + u.width, u.y],
+      ["sw", u.x, u.y + u.height],
+      ["se", u.x + u.width, u.y + u.height],
+    ];
+    let best: RotateCorner | null = null;
+    let bestD = reach;
+    for (const [name, cx, cy] of corners) {
+      const d = Math.hypot(world.x - cx, world.y - cy);
+      if (d <= bestD) {
+        bestD = d;
+        best = name;
+      }
+    }
+    return best;
+  }
+
+  private beginGroupRotate(): void {
+    const u = this.selectionUnionRect();
+    if (!u) return;
+    const center = { x: u.x + u.width / 2, y: u.y + u.height / 2 };
+    // Always drive the proxy for rotation (even for a native pure-stroke/stamp group) so the box spins
+    // cleanly and every node type is transformed via begin/update/endGroupTransform.
+    const proxy = this.ensureGroupProxy();
+    proxy.setAttrs({
+      x: center.x,
+      y: center.y,
+      width: u.width,
+      height: u.height,
+      offsetX: u.width / 2,
+      offsetY: u.height / 2,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+    });
+    this.transformer.nodes([proxy]);
+    this.refreshTransformer();
+    this.beginGroupTransform();
+    const p = this.point();
+    this.rotateGesture = {
+      center,
+      startAngle: Math.atan2(p.y - center.y, p.x - center.x),
+      angle: 0,
+    };
+    this.stage.container().style.cursor = ROTATE_CURSORS[this.rotationCornerOf(p) ?? "ne"];
+  }
+
+  private updateGroupRotate(): void {
+    const g = this.rotateGesture;
+    const proxy = this.groupProxy;
+    if (!g || !proxy) return;
+    const p = this.point();
+    const a = Math.atan2(p.y - g.center.y, p.x - g.center.x);
+    let deg = ((a - g.startAngle) * 180) / Math.PI;
+    const snapped = Math.round(deg / 15) * 15; // gentle 15° magnetism near the common angles
+    if (Math.abs(deg - snapped) < 3) deg = snapped;
+    g.angle = deg;
+    this.updateGroupTransform(); // groupDelta() builds the rotation matrix from g.angle about the centre
+    // Re-fit the (axis-aligned) box to the freshly-rotated content so it matches the union box peers
+    // draw — instead of the larger AABB of a rotated proxy rectangle.
+    const u = this.selectionUnionRect();
+    if (u) {
+      proxy.setAttrs({
+        x: u.x + u.width / 2,
+        y: u.y + u.height / 2,
+        width: u.width,
+        height: u.height,
+        offsetX: u.width / 2,
+        offsetY: u.height / 2,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+      });
+      this.transformer.forceUpdate();
+    }
+  }
+
+  private endGroupRotate(): void {
+    // Commit FIRST (groupDelta still reads the gesture angle), THEN clear it — otherwise the proxy is
+    // already reset to the upright box and the bake would be a no-op.
+    this.endGroupTransform(); // commit every node in one transaction + restore the chrome
+    this.rotateGesture = null;
+    this.stage.container().style.cursor = this.tool === "select" ? CURSOR_URL : "grab";
   }
 
   // ---- marquee (rubber-band) selection — resolves live while you drag ----
   private beginMarquee(additive: boolean): void {
     const p = this.point();
     this.marqueeStart = p;
-    this.marqueeBase = new Set(additive ? this.selected : []);
+    this.marqueeBase = new Set(additive ? [...this.selected, ...this.selectedStamps] : []);
     this.marqueeAdditive = additive;
     this.marquee = new Konva.Rect({
       x: p.x,
@@ -2039,10 +3153,16 @@ export class BoardCanvas {
         if (!node.visible()) continue; // culled (off-screen) → can't be inside an on-screen marquee
         if (rectsIntersect(box, this.nodeRect(id, node))) hits.add(id);
       }
+      for (const [id, node] of this.stampNodeById) {
+        if (rectsIntersect(box, this.nodeRect(id, node))) hits.add(id);
+      }
     }
     this.setSelection([...hits]);
     this.textLayer.selectInBox(box, this.marqueeAdditive); // text isn't a Konva node — select it separately
     this.selectConnectorsInBox(box); // connectors aren't in nodeById — test their polyline bbox
+    // All three subsystems are settled now — re-evaluate the transform box vs the union group box and
+    // redraw it (setSelection ran before text/connectors were known, so its box pass was incomplete).
+    this.reattachTransformer();
   }
 
   /** Add connectors whose polyline bounding box intersects the marquee (world coords). */
@@ -2083,12 +3203,15 @@ export class BoardCanvas {
   /** Light-blue per-node outlines for a multi-selection (the union gets the transform box). */
   private renderSelectionBoxes(): void {
     this.highlightGroup.destroyChildren();
+    // Faint per-stroke outlines for a multi-stroke selection (each member, inside the group box). The
+    // group box itself is the Konva transformer — attached to the stroke nodes for a pure-stroke
+    // selection, or to the invisible group proxy (sized to the whole union) for a mixed selection.
     if (this.selected.size > 1) {
       const sw = this.viewport.screenPx(1.2);
       for (const id of this.selected) {
         const node = this.nodeById.get(id);
         if (!node) continue;
-        const r = node.getClientRect({ relativeTo: this.content });
+        const r = node.getClientRect({ relativeTo: node.getLayer() ?? this.content });
         this.highlightGroup.add(
           new Konva.Rect({
             x: r.x,
@@ -2103,6 +3226,53 @@ export class BoardCanvas {
       }
     }
     this.uiLayer.batchDraw();
+  }
+
+  /**
+   * The union of every selected node's world-space AABB — strokes (Konva client rects), text /
+   * sticky / shape boxes (live geometry from the text layer), and connector polylines — in
+   * content/world coordinates. null when nothing measurable is selected.
+   */
+  private selectionUnionRect(): Rect | null {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    const fold = (x: number, y: number, w: number, h: number): void => {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + w);
+      maxY = Math.max(maxY, y + h);
+    };
+    for (const id of this.selected) {
+      const node = this.nodeById.get(id);
+      if (!node) continue;
+      const r = node.getClientRect({
+        relativeTo: node.getLayer() ?? this.content,
+        skipShadow: true,
+      });
+      fold(r.x, r.y, r.width, r.height);
+    }
+    for (const id of this.selectedStamps) {
+      const node = this.stampNodeById.get(id);
+      if (!node) continue;
+      // skipShadow → the box hugs the stamp, not its (rotation-inflating) drop shadow.
+      const r = node.getClientRect({
+        relativeTo: node.getLayer() ?? this.content,
+        skipShadow: true,
+      });
+      fold(r.x, r.y, r.width, r.height);
+    }
+    for (const r of this.textLayer.selectedWorldRects()) fold(r.x, r.y, r.width, r.height);
+    for (const id of this.selectedConnectors) {
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (obj?.type !== "connector") continue;
+      const pts = this.connectorPolyline(obj.kind, obj.from, obj.to);
+      for (let i = 0; i + 1 < pts.length; i += 2) fold(pts[i]!, pts[i + 1]!, 0, 0);
+    }
+    if (minX === Infinity) return null;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
 
   /**
@@ -2137,15 +3307,41 @@ export class BoardCanvas {
     // Reuse one rect per (peer, object): update attrs in place rather than destroy + recreate,
     // so the per-frame outline refresh during an interpolated remote drag/resize is allocation-free.
     const newConnSel = new Map<string, string>(); // connector id → selecting peer's colour
+    const seenGroups = new Set<number>();
     for (const { clientId, color, ids } of peers) {
-      for (const id of ids) {
-        // A peer-selected connector is shown by re-tinting the connector itself in their colour
-        // (like the local blue tint), NOT a bounding box — so record it and skip the rect.
-        if (this.connectorNodes.has(id)) {
-          newConnSel.set(id, color);
-          continue;
+      // A peer-selected connector is shown by re-tinting the connector in their colour (no box) —
+      // record it whether the selection is single or a group.
+      for (const id of ids) if (this.connectorNodes.has(id)) newConnSel.set(id, color);
+
+      if (ids.length >= 2) {
+        // Multi-node selection → ONE group box (in the peer's colour) around the whole union,
+        // mirroring the local group/transform box. No per-node rects (the box represents them all).
+        const u = this.peerSelectionUnionRect(ids);
+        if (u) {
+          seenGroups.add(clientId);
+          let box = this.remoteSelGroupRects.get(clientId);
+          if (!box) {
+            box = new Konva.Rect({ listening: false });
+            this.remoteSelections.add(box);
+            this.remoteSelGroupRects.set(clientId, box);
+          }
+          box.setAttrs({
+            x: u.x - pad * 2,
+            y: u.y - pad * 2,
+            width: u.width + pad * 4,
+            height: u.height + pad * 4,
+            stroke: color,
+            strokeWidth: 1.5 * inv,
+            cornerRadius: 2 * inv,
+          });
         }
-        const node = this.nodeById.get(id);
+        continue;
+      }
+
+      // Single selection → outline the one node (text boxes get their ring from the text layer).
+      for (const id of ids) {
+        if (this.connectorNodes.has(id)) continue;
+        const node = this.nodeById.get(id) ?? this.stampNodeById.get(id);
         if (!node || !node.visible()) continue; // skip culled (off-screen) peers' selections
         const r = this.nodeRect(id, node);
         const rkey = `${clientId}:${id}`;
@@ -2167,11 +3363,17 @@ export class BoardCanvas {
         });
       }
     }
-    // drop rects for selections that are gone (deselected, deleted, or culled off-screen)
+    // drop rects for selections that are gone (deselected, deleted, culled, or folded into a group box)
     for (const [rkey, rect] of this.remoteSelRects) {
       if (seen.has(rkey)) continue;
       rect.destroy();
       this.remoteSelRects.delete(rkey);
+    }
+    // drop group boxes for peers no longer holding a multi-node selection
+    for (const [cid, box] of this.remoteSelGroupRects) {
+      if (seenGroups.has(cid)) continue;
+      box.destroy();
+      this.remoteSelGroupRects.delete(cid);
     }
     this.overlay.batchDraw();
     // re-tint connectors only when the peer-selection set actually changed
@@ -2183,6 +3385,136 @@ export class BoardCanvas {
       for (const [id, c] of newConnSel) this.remoteConnSel.set(id, c);
       this.rerouteConnectors();
     }
+  }
+
+  /** Union AABB of an arbitrary id list (a peer's selection) across every node type — strokes,
+   *  text/sticky/shape, and connectors — in content/world coords. null if none resolve locally. */
+  private peerSelectionUnionRect(ids: string[]): Rect | null {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    const fold = (x: number, y: number, w: number, h: number): void => {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + w);
+      maxY = Math.max(maxY, y + h);
+    };
+    for (const id of ids) {
+      const node = this.nodeById.get(id) ?? this.stampNodeById.get(id);
+      if (node && node.visible()) {
+        const r = this.nodeRect(id, node);
+        fold(r.x, r.y, r.width, r.height);
+        continue;
+      }
+      const tr = this.textLayer.worldRectOf(id);
+      if (tr) {
+        fold(tr.x, tr.y, tr.width, tr.height);
+        continue;
+      }
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (obj?.type === "connector") {
+        const pts = this.connectorPolyline(obj.kind, obj.from, obj.to);
+        for (let i = 0; i + 1 < pts.length; i += 2) fold(pts[i]!, pts[i + 1]!, 0, 0);
+      }
+    }
+    if (minX === Infinity) return null;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  // ---- hover tooltip: who selected this? (avatar + name, shown over another user's selection) ----
+  private ensurePeerTip(): HTMLElement {
+    if (this.peerTip) return this.peerTip;
+    const el = document.createElement("div");
+    el.className = "co-peer-tip";
+    el.style.cssText =
+      "position:absolute;display:none;align-items:center;gap:7px;transform:translate(-50%,calc(-100% - 9px));" +
+      "background:#fff;color:#1f2024;padding:5px 11px 5px 6px;border-radius:10px;border:1px solid rgba(16,17,22,0.08);" +
+      "font:600 13px/1 system-ui,-apple-system,sans-serif;box-shadow:0 6px 18px rgba(16,17,22,0.18);" +
+      "pointer-events:none;z-index:60;white-space:nowrap;";
+    const av = document.createElement("span");
+    av.className = "av";
+    av.style.cssText =
+      "width:22px;height:22px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;" +
+      "justify-content:center;color:#fff;font:600 11px/1 system-ui;overflow:hidden;background-size:cover;background-position:center;";
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    const tail = document.createElement("span");
+    tail.style.cssText =
+      "position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);width:0;height:0;" +
+      "border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid #fff;" +
+      "filter:drop-shadow(0 2px 1px rgba(16,17,22,0.12));";
+    el.append(av, nm, tail);
+    this.opts.container.appendChild(el);
+    this.peerTip = el;
+    return el;
+  }
+
+  /** Update the canvas cursor + the "who selected this" tooltip for the select tool's idle hover. */
+  private updateSelectHover(world: { x: number; y: number }): void {
+    const self = this.opts.awareness.clientID;
+    let hit: { name: string; color: string; photo?: string; top: { x: number; y: number } } | null =
+      null;
+    this.opts.awareness.getStates().forEach((state, clientId) => {
+      if (hit || clientId === self) return;
+      const ids = state["selection"] as string[] | undefined;
+      if (!ids?.length) return;
+      const u = this.peerSelectionUnionRect(ids);
+      if (!u) return;
+      const pad = this.viewport.screenPx(4);
+      if (
+        world.x < u.x - pad ||
+        world.x > u.x + u.width + pad ||
+        world.y < u.y - pad ||
+        world.y > u.y + u.height + pad
+      )
+        return;
+      const id = String(state["id"] ?? "");
+      const prof = id ? readUserProfile(this.opts.doc, id) : undefined;
+      hit = {
+        name: String(state["user"] ?? prof?.name ?? "Anonymous"),
+        color: String(state["color"] ?? prof?.color ?? "#2563eb"),
+        photo: prof?.photo,
+        top: { x: u.x + u.width / 2, y: u.y - pad },
+      };
+    });
+    if (hit) {
+      this.showPeerTip(hit);
+      this.stage.container().style.cursor = CURSOR_URL;
+    } else {
+      this.hidePeerTip();
+      const rc = this.rotationCornerOf(world);
+      this.stage.container().style.cursor = rc ? ROTATE_CURSORS[rc] : CURSOR_URL;
+    }
+  }
+
+  private showPeerTip(hit: {
+    name: string;
+    color: string;
+    photo?: string;
+    top: { x: number; y: number };
+  }): void {
+    const el = this.ensurePeerTip();
+    const av = el.querySelector(".av") as HTMLElement;
+    if (hit.photo && hit.photo.startsWith("data:")) {
+      av.textContent = "";
+      av.style.backgroundColor = "";
+      av.style.backgroundImage = `url("${hit.photo}")`;
+    } else {
+      av.style.backgroundImage = "";
+      av.style.backgroundColor = hit.color;
+      av.textContent = (hit.name.trim()[0] ?? "?").toUpperCase();
+    }
+    (el.querySelector(".nm") as HTMLElement).textContent = hit.name;
+    const screen = this.stage.getAbsoluteTransform().point(hit.top);
+    el.style.left = `${screen.x}px`;
+    el.style.top = `${screen.y}px`;
+    el.style.display = "flex";
+  }
+
+  private hidePeerTip(): void {
+    if (this.peerTip && this.peerTip.style.display !== "none") this.peerTip.style.display = "none";
   }
 
   /**
@@ -2236,7 +3568,10 @@ export class BoardCanvas {
    */
   private renderRemoteXforms(): boolean {
     const self = this.opts.awareness.clientID;
-    const next = new Map<string, { x: number; y: number; sx: number; sy: number }>();
+    const next = new Map<
+      string,
+      { x: number; y: number; sx: number; sy: number; rotation: number }
+    >();
     const active = new Set<string>(); // ids in any peer's drag/resize, committed or not
     this.opts.awareness.getStates().forEach((state, clientId) => {
       if (clientId === self) return;
@@ -2247,17 +3582,31 @@ export class BoardCanvas {
         const y = d.dy ?? 0;
         for (const id of d.ids) {
           active.add(id);
-          if (!this.committedXforms.has(id)) next.set(id, { x, y, sx: 1, sy: 1 });
+          if (this.committedXforms.has(id)) continue;
+          if (this.stampNodeById.has(id)) {
+            const sm = this.objects.get(id);
+            const so = sm ? readObject(sm) : null;
+            if (so?.type === "stamp")
+              next.set(id, { x: so.x + x, y: so.y + y, sx: 1, sy: 1, rotation: so.rotation ?? 0 });
+          } else {
+            next.set(id, { x, y, sx: 1, sy: 1, rotation: 0 });
+          }
         }
       }
-      // resize: a per-node position + scale
+      // resize: a per-node position + scale + rotation
       const r = state["resize"] as { nodes?: Partial<ResizeNode>[] } | undefined;
       if (r?.nodes?.length) {
         for (const n of r.nodes) {
           if (!n?.id) continue;
           active.add(n.id);
           if (!this.committedXforms.has(n.id)) {
-            next.set(n.id, { x: n.x ?? 0, y: n.y ?? 0, sx: n.sx ?? 1, sy: n.sy ?? 1 });
+            next.set(n.id, {
+              x: n.x ?? 0,
+              y: n.y ?? 0,
+              sx: n.sx ?? 1,
+              sy: n.sy ?? 1,
+              rotation: n.rotation ?? 0,
+            });
           }
         }
       }
@@ -2266,20 +3615,41 @@ export class BoardCanvas {
     for (const id of this.committedXforms) if (!active.has(id)) this.committedXforms.delete(id);
 
     const localOwns = (id: string): boolean =>
-      (this.moveState !== null || this.resizing) && this.selected.has(id);
+      (this.moveState !== null || this.resizing) &&
+      (this.selected.has(id) || this.selectedStamps.has(id));
 
     let changed = false;
     // reset nodes whose remote gesture ended without a doc commit (e.g. the peer cancelled)
     for (const id of [...this.remoteXforms.keys()]) {
       if (next.has(id)) continue;
       this.remoteXforms.delete(id);
+      const stamp = this.stampNodeById.get(id);
+      if (stamp) {
+        const sm = this.objects.get(id);
+        const so = sm ? readObject(sm) : null;
+        if (so?.type === "stamp") {
+          stamp.position({ x: so.x, y: so.y });
+          stamp.scale({ x: 1, y: 1 });
+          stamp.rotation(so.rotation ?? 0);
+          stamp.size({ width: so.size, height: so.size });
+          stamp.offset({ x: so.size / 2, y: so.size / 2 });
+          this.rectCache.delete(id);
+          changed = true;
+        }
+        continue;
+      }
       const node = this.nodeById.get(id);
       if (
         node &&
-        (node.x() !== 0 || node.y() !== 0 || node.scaleX() !== 1 || node.scaleY() !== 1)
+        (node.x() !== 0 ||
+          node.y() !== 0 ||
+          node.scaleX() !== 1 ||
+          node.scaleY() !== 1 ||
+          node.rotation() !== 0)
       ) {
         node.position({ x: 0, y: 0 });
         node.scale({ x: 1, y: 1 });
+        node.rotation(0);
         this.rectCache.delete(id); // cached client rect is now stale → let the outline recompute
         changed = true;
       }
@@ -2289,10 +3659,13 @@ export class BoardCanvas {
     // than snapping at the 30 Hz awareness rate, which looked stepped on fast gestures.
     for (const [id, xf] of next) {
       if (localOwns(id)) continue; // a local gesture owns this node
-      if (this.nodeById.has(id)) this.remoteXforms.set(id, xf);
+      if (this.nodeById.has(id) || this.stampNodeById.has(id)) this.remoteXforms.set(id, xf);
     }
     if (this.remoteXforms.size) this.ensureAnim();
-    if (changed) this.content.batchDraw();
+    if (changed) {
+      this.content.batchDraw();
+      this.stampLayer.batchDraw(); // live
+    }
     return changed;
   }
 
@@ -2553,25 +3926,33 @@ export class BoardCanvas {
       // remote-dragged / resized objects (position + scale)
       let contentMoved = false;
       this.remoteXforms.forEach((tf, id) => {
-        const node = this.nodeById.get(id);
+        const node = this.nodeById.get(id) ?? this.stampNodeById.get(id);
         if (!node) return;
         const x = node.x();
         const y = node.y();
         const sx = node.scaleX();
         const sy = node.scaleY();
+        const r = node.rotation();
         const dx = tf.x - x;
         const dy = tf.y - y;
         const dsx = tf.sx - sx;
         const dsy = tf.sy - sy;
+        // LERP rotation along the SHORTEST arc (so position + rotation glide together — snapping
+        // rotation while the position glides made a peer's rotating selection box shake at 30 Hz).
+        let dr = tf.rotation - r;
+        while (dr > 180) dr -= 360;
+        while (dr < -180) dr += 360;
         if (
           Math.abs(dx) < 0.05 &&
           Math.abs(dy) < 0.05 &&
           Math.abs(dsx) < 0.0005 &&
-          Math.abs(dsy) < 0.0005
+          Math.abs(dsy) < 0.0005 &&
+          Math.abs(dr) < 0.1
         ) {
-          if (x !== tf.x || y !== tf.y || sx !== tf.sx || sy !== tf.sy) {
+          if (x !== tf.x || y !== tf.y || sx !== tf.sx || sy !== tf.sy || r !== tf.rotation) {
             node.position({ x: tf.x, y: tf.y });
             node.scale({ x: tf.sx, y: tf.sy });
+            node.rotation(tf.rotation);
             this.rectCache.delete(id);
             contentMoved = true;
           }
@@ -2579,12 +3960,14 @@ export class BoardCanvas {
         }
         node.position({ x: x + dx * LERP, y: y + dy * LERP });
         node.scale({ x: sx + dsx * LERP, y: sy + dsy * LERP });
+        node.rotation(r + dr * LERP);
         this.rectCache.delete(id);
         moving = true;
         contentMoved = true;
       });
       if (contentMoved) {
         this.content.batchDraw();
+        this.stampLayer.batchDraw(); // live
         this.renderRemoteSelections(true); // keep peers' outlines glued to the gliding nodes
       }
       this.cursorLayer.batchDraw(); // cursors glided this frame (their own top stage)
@@ -2608,6 +3991,7 @@ export class BoardCanvas {
     window.removeEventListener("blur", this.onWindowBlur);
     window.removeEventListener("pointerup", this.onWindowPointerUp);
     this.resizeObserver?.disconnect();
+    this.peerTip?.remove();
     const cursorContainer = this.cursorStage.container();
     this.cursorStage.destroy();
     cursorContainer.remove();
