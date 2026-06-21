@@ -1329,8 +1329,11 @@ export class TextLayer {
     for (const [id, size] of this.sizes) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      if (obj?.type !== "text") continue;
-      if (rectsIntersect(box, { x: obj.x, y: obj.y, width: size.w, height: size.h })) {
+      if (obj?.type !== "text" && obj?.type !== "stamp") continue;
+      // stamps are centre-anchored (x,y is the centre); text/shape/sticky use a top-left origin
+      const left = obj.type === "stamp" ? obj.x - size.w / 2 : obj.x;
+      const top = obj.type === "stamp" ? obj.y - size.h / 2 : obj.y;
+      if (rectsIntersect(box, { x: left, y: top, width: size.w, height: size.h })) {
         this.selected.add(id);
       }
     }
