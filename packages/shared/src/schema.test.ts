@@ -10,9 +10,13 @@ import {
   DEFAULT_TEXT_SIZE,
   deleteObject,
   deleteObjects,
+  expandGroups,
+  groupObjects,
   objectsMap,
   orderArray,
   readObject,
+  setLocked,
+  ungroupObjects,
   setConnectorEnds,
   setObjectsPoints,
   setTextGeometry,
@@ -469,5 +473,141 @@ describe("stamp attachment", () => {
     >;
     expect([free.x, free.y]).toEqual([110, 60]); // unmoved
     expect(objectsMap(doc).get("free")).toBeDefined(); // undeleted
+  });
+});
+
+describe("grouping", () => {
+  const seed = (doc: Y.Doc, ids: string[]) =>
+    ids.forEach((id, i) => addText(doc, textObj(id, { x: i * 10 })));
+
+  it("groupObjects assigns one shared id; expandGroups selects the whole group from one member", () => {
+    const doc = new Y.Doc();
+    seed(doc, ["a", "b", "c"]);
+    const gid = groupObjects(doc, ["a", "b"]);
+    expect(asText(readObject(objectsMap(doc).get("a")!)).groupId).toBe(gid);
+    expect(asText(readObject(objectsMap(doc).get("b")!)).groupId).toBe(gid);
+    expect(asText(readObject(objectsMap(doc).get("c")!)).groupId).toBeUndefined();
+    // Touching just one member expands to both; an ungrouped id stays alone.
+    expect([...expandGroups(doc, ["a"])].sort()).toEqual(["a", "b"]);
+    expect([...expandGroups(doc, ["c"])]).toEqual(["c"]);
+  });
+
+  it("ungroupObjects clears the whole group given any one member", () => {
+    const doc = new Y.Doc();
+    seed(doc, ["a", "b"]);
+    groupObjects(doc, ["a", "b"]);
+    ungroupObjects(doc, ["a"]); // pass only one — both clear
+    expect(asText(readObject(objectsMap(doc).get("a")!)).groupId).toBeUndefined();
+    expect(asText(readObject(objectsMap(doc).get("b")!)).groupId).toBeUndefined();
+    expect([...expandGroups(doc, ["a"])]).toEqual(["a"]);
+  });
+
+  it("re-grouping moves members into the new group", () => {
+    const doc = new Y.Doc();
+    seed(doc, ["a", "b"]);
+    const g1 = groupObjects(doc, ["a", "b"]);
+    const g2 = groupObjects(doc, ["a"]); // re-group a into a fresh group
+    expect(g2).not.toBe(g1);
+    expect(asText(readObject(objectsMap(doc).get("a")!)).groupId).toBe(g2);
+  });
+
+  it("expandGroups skips a locked sibling but keeps a directly-targeted locked id", () => {
+    const doc = new Y.Doc();
+    seed(doc, ["a", "b", "c"]);
+    groupObjects(doc, ["a", "b", "c"]);
+    setLocked(doc, ["b"], true);
+    // Selecting unlocked `a` pulls in unlocked `c` but NOT locked `b` (so the group stays movable).
+    expect([...expandGroups(doc, ["a"])].sort()).toEqual(["a", "c"]);
+    // Clicking the locked member directly still selects it (to unlock it).
+    expect([...expandGroups(doc, ["b"])]).toContain("b");
+  });
+});
+
+describe("locking", () => {
+  it("setLocked toggles the flag", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("a"));
+    setLocked(doc, ["a"], true);
+    expect(asText(readObject(objectsMap(doc).get("a")!)).locked).toBe(true);
+    setLocked(doc, ["a"], false);
+    expect(asText(readObject(objectsMap(doc).get("a")!)).locked).toBeUndefined();
+  });
+
+  it("deleteObjects skips a locked object (lock protects against delete/erase)", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("a"));
+    addText(doc, textObj("b"));
+    setLocked(doc, ["a"], true);
+    deleteObjects(doc, ["a", "b"]);
+    expect(objectsMap(doc).get("a")).toBeDefined(); // locked → survived
+    expect(objectsMap(doc).get("b")).toBeUndefined(); // unlocked → deleted
+    expect(orderArray(doc).toArray()).toEqual(["a"]);
+  });
+
+  // Mutator-level lock guards (defence-in-depth: a locked object never moves/resizes/rotates no matter
+  // which UI path reaches the commit). These close the connector / group-rotate / ⌘A-drag bypasses.
+  it("translateObjects does not move a locked object", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("a", { x: 100, y: 50 }));
+    setLocked(doc, ["a"], true);
+    translateObjects(doc, ["a"], 30, 40);
+    const a = asText(readObject(objectsMap(doc).get("a")!));
+    expect([a.x, a.y]).toEqual([100, 50]); // unmoved
+  });
+
+  it("setTextGeometry no-ops on a locked box", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("a", { x: 0, y: 0 }));
+    setLocked(doc, ["a"], true);
+    setTextGeometry(doc, "a", { x: 999, rotation: 45 });
+    const a = asText(readObject(objectsMap(doc).get("a")!));
+    expect(a.x).toBe(0);
+    expect(a.rotation ?? null).toBeNull();
+  });
+
+  it("setConnectorEnds no-ops on a locked connector (closes the connector lock bypass)", () => {
+    const doc = new Y.Doc();
+    addConnector(doc, connector("c", { from: { x: 0, y: 0 }, to: { x: 10, y: 0 } }));
+    setLocked(doc, ["c"], true);
+    setConnectorEnds(doc, "c", { to: { x: 999, y: 999 } });
+    expect(asConnector(readObject(objectsMap(doc).get("c")!)).to).toMatchObject({ x: 10, y: 0 });
+  });
+
+  it("locking a host locks its attached stamps (unlocking unlocks them)", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("host"));
+    addStamp(doc, {
+      id: "st",
+      type: "stamp",
+      x: 10,
+      y: 10,
+      size: 30,
+      src: "emoji:2705",
+      authorId: "u",
+      attachedTo: "host",
+    });
+    setLocked(doc, ["host"], true);
+    expect(readObject(objectsMap(doc).get("st")!)!.locked).toBe(true); // attached sticker follows
+    setLocked(doc, ["host"], false);
+    expect(readObject(objectsMap(doc).get("st")!)!.locked).toBeUndefined();
+  });
+
+  it("a locked attached stamp survives deletion of its (unlocked) host", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("host"));
+    addStamp(doc, {
+      id: "st",
+      type: "stamp",
+      x: 10,
+      y: 10,
+      size: 30,
+      src: "emoji:2705",
+      authorId: "u",
+      attachedTo: "host",
+    });
+    setLocked(doc, ["st"], true);
+    deleteObjects(doc, ["host"]);
+    expect(objectsMap(doc).get("host")).toBeUndefined(); // host deleted
+    expect(objectsMap(doc).get("st")).toBeDefined(); // locked sticker survived the cascade
   });
 });

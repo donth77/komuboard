@@ -20,6 +20,10 @@ export type StrokeStyle = "solid" | "dashed" | "highlight" | "highlight-dashed";
 export interface StrokeObject {
   id: string;
   type: "stroke";
+  /** Group membership — objects sharing a `groupId` select / move / transform / delete as one unit. */
+  groupId?: string;
+  /** Locked objects can't be moved / resized / rotated / edited / deleted (still selectable, to unlock). */
+  locked?: boolean;
   /** Flat polyline in canvas coords: [x0, y0, x1, y1, …]. */
   points: number[];
   color: string;
@@ -91,6 +95,10 @@ export interface ConnectorEnd {
 export interface ConnectorObject {
   id: string;
   type: "connector";
+  /** Group membership — see {@link StrokeObject.groupId}. */
+  groupId?: string;
+  /** Locked — see {@link StrokeObject.locked}. */
+  locked?: boolean;
   kind: ConnectorKind;
   from: ConnectorEnd;
   to: ConnectorEnd;
@@ -119,6 +127,10 @@ export function defaultCapsFor(kind: ConnectorKind): {
 export interface TextObject {
   id: string;
   type: "text";
+  /** Group membership — see {@link StrokeObject.groupId}. */
+  groupId?: string;
+  /** Locked — see {@link StrokeObject.locked}. */
+  locked?: boolean;
   /** Top-left in canvas coords. */
   x: number;
   y: number;
@@ -156,6 +168,10 @@ export interface TextObject {
 export interface StampObject {
   id: string;
   type: "stamp";
+  /** Group membership — see {@link StrokeObject.groupId}. */
+  groupId?: string;
+  /** Locked — see {@link StrokeObject.locked}. */
+  locked?: boolean;
   x: number;
   y: number;
   /** Width = height, in canvas units. */
@@ -408,7 +424,7 @@ export function setConnectorEnds(
 ): void {
   doc.transact(() => {
     const m = objectsMap(doc).get(id);
-    if (!m || m.get("type") !== "connector") return;
+    if (!m || m.get("type") !== "connector" || m.get("locked") === true) return; // lock guard
     if (ends.from) m.set("from", connectorEndToPlain(ends.from));
     if (ends.to) m.set("to", connectorEndToPlain(ends.to));
   });
@@ -430,7 +446,7 @@ export function setTextGeometry(
 ): void {
   doc.transact(() => {
     const m = objectsMap(doc).get(id);
-    if (!m || m.get("type") !== "text") return;
+    if (!m || m.get("type") !== "text" || m.get("locked") === true) return; // lock guard
     if (geom.x != null) m.set("x", geom.x);
     if (geom.y != null) m.set("y", geom.y);
     if (geom.width != null) m.set("width", geom.width);
@@ -480,13 +496,89 @@ function attachedStampIds(objs: Y.Map<Y.Map<unknown>>, targets: Set<string>): st
   return out;
 }
 
+// ---- grouping + locking (cross-type membership, one Y.Map field each) ----
+
+/** Assign a fresh shared `groupId` to every given object so they select / transform / delete as one.
+ *  Returns the new group id. Objects with an existing group are re-grouped into the new one. */
+export function groupObjects(doc: Y.Doc, ids: Iterable<string>): string {
+  const gid = randomId("grp");
+  doc.transact(() => {
+    const objs = objectsMap(doc);
+    for (const id of ids) {
+      const m = objs.get(id);
+      if (m) m.set("groupId", gid);
+    }
+  });
+  return gid;
+}
+
+/** Clear group membership from every object sharing a group with any of `ids` (ungroup the whole
+ *  group, not just the clicked members). */
+export function ungroupObjects(doc: Y.Doc, ids: Iterable<string>): void {
+  doc.transact(() => {
+    const objs = objectsMap(doc);
+    const groups = new Set<string>();
+    for (const id of ids) {
+      const g = objs.get(id)?.get("groupId");
+      if (typeof g === "string") groups.add(g);
+    }
+    if (!groups.size) return;
+    objs.forEach((m) => {
+      const g = m.get("groupId");
+      if (typeof g === "string" && groups.has(g)) m.delete("groupId");
+    });
+  });
+}
+
+/** Lock or unlock the given objects (locked objects stay selectable so they can be unlocked). A stamp
+ *  attached to a host locks/unlocks WITH its host — like the move + delete cascades — so locking a
+ *  sticky/shape protects the whole unit (its stickers can't be dragged off or deleted either). */
+export function setLocked(doc: Y.Doc, ids: Iterable<string>, locked: boolean): void {
+  doc.transact(() => {
+    const objs = objectsMap(doc);
+    const set = new Set(ids);
+    for (const sid of attachedStampIds(objs, set)) set.add(sid); // attached stickers follow their host
+    for (const id of set) {
+      const m = objs.get(id);
+      if (!m) continue;
+      if (locked) m.set("locked", true);
+      else m.delete("locked");
+    }
+  });
+}
+
+/** Expand `ids` to include the UNLOCKED objects sharing a `groupId` with any of them (one level — a
+ *  member's group). The input `ids` are always kept (so a directly-clicked locked object stays
+ *  selectable, to unlock it); only locked *siblings* are skipped, so selecting an unlocked group member
+ *  doesn't drag a locked one into the selection and immobilise the whole group. Pure read. */
+export function expandGroups(doc: Y.Doc, ids: Iterable<string>): Set<string> {
+  const objs = objectsMap(doc);
+  const out = new Set<string>(ids);
+  const groups = new Set<string>();
+  for (const id of out) {
+    const g = objs.get(id)?.get("groupId");
+    if (typeof g === "string") groups.add(g);
+  }
+  if (groups.size) {
+    objs.forEach((m, id) => {
+      const g = m.get("groupId");
+      if (typeof g === "string" && groups.has(g) && m.get("locked") !== true) out.add(id);
+    });
+  }
+  return out;
+}
+
 export function deleteObjects(doc: Y.Doc, ids: Iterable<string>): void {
   const idSet = new Set(ids);
   if (!idSet.size) return;
   doc.transact(() => {
     const objs = objectsMap(doc);
     const order = orderArray(doc);
-    for (const sid of attachedStampIds(objs, idSet)) idSet.add(sid); // a sticker dies with its host
+    for (const id of [...idSet]) if (objs.get(id)?.get("locked") === true) idSet.delete(id); // lock blocks delete/erase
+    if (!idSet.size) return;
+    // A sticker dies with its host — UNLESS the sticker itself is locked (lock survives the cascade too).
+    for (const sid of attachedStampIds(objs, idSet))
+      if (objs.get(sid)?.get("locked") !== true) idSet.add(sid);
     for (const id of idSet) objs.delete(id);
     // One pass over the order array, deleting matching indices back-to-front so the
     // remaining indices stay valid — O(n) instead of toArray().indexOf() per id (O(n²)).
@@ -507,7 +599,7 @@ export function translateObjects(doc: Y.Doc, ids: Iterable<string>, dx: number, 
     for (const sid of attachedStampIds(objs, set)) set.add(sid); // a sticker rides its sticky/shape
     for (const id of set) {
       const m = objs.get(id);
-      if (!m) continue;
+      if (!m || m.get("locked") === true) continue; // lock guard (defence-in-depth vs the UI gates)
       if (m.get("type") === "connector") {
         // Shift both endpoints' stored points. Bound ends re-resolve to their shape at render, so a
         // fully-bound connector won't visibly move (you'd move the shapes); free ends follow.
@@ -541,7 +633,7 @@ export function setObjectsPoints(
     const objs = objectsMap(doc);
     for (const u of updates) {
       const m = objs.get(u.id);
-      if (m) m.set("points", u.points);
+      if (m && m.get("locked") !== true) m.set("points", u.points); // lock guard
     }
   });
 }
@@ -572,7 +664,7 @@ export function setStampGeom(
 ): void {
   doc.transact(() => {
     const m = objectsMap(doc).get(id);
-    if (!m || m.get("type") !== "stamp") return;
+    if (!m || m.get("type") !== "stamp" || m.get("locked") === true) return; // lock guard
     if (geom.x != null) m.set("x", geom.x);
     if (geom.y != null) m.set("y", geom.y);
     if (geom.size != null) m.set("size", geom.size);
@@ -607,6 +699,16 @@ function readStamp(m: Y.Map<unknown>): StampObject | null {
 
 /** Read a typed object out of its Y.Map — returns null for unknown types or malformed data. */
 export function readObject(m: Y.Map<unknown>): BoardObject | null {
+  const obj = readObjectByType(m);
+  if (!obj) return null;
+  // Cross-type fields read once here so every object type carries them uniformly.
+  const groupId = m.get("groupId");
+  if (typeof groupId === "string" && groupId) obj.groupId = groupId;
+  if (m.get("locked") === true) obj.locked = true;
+  return obj;
+}
+
+function readObjectByType(m: Y.Map<unknown>): BoardObject | null {
   const type = m.get("type");
   if (type === "text") return readText(m);
   if (type === "connector") return readConnector(m);
