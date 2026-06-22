@@ -243,7 +243,8 @@ export class CoStampWheel extends HTMLElement {
   }
 }
 
-if (!customElements.get("komu-stamp-wheel")) customElements.define("komu-stamp-wheel", CoStampWheel);
+if (!customElements.get("komu-stamp-wheel"))
+  customElements.define("komu-stamp-wheel", CoStampWheel);
 
 declare global {
   interface HTMLElementTagNameMap {

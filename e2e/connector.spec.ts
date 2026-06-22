@@ -200,7 +200,9 @@ test("connector: a peer's body-move shows exactly one connector (no double-draw)
   const a = await connectPeer(browser, room);
   const b = await connectPeer(browser, room);
   await injectConnector(a.page, { id: "cn1", from: { x: 0, y: 0 }, to: { x: 200, y: 0 } });
-  await expect.poll(() => b.page.locator("svg.komu-connector").count(), { timeout: 10_000 }).toBe(1);
+  await expect
+    .poll(() => b.page.locator("svg.komu-connector").count(), { timeout: 10_000 })
+    .toBe(1);
 
   const cal = await calibrate(a.page);
   await a.page.keyboard.press("v");

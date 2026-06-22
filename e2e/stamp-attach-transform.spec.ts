@@ -16,7 +16,9 @@ import {
  */
 
 const orderIds = (page: Page): Promise<string[]> =>
-  page.evaluate(() => (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray());
+  page.evaluate(() =>
+    (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray(),
+  );
 
 async function shapeWithStamp(page: Page, stampWorld: { x: number; y: number }): Promise<string> {
   await injectShape(page, { id: "sh", x: 0, y: 0, width: 200, height: 160, bg: "#a5d8ff" });

@@ -430,7 +430,7 @@ Explicitly **out of scope** for v1. These are deliberate decisions, not omission
 
 | Non-goal                                          | Why it's out of v1                                                                                                                                                           |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Native app-store apps**                         | Komuboard ships as a **PWA only**; no iOS/Android/Quest store builds. The web + WebXR path covers all target devices.                                                          |
+| **Native app-store apps**                         | Komuboard ships as a **PWA only**; no iOS/Android/Quest store builds. The web + WebXR path covers all target devices.                                                        |
 | **Enterprise SSO / admin console**                | No SAML/SSO, org management, or admin governance. Anonymous-first rooms are the model; named accounts are an optional _later_ add (GitHub OAuth / Clerk free tier), not v1.  |
 | **Real-time video tiles**                         | No webcam video grid. Optional **audio-only** WebRTC voice is the ceiling (Phase 2/3, _Could_); video does not fit the free-tier bandwidth/compute budget.                   |
 | **Offline-first sync beyond reconnect buffering** | We guarantee reconnect/resync (§1.11) and short buffering, **not** full offline editing with long-horizon merge. Yjs makes this _possible later_, but it's not a v1 promise. |

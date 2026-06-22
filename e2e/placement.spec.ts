@@ -19,7 +19,9 @@ import {
  */
 
 const orderIds = (page: Page): Promise<string[]> =>
-  page.evaluate(() => (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray());
+  page.evaluate(() =>
+    (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray(),
+  );
 
 const runsText = (o: { runs?: unknown } | null): string =>
   Array.isArray(o?.runs) ? (o!.runs as { text?: string }[]).map((r) => r.text ?? "").join("") : "";

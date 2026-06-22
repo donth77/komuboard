@@ -16,7 +16,9 @@ import {
  */
 
 const orderIds = (page: Page): Promise<string[]> =>
-  page.evaluate(() => (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray());
+  page.evaluate(() =>
+    (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray(),
+  );
 
 async function placeStampOnSticky(page: Page): Promise<string> {
   await injectSticky(page, { id: "s1", x: 0, y: 0, size: 180, bg: "#ffec99" });

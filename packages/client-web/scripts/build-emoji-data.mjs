@@ -30,7 +30,11 @@ function notoStem(emoji) {
     .join("_");
 }
 
-const have = new Set(readdirSync(emojiDir).filter((f) => f.endsWith(".svg")).map((f) => f.slice(0, -4)));
+const have = new Set(
+  readdirSync(emojiDir)
+    .filter((f) => f.endsWith(".svg"))
+    .map((f) => f.slice(0, -4)),
+);
 
 const SRC = "https://cdn.jsdelivr.net/npm/unicode-emoji-json@latest/data-by-group.json";
 const groups = await fetch(SRC).then((r) => r.json());
@@ -50,4 +54,6 @@ const result = groups.map((g) => ({
 }));
 
 writeFileSync(out, JSON.stringify(result));
-console.log(`Wrote ${out}: ${kept} emojis kept across ${result.length} groups (${dropped} without a Noto SVG).`);
+console.log(
+  `Wrote ${out}: ${kept} emojis kept across ${result.length} groups (${dropped} without a Noto SVG).`,
+);

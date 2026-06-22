@@ -19,11 +19,11 @@ This surfaced through the stamp work: stamps couldn't sit on top of shapes/stick
 
 **Per-object interleaving across all types requires one stacking context — i.e. one render model.** The choice of renderer is secondary; the single-context requirement is primary. Three render models can provide it:
 
-| Model                        | Per-object z | Rich text editing                          | Perf ceiling | Rebuild cost / regression risk            |
-| ---------------------------- | ------------ | ------------------------------------------ | ------------ | ----------------------------------------- |
-| **DOM-unify** _(this ADR)_   | ✅ z-index    | ✅ native `contenteditable` kept            | high (w/ culling) | medium — view layer only, reuses HTML text |
-| All-canvas (Konva)           | ✅ node order | ⚠️ rebuild rich text in canvas             | higher       | high — text + display rewrite             |
-| All-canvas (PixiJS/WebGL)    | ✅ node order | ⚠️ rebuild rich text + contenteditable overlay | highest  | highest — renderer + interaction + text   |
+| Model                      | Per-object z  | Rich text editing                              | Perf ceiling      | Rebuild cost / regression risk             |
+| -------------------------- | ------------- | ---------------------------------------------- | ----------------- | ------------------------------------------ |
+| **DOM-unify** _(this ADR)_ | ✅ z-index    | ✅ native `contenteditable` kept               | high (w/ culling) | medium — view layer only, reuses HTML text |
+| All-canvas (Konva)         | ✅ node order | ⚠️ rebuild rich text in canvas                 | higher            | high — text + display rewrite              |
+| All-canvas (PixiJS/WebGL)  | ✅ node order | ⚠️ rebuild rich text + contenteditable overlay | highest           | highest — renderer + interaction + text    |
 
 ## Decision
 
@@ -52,17 +52,17 @@ Performance comes from **culling + GPU**, not from the renderer choice:
 
 App stays working and **two-client tested** at every step; the Yjs model never changes.
 
-| Phase | Scope                                                                                                                                                 | Done-when                                                                                              |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| **0 ✅** | **Foundation:** object container + camera transform + **viewport culling** + keyed reconcile + a `z-index = orderArray` pass over existing DOM objects. | Culling + camera proven on current objects; no behavior change yet. _(Culling deferred to Phase 4; container/camera/keyed-reconcile/z-order done.)_ |
-| **1 ✅** | **Stamps → DOM image-boxes:** retire bespoke Konva stamp nodes; stamps inherit the unified selection/resize/rotate/realtime (like shapes). Net code removal. | Stamp stacks on/under any object by placement; realtime + undo intact.                                 |
-| **2 ✅** | **Existing DOM objects under `orderArray` z:** text/shapes/stickies z-index by placement order (not DOM insertion order).                              | Any two DOM objects stack by creation order.                                                          |
-| **3 ✅** | **Strokes + connectors → DOM** (riskiest): each a DOM element (SVG path; or per-stroke canvas), z-indexed + culled. Retire the Konva layers + `Konva.Transformer` in favour of the unified DOM chrome. | Per-object interleaving across **all** types; perf holds on dense boards. _(Culling lands in Phase 4.)_ |
-| **4** | **Polish:** LOD at low zoom, profiling on dense boards, a11y pass, remove dead Konva paths.                                                            | FigJam-parity stacking, smooth on realistic boards.                                                   |
+| Phase    | Scope                                                                                                                                                                                                  | Done-when                                                                                                                                           |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0 ✅** | **Foundation:** object container + camera transform + **viewport culling** + keyed reconcile + a `z-index = orderArray` pass over existing DOM objects.                                                | Culling + camera proven on current objects; no behavior change yet. _(Culling deferred to Phase 4; container/camera/keyed-reconcile/z-order done.)_ |
+| **1 ✅** | **Stamps → DOM image-boxes:** retire bespoke Konva stamp nodes; stamps inherit the unified selection/resize/rotate/realtime (like shapes). Net code removal.                                           | Stamp stacks on/under any object by placement; realtime + undo intact.                                                                              |
+| **2 ✅** | **Existing DOM objects under `orderArray` z:** text/shapes/stickies z-index by placement order (not DOM insertion order).                                                                              | Any two DOM objects stack by creation order.                                                                                                        |
+| **3 ✅** | **Strokes + connectors → DOM** (riskiest): each a DOM element (SVG path; or per-stroke canvas), z-indexed + culled. Retire the Konva layers + `Konva.Transformer` in favour of the unified DOM chrome. | Per-object interleaving across **all** types; perf holds on dense boards. _(Culling lands in Phase 4.)_                                             |
+| **4**    | **Polish:** LOD at low zoom, profiling on dense boards, a11y pass, remove dead Konva paths.                                                                                                            | FigJam-parity stacking, smooth on realistic boards.                                                                                                 |
 
 ## WebGL / PixiJS — deferred (revisit triggers)
 
-This continues **ADR-0002** (Konva-first, with a documented Pixi/WebGL migration trigger), now reframed: the next big renderer move is **DOM-unification (this ADR)**; PixiJS/WebGL is the *subsequent*, scale-driven step — not this one.
+This continues **ADR-0002** (Konva-first, with a documented Pixi/WebGL migration trigger), now reframed: the next big renderer move is **DOM-unification (this ADR)**; PixiJS/WebGL is the _subsequent_, scale-driven step — not this one.
 
 - **WebGL is not what unlocks the behavior.** Placement-order z comes from a single stacking context (DOM here). WebGL buys **scale headroom** — tens of thousands of objects all visible at once, buttery extreme zoom-out — which culling can't help because everything is on screen.
 - **Cost of WebGL now** would be: rebuild the whole render + interaction layer (Pixi has **no Transformer** — selection/marquee/resize/rotate is hand-rolled), **and** re-implement rich text in canvas + a contenteditable overlay. That maximizes perf and **maximizes regression risk** — the opposite of this ADR's constraint.
@@ -86,7 +86,7 @@ This continues **ADR-0002** (Konva-first, with a documented Pixi/WebGL migration
 
 **Trade-offs**
 
-- Larger view-layer change than the rejected "ink as one Konva layer" hybrid — which was rejected precisely because it can't interleave *individual* strokes with objects.
+- Larger view-layer change than the rejected "ink as one Konva layer" hybrid — which was rejected precisely because it can't interleave _individual_ strokes with objects.
 - Vector ink in the DOM needs care: SVG paint / per-stroke canvas + culling + LOD; the **zoomed-far-out dense-ink** case is the one to watch.
 - Retires the `Konva.Transformer` and the recent Konva-based stamp transform work in favour of one unified DOM chrome (some rework, but consolidates onto a single system).
 - The VR path (§ 04) keeps its own renderer; this ADR is the **2D web** render model only. The Yjs doc remains the shared source both bind to.

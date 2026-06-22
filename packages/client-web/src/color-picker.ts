@@ -220,7 +220,8 @@ export class CoColorPicker extends HTMLElement {
   }
 }
 
-if (!customElements.get("komu-color-picker")) customElements.define("komu-color-picker", CoColorPicker);
+if (!customElements.get("komu-color-picker"))
+  customElements.define("komu-color-picker", CoColorPicker);
 
 declare global {
   interface HTMLElementTagNameMap {

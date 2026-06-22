@@ -104,7 +104,9 @@ test("incremental render: add then delete-all rebuild correctly", async ({ brows
 
   await expect
     .poll(() =>
-      page.evaluate(() => (window as unknown as BoardWindow).__komuboard.doc.getMap("objects").size),
+      page.evaluate(
+        () => (window as unknown as BoardWindow).__komuboard.doc.getMap("objects").size,
+      ),
     )
     .toBe(0);
   for (const id of ids) {

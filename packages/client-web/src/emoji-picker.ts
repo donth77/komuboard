@@ -75,7 +75,8 @@ export class CoEmojiPicker extends HTMLElement {
   }
 }
 
-if (!customElements.get("komu-emoji-picker")) customElements.define("komu-emoji-picker", CoEmojiPicker);
+if (!customElements.get("komu-emoji-picker"))
+  customElements.define("komu-emoji-picker", CoEmojiPicker);
 
 declare global {
   interface HTMLElementTagNameMap {
