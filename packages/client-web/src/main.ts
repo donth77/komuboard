@@ -370,6 +370,8 @@ const shortcutsDialog = createDialog({
     `<div class="kbd-row"><span>Copy</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">C</kbd></span></div>` +
     `<div class="kbd-row"><span>Paste</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">V</kbd></span></div>` +
     '<div class="kbd-row"><span>Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">Backspace</kbd></span></div>' +
+    `<div class="kbd-row"><span>Group / ungroup</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">G</kbd> / <kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">G</kbd></span></div>` +
+    `<div class="kbd-row"><span>Lock / unlock (toggle)</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">L</kbd></span></div>` +
     `<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     `<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     '<div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
@@ -452,6 +454,21 @@ window.addEventListener("keydown", (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
     canvas.selectAll();
+    e.preventDefault();
+    return;
+  }
+  // ⌘G group · ⇧⌘G ungroup
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "g") {
+    if (e.shiftKey) canvas.ungroupSelection();
+    else canvas.groupSelection();
+    e.preventDefault();
+    return;
+  }
+  // ⌘L toggles lock/unlock (single key — some browser extensions grab ⇧⌘L); ⇧⌘L stays as an
+  // explicit unlock for anyone whose ⇧⌘L is free.
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l") {
+    if (e.shiftKey) canvas.setSelectionLocked(false);
+    else canvas.toggleSelectionLock();
     e.preventDefault();
     return;
   }

@@ -22,10 +22,12 @@ import {
   DEFAULT_TEXT_SIZE,
   deleteObject,
   deleteObjects,
+  expandGroups,
   objectsMap,
   orderArray,
   randomId,
   readObject,
+  type BoardObject,
   setConnectorEnds,
   setObjectsPoints,
   setStampGeom,
@@ -89,6 +91,9 @@ export interface TextLayerOptions {
   /** Fired each frame a shape's geometry changes visually (local drag/resize, peer glide) so the
    *  canvas can re-route connectors bound to it live (not just on the doc commit). */
   onShapesMoved?: () => void;
+  /** Ungroup the current selection — fired by the group box's "Ungroup" chip. The canvas owns the
+   *  ungroup (it spans both selection subsystems). */
+  onUngroup?: () => void;
 }
 
 /** A live editing session: a contenteditable box for a new (id === null) or existing text object. */
@@ -174,6 +179,10 @@ const MIN_FONT = 8;
 const LERP = 0.3;
 /** Throttle for the live in-progress-text broadcast (~30 Hz, like the cursor/stroke streams). */
 const EDIT_BROADCAST_MS = 1000 / 30;
+// Viewport culling (ADR-0009 Phase 4): only objects whose world AABB intersects the viewport inflated
+// by this fraction per side are mounted, so on-screen DOM-node count tracks visible — not total —
+// board size. 0.5 = a half-viewport pre-mount margin in every direction (smooth panning).
+const CULL_MARGIN = 0.5;
 
 interface WorldRect {
   x: number;
@@ -291,6 +300,8 @@ export class TextLayer {
   /** Transform box for a MULTI-node group (ADR-0009 Phase 3: replaces the Konva proxy + Transformer).
    *  Resizes/rotates every selected object as one unit via setGroupPreview/commitGroupTransform. */
   private groupEl: HTMLDivElement | null = null;
+  /** "Grouped — Ungroup" chip on the group box; shown only when the selection is one persistent group. */
+  private groupChip: HTMLButtonElement | null = null;
   private groupGeom: Map<
     string,
     { cx: number; cy: number; w: number; h: number; rot: number; font: number }
@@ -420,68 +431,23 @@ export class TextLayer {
   /** Reconcile display elements with the doc's text objects (z-ordered), then lay them out. */
   private render(): void {
     const order = orderArray(this.opts.doc).toArray();
+    const cull = this.cullRect();
     const seen = new Set<string>();
     for (const id of order) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      // Stamps render here too (ADR-0009): a `.komu-stamp` <img> box, z-ordered with text/shapes by
-      // `orderArray` index so any object stacks over any other by placement order (FigJam parity).
-      if (obj?.type === "stamp") {
-        seen.add(id);
-        let el = this.els.get(id);
-        if (!el) {
-          el = document.createElement("div");
-          el.className = "komu-stamp";
-          el.dataset.id = id;
-          this.els.set(id, el);
-        }
-        this.paintStamp(el, obj.src);
-        this.root.appendChild(el); // (re)append in z-order
-        const g = this.effectiveGeom(id, obj);
-        // A stamp is a fixed square box (size×size); reuse the box layout (fontFamily/align unused).
-        this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
-        this.applyRotation(el, g.rotation);
+      if (
+        obj?.type !== "text" &&
+        obj?.type !== "stamp" &&
+        obj?.type !== "stroke" &&
+        obj?.type !== "connector"
+      )
         continue;
-      }
-      // Strokes + connectors render as their own <svg> here too (ADR-0009 Phase 3) — z-order siblings
-      // of the text/stamp boxes, so a stroke stacks over/under any object by placement order.
-      if (obj?.type === "stroke") {
-        seen.add(id);
-        let el = this.inkEls.get(id);
-        if (!el) {
-          el = this.makeInkSvg(id, "stroke");
-          this.inkEls.set(id, el);
-        }
-        this.root.appendChild(el); // (re)append in z-order
-        this.paintStroke(el, obj);
-        continue;
-      }
-      if (obj?.type === "connector") {
-        seen.add(id);
-        let el = this.inkEls.get(id);
-        if (!el) {
-          el = this.makeInkSvg(id, "connector");
-          this.inkEls.set(id, el);
-        }
-        this.root.appendChild(el); // (re)append in z-order
-        this.paintConnector(el, obj);
-        el.style.display = this.remoteInkHidden.has(id) ? "none" : ""; // hidden while a peer edits it
-        continue;
-      }
-      if (obj?.type !== "text") continue;
+      // Viewport culling (ADR-0009 Phase 4): an off-screen object is left unmounted (the sweep below
+      // removes it if it was mounted), so on-screen DOM-node count tracks visible, not total, board size.
+      if (!this.shouldMount(id, obj, cull)) continue;
       seen.add(id);
-      let el = this.els.get(id);
-      if (!el) {
-        el = document.createElement("div");
-        el.className = "komu-text";
-        el.dataset.id = id;
-        this.els.set(id, el);
-      }
-      this.paint(el, obj);
-      this.root.appendChild(el); // (re)append in z-order — cheap for a handful of boxes
-      const g = this.effectiveGeom(id, obj);
-      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
-      this.applyRotation(el, g.rotation); // CSS rotate about the box centre (after layout sets the box)
+      this.mountObject(id, obj); // create (if needed) + paint + layout + (re)append in z-order
     }
     for (const [id, el] of this.els) {
       if (seen.has(id)) continue;
@@ -502,6 +468,187 @@ export class TextLayer {
     if (this.edit) this.root.appendChild(this.edit.el); // keep the editor on top of the re-stacked boxes
     if (this.stickyGhost) this.root.appendChild(this.stickyGhost); // …and the placement ghost above all
     if (this.stampGhost) this.root.appendChild(this.stampGhost); // stamp preview stays above objects too
+  }
+
+  /** Create (if absent) + paint + lay out one object's element and (re)append it in z-order. Shared by
+   *  the doc-render pass and the camera-driven cull reconcile (`recull`). */
+  private mountObject(id: string, obj: BoardObject): void {
+    // Stamps: a `.komu-stamp` <img> box, z-ordered with text/shapes by `orderArray` (FigJam parity).
+    if (obj.type === "stamp") {
+      let el = this.els.get(id);
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "komu-stamp";
+        el.dataset.id = id;
+        this.els.set(id, el);
+      }
+      this.paintStamp(el, obj.src);
+      el.toggleAttribute("data-locked", obj.locked === true);
+      this.root.appendChild(el);
+      const g = this.effectiveGeom(id, obj);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
+      this.applyRotation(el, g.rotation);
+      return;
+    }
+    // Strokes + connectors: each its own <svg>, a z-order sibling of the text/stamp boxes.
+    if (obj.type === "stroke") {
+      let el = this.inkEls.get(id);
+      if (!el) {
+        el = this.makeInkSvg(id, "stroke");
+        this.inkEls.set(id, el);
+      }
+      this.root.appendChild(el);
+      this.paintStroke(el, obj);
+      return;
+    }
+    if (obj.type === "connector") {
+      let el = this.inkEls.get(id);
+      if (!el) {
+        el = this.makeInkSvg(id, "connector");
+        this.inkEls.set(id, el);
+      }
+      this.root.appendChild(el);
+      this.paintConnector(el, obj);
+      el.style.display = this.remoteInkHidden.has(id) ? "none" : ""; // hidden while a peer edits it
+      return;
+    }
+    // Text / sticky / shape.
+    let el = this.els.get(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "komu-text";
+      el.dataset.id = id;
+      this.els.set(id, el);
+    }
+    this.paint(el, obj);
+    el.toggleAttribute("data-locked", obj.locked === true);
+    this.root.appendChild(el);
+    const g = this.effectiveGeom(id, obj);
+    this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
+    this.applyRotation(el, g.rotation);
+  }
+
+  /** Visible world rect (viewport AABB) inflated by `CULL_MARGIN` per side, or null when culling can't
+   *  run yet (container has no measured size → mount everything). */
+  private cullRect(): { x0: number; y0: number; x1: number; y1: number } | null {
+    const cam = this.opts.camera();
+    const W = this.opts.container.clientWidth;
+    const H = this.opts.container.clientHeight;
+    if (!W || !H || !cam.scale) return null;
+    const x0 = -cam.x / cam.scale; // screen (0,0) and (W,H) → world
+    const y0 = -cam.y / cam.scale;
+    const x1 = (W - cam.x) / cam.scale;
+    const y1 = (H - cam.y) / cam.scale;
+    const mx = (x1 - x0) * CULL_MARGIN;
+    const my = (y1 - y0) * CULL_MARGIN;
+    return { x0: x0 - mx, y0: y0 - my, x1: x1 + mx, y1: y1 + my };
+  }
+
+  /** An object that must stay mounted regardless of viewport — the locally-edited box, or any object in
+   *  a live local/remote gesture — so its preview/glide never breaks at the viewport edge. */
+  private isExempt(id: string): boolean {
+    return (
+      this.edit?.id === id ||
+      this.remoteEditIds.has(id) ||
+      this.remoteDrag.has(id) ||
+      this.remoteResize.has(id) ||
+      this.remoteRotate.has(id) ||
+      this.resizing?.id === id ||
+      this.rotating?.id === id ||
+      this.movingAttached.has(id) ||
+      this.transformAttached.has(id) ||
+      (this.moveState !== null && this.selected.has(id)) || // a selected box mid local drag
+      (this.groupGeom?.has(id) ?? false)
+    );
+  }
+
+  /** Cheap world AABB for the cull test, from an ALREADY-READ obj (no second readObject) — reusing the
+   *  `inkBBox` cache for mounted ink. Returns null for auto-sized text with no known size (→ never cull). */
+  private cullAABB(
+    id: string,
+    obj: BoardObject,
+  ): { x: number; y: number; w: number; h: number } | null {
+    if (obj.type === "stroke" || obj.type === "connector") {
+      const bb =
+        this.inkBBox.get(id) ??
+        (obj.type === "stroke" ? this.strokeWorldBBox(obj) : this.connectorWorldBBox(obj));
+      return { x: bb.x, y: bb.y, w: bb.width, h: bb.height };
+    }
+    if (obj.type === "stamp") {
+      return { x: obj.x - obj.size / 2, y: obj.y - obj.size / 2, w: obj.size, h: obj.size };
+    }
+    const w = obj.width ?? this.sizes.get(id)?.w ?? 0;
+    const h = obj.height ?? this.sizes.get(id)?.h ?? 0;
+    if (w === 0 || h === 0) return null; // auto-sized text with unknown bounds → don't cull
+    return { x: obj.x, y: obj.y, w, h };
+  }
+
+  /** Whether object `id` should be mounted: always when culling is off or it's exempt; otherwise only
+   *  when its world AABB intersects the cull rect. Auto-sized text (unknown w/h) is never culled. */
+  private shouldMount(
+    id: string,
+    obj: BoardObject,
+    cull: { x0: number; y0: number; x1: number; y1: number } | null,
+  ): boolean {
+    if (!cull || this.isExempt(id)) return true;
+    const r = this.cullAABB(id, obj);
+    if (!r) return true;
+    return r.x <= cull.x1 && r.x + r.w >= cull.x0 && r.y <= cull.y1 && r.y + r.h >= cull.y0;
+  }
+
+  /** Camera-driven mount reconcile: mount objects that scrolled into the (margin-inflated) viewport,
+   *  unmount those that left it, then fix z-order if the mounted set changed. Cheap per frame — an O(n)
+   *  AABB walk with DOM work bounded by the on-screen delta. */
+  private recull(): void {
+    const cull = this.cullRect();
+    if (!cull) return;
+    const want = new Set<string>();
+    let changed = false;
+    for (const id of orderArray(this.opts.doc).toArray()) {
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (
+        obj?.type !== "text" &&
+        obj?.type !== "stamp" &&
+        obj?.type !== "stroke" &&
+        obj?.type !== "connector"
+      )
+        continue;
+      if (!this.shouldMount(id, obj, cull)) continue;
+      want.add(id);
+      if (!this.els.has(id) && !this.inkEls.has(id)) {
+        this.mountObject(id, obj);
+        changed = true;
+      }
+    }
+    for (const [id, el] of this.els) {
+      if (want.has(id)) continue;
+      el.remove();
+      this.els.delete(id);
+      this.sizes.delete(id);
+      changed = true;
+    }
+    for (const [id, el] of this.inkEls) {
+      if (want.has(id)) continue;
+      el.remove();
+      this.inkEls.delete(id);
+      this.sizes.delete(id);
+      this.inkBBox.delete(id);
+      changed = true;
+    }
+    if (changed) this.reorderZ();
+  }
+
+  /** Reorder mounted objects into `orderArray` z-order after an incremental mount. Objects are inserted
+   *  BEFORE the topmost-chrome anchor (the open editor or a placement ghost) so that chrome NEVER moves
+   *  in the DOM — re-appending a focused contenteditable can collapse its selection / abort IME, and
+   *  recull() runs at ~30 Hz during a peer's gesture. With no chrome, this is a plain append. */
+  private reorderZ(): void {
+    const anchor = this.edit?.el ?? this.stickyGhost ?? this.stampGhost ?? null;
+    for (const id of orderArray(this.opts.doc).toArray()) {
+      const el = this.els.get(id) ?? this.inkEls.get(id);
+      if (el) this.root.insertBefore(el, anchor); // anchor=null → append (same as before)
+    }
   }
 
   /** Hide the doc display copy of any box currently being edited (locally or by a peer). */
@@ -1058,6 +1205,7 @@ export class TextLayer {
   /** Rotate every selected box by `delta`° about its own centre (keyboard nudge); one transaction.
    *  Returns true when it rotated at least one box. */
   rotateSelected(delta: number): boolean {
+    if (this.hasLockedSelection()) return false; // a locked member anchors the selection
     let any = false;
     this.opts.doc.transact(() => {
       for (const id of this.selected) {
@@ -1129,6 +1277,7 @@ export class TextLayer {
 
   /** Re-run layout for every box + the editor + peers' live edits after a camera change. */
   syncTransform(): void {
+    this.recull(); // the camera moved → mount what scrolled in, unmount what left, before repositioning
     for (const [id, el] of this.els) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
@@ -1267,11 +1416,12 @@ export class TextLayer {
   ): void {
     if (this.edit) this.commit();
     const hit = this.hitTest(world);
+    if (hit && this.objects.get(hit)?.get("locked") === true) return; // locked → no edit, no create-on-top
     if (hit && !this.isStampId(hit) && !this.isInkId(hit)) {
       if (this.remoteEditIds.has(hit)) return; // a peer is editing this box — leave it to them
       this.beginEdit(hit, selectAll, caretAt);
     } else {
-      this.beginCreate(world.x, world.y); // empty space (or a non-editable stamp/stroke) → new text box
+      this.beginCreate(world.x, world.y); // empty space (or a non-editable stamp/stroke) → new box
     }
   }
 
@@ -1389,7 +1539,7 @@ export class TextLayer {
   private beginEdit(id: string, selectAll = false, caretAt?: { x: number; y: number }): void {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
-    if (obj?.type !== "text") return;
+    if (obj?.type !== "text" || obj.locked) return; // locked boxes aren't editable
     const session: Omit<EditSession, "el" | "editable"> = {
       id,
       x: obj.x,
@@ -1903,13 +2053,24 @@ export class TextLayer {
     return this.resizing !== null;
   }
 
-  /** Select a text box (additive toggles it within the current selection). */
+  /** Select a text box (additive toggles it within the current selection). Selecting any grouped
+   *  object selects its whole group; toggling a member off removes the whole group. */
   selectText(id: string, additive = false): void {
     if (!additive) this.selected.clear();
-    if (additive && this.selected.has(id)) this.selected.delete(id);
-    else this.selected.add(id);
+    const group = expandGroups(this.opts.doc, [id]);
+    if (additive && this.selected.has(id)) {
+      for (const g of group) this.selected.delete(g);
+    } else {
+      for (const g of group) this.selected.add(g);
+    }
     this.refreshSelectionChrome();
     this.opts.onSelectionChange?.();
+  }
+
+  /** True if any selected object is locked — blocks moving / resizing / rotating the whole selection. */
+  hasLockedSelection(): boolean {
+    for (const id of this.selected) if (this.objects.get(id)?.get("locked") === true) return true;
+    return false;
   }
   clearSelection(): void {
     if (!this.selected.size) return;
@@ -1928,8 +2089,15 @@ export class TextLayer {
   }
   selectAll(): void {
     const before = this.selected.size;
-    for (const id of this.els.keys()) this.selected.add(id);
-    for (const id of this.inkEls.keys()) this.selected.add(id); // strokes + connectors (all SVG ink)
+    // Walk the doc, not the mounted maps — viewport culling means off-screen objects have no element
+    // yet, but ⌘A must still select every object on the board.
+    for (const id of orderArray(this.opts.doc).toArray()) {
+      const m = this.objects.get(id);
+      const t = m?.get("type");
+      if (m?.get("locked") === true) continue; // ⌘A selects the actionable (unlocked) objects
+      if (t === "text" || t === "stamp" || t === "stroke" || t === "connector")
+        this.selected.add(id);
+    }
     if (this.selected.size !== before) {
       this.refreshSelectionChrome();
       this.opts.onSelectionChange?.();
@@ -1948,6 +2116,7 @@ export class TextLayer {
         obj?.type !== "connector"
       )
         continue;
+      if (obj.locked) continue; // a marquee never grabs locked objects
       // stamps are centre-anchored; ink uses its AABB origin; text/shape/sticky use top-left.
       let left: number, top: number;
       if (obj.type === "stamp") {
@@ -1966,6 +2135,7 @@ export class TextLayer {
         this.selected.add(id);
       }
     }
+    for (const id of expandGroups(this.opts.doc, this.selected)) this.selected.add(id); // whole groups
     this.refreshSelectionChrome();
     this.opts.onSelectionChange?.();
   }
@@ -1996,7 +2166,7 @@ export class TextLayer {
 
   /** Begin dragging the current text selection from a world point. */
   beginMove(world: { x: number; y: number }): void {
-    if (!this.selected.size) return;
+    if (!this.selected.size || this.hasLockedSelection()) return; // a locked member anchors the selection
     this.moveState = { startX: world.x, startY: world.y, dx: 0, dy: 0 };
     this.movingAttached = this.attachedStampsOf(this.selected); // stickers ride their host live
     this.updateSelectionBar(); // hide the floating toolbar while dragging (re-shows on release)
@@ -2583,14 +2753,48 @@ export class TextLayer {
       hd.addEventListener("pointerdown", (e) => this.beginGroupResize(e, h));
       box.appendChild(hd);
     }
+    // "Grouped" chip + Ungroup action (shown only for a real group — see updateGroupChrome). Surfaces
+    // that the selection IS a group (vs a loose multi-select) and makes ⌘⇧G discoverable.
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "komu-group-ungroup";
+    chip.title = "Ungroup (⌘⇧G)";
+    chip.setAttribute("aria-label", "Ungroup");
+    chip.innerHTML =
+      '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="2.5" width="6" height="6" rx="1"/><rect x="7.5" y="7.5" width="6" height="6" rx="1"/></svg><span>Group</span>';
+    chip.addEventListener("pointerdown", (e) => e.stopPropagation()); // don't start a group drag
+    chip.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.opts.onUngroup?.();
+    });
+    box.appendChild(chip);
+    this.groupChip = chip;
     this.root.appendChild(box);
     this.groupEl = box;
     return box;
   }
 
+  /** The shared groupId if the selection is exactly one persistent group (≥2 objects, all sharing one
+   *  non-empty groupId), else null — i.e. a real group vs a loose multi-select. */
+  private selectionGroupId(): string | null {
+    if (this.selected.size < 2) return null;
+    let gid: string | null = null;
+    for (const id of this.selected) {
+      const g = this.objects.get(id)?.get("groupId");
+      if (typeof g !== "string" || !g) return null; // an ungrouped member → not a group
+      if (gid === null) gid = g;
+      else if (gid !== g) return null; // members from different groups → not one group
+    }
+    return gid;
+  }
+
   /** Show/position the group transform box over the selection union (2+ objects), else hide it. */
   private updateGroupChrome(): void {
-    const u = this.selected.size >= 2 && !this.edit ? this.groupUnionRect() : null;
+    // No group transform box when a locked object is in the selection (it would move/scale the locked one).
+    const u =
+      this.selected.size >= 2 && !this.edit && !this.hasLockedSelection()
+        ? this.groupUnionRect()
+        : null;
     if (!u) {
       if (this.groupEl) this.groupEl.style.display = "none";
       return;
@@ -2602,6 +2806,11 @@ export class TextLayer {
     box.style.top = `${u.y * cam.scale + cam.y}px`;
     box.style.width = `${u.width * cam.scale}px`;
     box.style.height = `${u.height * cam.scale}px`;
+    // Mark a real group distinctly (solid accent outline) + show the Ungroup chip; a loose multi-select
+    // keeps the plain handle box and hides the chip.
+    const grouped = this.selectionGroupId() !== null;
+    box.classList.toggle("is-group", grouped);
+    if (this.groupChip) this.groupChip.style.display = grouped ? "" : "none";
   }
 
   /** Snapshot each selected box's centre+size+rotation+font — the start state for a group gesture. */
@@ -2732,7 +2941,7 @@ export class TextLayer {
   /** Begin a group rotation — called by the canvas when a pointerdown lands in the rotate band just
    *  outside the group's corners (canvas keeps owning that band detection via rotationCornerOf). */
   beginGroupRotate(e: PointerEvent): void {
-    if (this.selected.size < 2) return;
+    if (this.selected.size < 2 || this.hasLockedSelection()) return; // a locked member anchors the group
     const u = this.groupUnionRect();
     if (!u) return;
     const cam = this.opts.camera();
@@ -2816,9 +3025,16 @@ export class TextLayer {
     const obj = m ? readObject(m) : null;
     const el = id ? this.els.get(id) : undefined;
     const inkEl = id && obj?.type === "stroke" ? this.inkEls.get(id) : undefined;
-    // Hidden for 0 / many / editing, AND when this box is one node inside a multi-node group — the
-    // group's own transform box owns resize/rotate there, so no per-box handles.
-    if (!id || (!el && !inkEl) || this.edit || this.remoteEditIds.has(id) || this.groupSelected) {
+    // Hidden for 0 / many / editing, a locked box (can't resize/rotate it), AND when this box is one
+    // node inside a multi-node group — the group's own transform box owns resize/rotate there.
+    if (
+      !id ||
+      (!el && !inkEl) ||
+      this.edit ||
+      this.remoteEditIds.has(id) ||
+      this.groupSelected ||
+      obj?.locked
+    ) {
       if (this.resizeEl) this.resizeEl.style.display = "none";
     } else if (inkEl && obj?.type === "stroke") {
       // A stroke's selection box is its world AABB (effectiveGeom) mapped to screen. It resizes
@@ -3451,8 +3667,7 @@ export class TextLayer {
         for (const id of d.ids) {
           // ink (strokes/connectors) live in inkEls, not els — include them so a peer's in-progress
           // move/resize/rotate of a stroke or connector glides live too (ADR-0009 Phase 3 Step 5).
-          if (typeof id === "string" && (this.els.has(id) || this.inkEls.has(id)))
-            drag.set(id, { dx, dy });
+          if (typeof id === "string" && this.objects.has(id)) drag.set(id, { dx, dy });
         }
       }
       const tr = st.textresize as
@@ -3468,7 +3683,7 @@ export class TextLayer {
       if (
         tr &&
         typeof tr.id === "string" &&
-        (this.els.has(tr.id) || this.inkEls.has(tr.id)) &&
+        this.objects.has(tr.id) &&
         typeof tr.x === "number" &&
         typeof tr.fontSize === "number"
       ) {
@@ -3485,7 +3700,7 @@ export class TextLayer {
       if (
         trot &&
         typeof trot.id === "string" &&
-        (this.els.has(trot.id) || this.inkEls.has(trot.id)) &&
+        this.objects.has(trot.id) &&
         typeof trot.rotation === "number"
       ) {
         rotate.set(trot.id, trot.rotation);
@@ -3495,7 +3710,7 @@ export class TextLayer {
       const grp = (st as { groupresize?: { nodes?: unknown } }).groupresize;
       if (grp && Array.isArray(grp.nodes)) {
         for (const n of grp.nodes as Array<Record<string, unknown>>) {
-          if (typeof n.id !== "string" || !(this.els.has(n.id) || this.inkEls.has(n.id))) continue;
+          if (typeof n.id !== "string" || !this.objects.has(n.id)) continue;
           if (typeof n.x === "number" && typeof n.fontSize === "number") {
             const g: ResizeGeom = {
               x: n.x,
@@ -3526,20 +3741,25 @@ export class TextLayer {
     const selChanged = !sameColorMap(sel, this.remoteSelColor);
     const dragChanged = !sameDragMap(drag, this.remoteDrag);
     const resizeChanged = !sameResizeMap(resize, this.remoteResize);
+    const rotateChanged = !sameNumMap(rotate, this.remoteRotate);
+    // Boxes that gained or lost a remote rotation (computed from old+new before committing).
+    const rotateAffected = rotateChanged
+      ? new Set([...rotate.keys(), ...this.remoteRotate.keys()])
+      : null;
     this.remoteSelColor = sel;
     this.remoteDrag = drag;
     this.remoteResize = resize;
+    this.remoteRotate = rotate;
+    // A peer's gesture can bring an object into a static viewport (my camera didn't move, so no
+    // syncTransform): mount exempt objects now — after the gesture maps commit so `isExempt` sees them —
+    // before the glide/relayout below reads their elements.
+    if (dragChanged || resizeChanged || rotateChanged) this.recull();
     if (selChanged) this.refreshSelectionChrome();
     if (dragChanged || resizeChanged) this.ensureGlide(); // glide toward the new target
-    // Peers' live rotation is applied straight to the box (no glide — 30 Hz is smooth enough); relayout
-    // each box that just gained or lost a remote rotation.
-    if (!sameNumMap(rotate, this.remoteRotate)) {
-      const affected = new Set([...rotate.keys(), ...this.remoteRotate.keys()]);
-      this.remoteRotate = rotate;
-      for (const id of affected) this.relayoutBox(id);
+    // Peers' live rotation is applied straight to the box (no glide — 30 Hz is smooth enough).
+    if (rotateAffected) {
+      for (const id of rotateAffected) this.relayoutBox(id);
       this.updateResizeChrome();
-    } else {
-      this.remoteRotate = rotate;
     }
   }
 

@@ -2297,6 +2297,20 @@ input[type="range"] {
   box-shadow: 0 0 0 1.5px #4a9eff;
   border-radius: 2px;
 }
+/* Locked object (⌘L) — a small lock badge in the top-right so it's clear at a glance the object can't
+   be moved / resized / edited / deleted. Re-click it (still selectable) + ⇧⌘L to unlock. */
+.komu-text[data-locked]::after,
+.komu-stamp[data-locked]::after {
+  content: "🔒";
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.75;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(16, 17, 22, 0.35));
+}
 /* ── Ink (strokes + connectors) rendered as SVG, ADR-0009 Phase 3 ─────────────────────────────── */
 /* Each stroke/connector is its own <svg>, positioned in screen space (left/top) + scale() for zoom;
    the path coords are in a local box. pointer-events:none → clicks pass to the canvas (hit-test). */
@@ -2405,6 +2419,41 @@ input[type="range"] {
   z-index: 2;
   pointer-events: none;
   box-shadow: 0 0 0 1px #4a9eff;
+}
+/* A real group reads as one object: a solid accent outline (vs the plain 1px multi-select box). */
+.komu-group-box.is-group {
+  box-shadow: 0 0 0 1.5px #4a9eff;
+  border-radius: 3px;
+}
+/* "Group" chip with an ungroup action, pinned just above the group box's top-left corner. */
+.komu-group-ungroup {
+  position: absolute;
+  bottom: 100%;
+  left: -1px;
+  margin-bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  font:
+    600 11px Inter,
+    system-ui,
+    sans-serif;
+  color: #fff;
+  background: #4a9eff;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(16, 17, 22, 0.28);
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.komu-group-ungroup:hover {
+  background: #3b8eef;
+}
+.komu-group-ungroup svg {
+  opacity: 0.95;
 }
 .komu-group-handle {
   position: absolute;

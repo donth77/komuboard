@@ -35,6 +35,12 @@ test("shortcuts menu lists the Copy + Paste rows", async ({ page }) => {
   await expect(dialog).toContainText("Paste");
 });
 
+test("shortcuts menu lists the Group + Lock rows", async ({ page }) => {
+  const dialog = await openShortcuts(page);
+  await expect(dialog).toContainText("Group / ungroup");
+  await expect(dialog).toContainText("Lock / unlock");
+});
+
 test("macOS → modifier shows ⌘ (not Ctrl)", async ({ page }) => {
   await spoofPlatform(page, "macOS", "MacIntel");
   const txt = await (await openShortcuts(page)).innerText();

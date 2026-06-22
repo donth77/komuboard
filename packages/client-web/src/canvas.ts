@@ -15,6 +15,7 @@ import {
   DEFAULT_STICKY_COLOR,
   defaultCapsFor,
   deleteObjects,
+  groupObjects,
   objectsMap,
   orderArray,
   randomId,
@@ -22,7 +23,9 @@ import {
   readUserProfile,
   setConnectorEnds,
   setConnectorStyle,
+  setLocked,
   sideMidpoint,
+  ungroupObjects,
   type BoardObject,
   type ConnectorCap,
   type ConnectorEnd,
@@ -160,6 +163,9 @@ export class BoardCanvas {
   /** One group box per peer (keyed by clientId) drawn around a peer's multi-node selection, in their
    *  colour — mirrors the local group/transform box so others see the grouping in realtime. */
   private readonly remoteSelGroupRects = new Map<number, Konva.Rect>();
+  /** A non-interactive "Group" badge per peer whose selection is a real (persistent) group — shows the
+   *  grouped state to other users in their colour (the interactive Ungroup chip stays local). */
+  private readonly remoteGroupLabels = new Map<number, Konva.Label>();
   /** Floating tooltip (avatar + name) shown when hovering another user's selection on the canvas. */
   private peerTip: HTMLElement | null = null;
   /** The stamp the next canvas tap places (`mark:<name>` | `emoji:<codepoint>`), or null. */
@@ -281,9 +287,30 @@ export class BoardCanvas {
     this.yieldSelectionToPeers(); // release any node a peer has just taken over (selected/dragged)…
     this.renderRemoteDraws(); // peers' in-progress strokes
     this.renderRemoteConnectors(); // peers' in-progress connector draws / moves / endpoint drags
-    // force the outline rebuild when geometry moved OR a peer is live-editing a connector
-    this.renderRemoteSelections(this.remoteConn.size > 0);
+    // Force the outline rebuild when a peer is live-editing a connector OR mid drag/resize/rotate — the
+    // selection ids don't change during a gesture, so the cache key alone would freeze the ring at the
+    // gesture-start position while the object glides. ensureAnim then re-renders it each glide frame.
+    const gesturing = this.anyPeerGesturing();
+    this.renderRemoteSelections(this.remoteConn.size > 0 || gesturing);
+    if (gesturing) this.ensureAnim(); // keep the ring following the glide at frame rate
   };
+  /** True if any remote peer is mid drag / resize / rotate (an ephemeral geometry gesture). */
+  private anyPeerGesturing(): boolean {
+    const self = this.opts.awareness.clientID;
+    let any = false;
+    this.opts.awareness.getStates().forEach((state, cid) => {
+      if (cid === self || any) return;
+      if (
+        state["drag"] ||
+        state["resize"] ||
+        state["textresize"] ||
+        state["textrotate"] ||
+        state["groupresize"]
+      )
+        any = true;
+    });
+    return any;
+  }
   /** Window listeners kept as fields so destroy() can detach them (else they leak / fire on a dead stage). */
   private readonly onWindowBlur = (): void => {
     this.opts.awareness.setLocalStateField("cursor", null);
@@ -366,6 +393,7 @@ export class BoardCanvas {
         this.refreshConnectorSelection();
         this.renderSelectionBoxes(); // …and keep the union group box tracking the shape's new bounds
       },
+      onUngroup: () => this.ungroupSelection(), // the group box's "Ungroup" chip
     });
 
     // The dark edit bar for a selected connector — each control writes to the sole-selected connector.
@@ -1187,6 +1215,12 @@ export class BoardCanvas {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
     if (obj?.type !== "connector") return;
+    if (obj.locked) {
+      // A locked connector stays selectable (to unlock) but exposes no endpoint handles / edit bar.
+      if (this.connectorHandlesEl) this.connectorHandlesEl.style.display = "none";
+      this.connectorBar.hide();
+      return;
+    }
     this.ensureConnectorHandles().style.display = "";
     this.positionConnectorHandles(obj);
     // The edit bar: reflect the connector's style + sit above its screen bounding box.
@@ -1561,7 +1595,8 @@ export class BoardCanvas {
   selectAll(): void {
     // Strokes select via the text-layer now (ADR-0009 P3); the canvas keeps no stroke selection.
     this.textLayer.selectAll();
-    for (const id of this.connectorIds) this.selectedConnectors.add(id);
+    for (const id of this.connectorIds)
+      if (this.objects.get(id)?.get("locked") !== true) this.selectedConnectors.add(id); // skip locked
     this.refreshConnectorSelection();
     // All subsystems settled — re-evaluate the transform box vs the union group box (a board with any
     // non-stroke object makes ⌘A a mixed selection → union box, transform box detached) and redraw it.
@@ -1572,6 +1607,39 @@ export class BoardCanvas {
     const connIds = [...this.selectedConnectors];
     this.selectedConnectors.clear();
     if (connIds.length) deleteObjects(this.opts.doc, connIds); // observer re-renders without them
+  }
+  /** All currently-selected object ids across both subsystems (text-layer objects + connectors). */
+  private selectionIds(): string[] {
+    return [...this.selectedConnectors, ...this.textLayer.selectedIds()];
+  }
+  /** Group the selection (⌘G) — needs ≥2 objects; members then select / transform / delete as one. */
+  groupSelection(): void {
+    const ids = this.selectionIds();
+    if (ids.length < 2) return;
+    groupObjects(this.opts.doc, ids);
+    this.reattachTransformer();
+  }
+  /** Ungroup the selection (⇧⌘G). */
+  ungroupSelection(): void {
+    const ids = this.selectionIds();
+    if (ids.length) ungroupObjects(this.opts.doc, ids);
+    this.reattachTransformer();
+  }
+  /** Lock / unlock the selection (the selection is KEPT, so the chrome just re-renders: a locked box
+   *  keeps its selection ring + lock badge but loses its resize/rotate handles; unlocking restores them). */
+  setSelectionLocked(locked: boolean): void {
+    const ids = this.selectionIds();
+    if (!ids.length) return;
+    setLocked(this.opts.doc, ids, locked);
+    this.reattachTransformer(); // refresh chrome now (handles hide on lock, return on unlock)
+  }
+  /** ⌘L toggles the selection's lock — lock if any selected object is unlocked, else unlock all. A
+   *  single-key toggle so unlock never needs ⇧⌘L (which many browser extensions intercept). */
+  toggleSelectionLock(): void {
+    const ids = this.selectionIds();
+    if (!ids.length) return;
+    const allLocked = ids.every((id) => this.objects.get(id)?.get("locked") === true);
+    this.setSelectionLocked(!allLocked);
   }
 
   /** Copy the current selection (strokes + connectors + text/shapes) into the in-app clipboard. */
@@ -1665,6 +1733,15 @@ export class BoardCanvas {
   /** Test/debug hook: how many remote-peer selection outlines are currently drawn. */
   remoteSelectionCount(): number {
     return this.remoteSelections.getChildren().length;
+  }
+  /** Test/debug hook: the x of the first remote-peer selection outline (screen px), or null. */
+  remoteSelectionRectX(): number | null {
+    const first = this.remoteSelections.getChildren()[0];
+    return first ? first.x() : null;
+  }
+  /** Test/debug hook: how many remote-peer "Group" badges are currently drawn. */
+  remoteGroupLabelCount(): number {
+    return this.remoteGroupLabels.size;
   }
   /** Test/debug hook: how many remote-peer in-progress stroke previews are currently drawn. */
   remoteDrawCount(): number {
@@ -1896,7 +1973,7 @@ export class BoardCanvas {
       for (const id of this.connectorIds) {
         const m = this.objects.get(id);
         const obj = m ? readObject(m) : null;
-        if (obj?.type !== "connector") continue;
+        if (obj?.type !== "connector" || obj.locked) continue; // a marquee never grabs locked connectors
         const pts = this.connectorPolyline(obj.kind, obj.from, obj.to);
         let minX = Infinity,
           minY = Infinity,
@@ -1991,6 +2068,7 @@ export class BoardCanvas {
     // Reuse one rect per (peer, object): update attrs in place rather than destroy + recreate,
     // so the per-frame outline refresh during an interpolated remote drag/resize is allocation-free.
     const seenGroups = new Set<number>();
+    const seenGroupLabels = new Set<number>();
     for (const { clientId, color, ids } of peers) {
       if (ids.length >= 2) {
         // Multi-node selection → ONE group box (in the peer's colour) around the whole union,
@@ -2013,6 +2091,34 @@ export class BoardCanvas {
             strokeWidth: 1.5 * inv,
             cornerRadius: 2 * inv,
           });
+          // A non-interactive "Group" badge above the box when this peer's selection IS a group — so
+          // others see the grouped state (the actionable Ungroup chip stays on the local user's box).
+          if (this.idsFormGroup(ids)) {
+            seenGroupLabels.add(clientId);
+            let label = this.remoteGroupLabels.get(clientId);
+            if (!label) {
+              label = new Konva.Label({ listening: false });
+              label.add(new Konva.Tag({ cornerRadius: 999 }));
+              label.add(
+                new Konva.Text({
+                  text: "Group",
+                  fontFamily: "Inter, system-ui, sans-serif",
+                  fontStyle: "600",
+                  fontSize: 11,
+                  fill: "#fff",
+                  padding: 5,
+                }),
+              );
+              this.remoteSelections.add(label);
+              this.remoteGroupLabels.set(clientId, label);
+            }
+            (label.getTag() as Konva.Tag).fill(color);
+            label.scale({ x: inv, y: inv }); // counter the camera so the badge stays screen-constant
+            label.position({
+              x: u.x - pad * 2,
+              y: u.y - pad * 2 - (label.height() + 5) * inv, // just above the box top edge
+            });
+          }
         }
         continue;
       }
@@ -2057,7 +2163,26 @@ export class BoardCanvas {
       box.destroy();
       this.remoteSelGroupRects.delete(cid);
     }
+    // drop "Group" badges for peers whose selection is no longer a group
+    for (const [cid, label] of this.remoteGroupLabels) {
+      if (seenGroupLabels.has(cid)) continue;
+      label.destroy();
+      this.remoteGroupLabels.delete(cid);
+    }
     this.cursorLayer.batchDraw();
+  }
+  /** True if every id in a peer's selection shares one non-empty groupId — i.e. a real group, not a
+   *  loose multi-select (the grouping is a shared doc property, so we can read it locally). */
+  private idsFormGroup(ids: string[]): boolean {
+    if (ids.length < 2) return false;
+    let gid: string | null = null;
+    for (const id of ids) {
+      const g = this.objects.get(id)?.get("groupId");
+      if (typeof g !== "string" || !g) return false;
+      if (gid === null) gid = g;
+      else if (gid !== g) return false;
+    }
+    return true;
   }
 
   /** Union AABB of an arbitrary id list (a peer's selection) across every node type — strokes,
@@ -2475,7 +2600,13 @@ export class BoardCanvas {
         group.position({ x: p.x + dx * LERP, y: p.y + dy * LERP });
         moving = true;
       });
-      // remote-dragged / resized objects (position + scale)
+      // Peers' selection outlines follow the gliding object each frame (worldRectOf folds in the
+      // interpolated remote-drag offset). Keep the loop alive while any peer is mid-gesture so the ring
+      // tracks the 60 fps glide instead of stepping at the 30 Hz awareness rate.
+      if (this.anyPeerGesturing()) {
+        this.renderRemoteSelections(true);
+        moving = true;
+      }
       this.cursorLayer.batchDraw(); // cursors + peer rings glided this frame (the above-objects stage)
       if (moving) {
         this.raf = requestAnimationFrame(step);

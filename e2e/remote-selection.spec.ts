@@ -93,3 +93,52 @@ test("a peer's selection is broadcast and rendered on the other client", async (
   await a.close();
   await b.close();
 });
+
+test("a peer's selection ring follows a stroke being dragged (not frozen at the start)", async ({
+  browser,
+}) => {
+  const room = uniqueRoom("e2e-selglide");
+  const a = await connectPeer(browser, room);
+  const b = await connectPeer(browser, room);
+
+  // A draws a horizontal stroke through the canvas centre (so a click at the centre hits it).
+  await a.page.keyboard.press("p");
+  const box = (await a.page.locator("#board").boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await a.page.mouse.move(cx - 110, cy);
+  await a.page.mouse.down();
+  await a.page.mouse.move(cx - 40, cy);
+  await a.page.mouse.move(cx + 30, cy);
+  await a.page.mouse.move(cx + 110, cy);
+  await a.page.mouse.up();
+  expect((await objectIds(a.page))[0]).toBeTruthy();
+
+  const ringX = (): Promise<number | null> =>
+    b.page.evaluate(() =>
+      (window as unknown as BoardWindow).__komuboard.canvas!.remoteSelectionRectX(),
+    );
+
+  // A selects + drags the stroke in ONE gesture (the down selects, the moves drag — a separate click
+  // first would register as a two-click). Hold mid-drag.
+  await a.page.keyboard.press("v");
+  await a.page.mouse.move(cx, cy);
+  await a.page.mouse.down(); // selects the stroke → publishes A's selection
+  await expect.poll(() => remoteSelectionCount(b.page)).toBeGreaterThan(0);
+  const x0 = await ringX(); // ring at the drag-start position
+  expect(x0).not.toBeNull();
+  await a.page.mouse.move(cx + 120, cy, { steps: 10 }); // drag right, still holding
+  await a.page.waitForTimeout(120);
+
+  // ★ B's ring must have followed the drag (the bug: it stayed frozen at the start position).
+  await expect
+    .poll(async () => {
+      const x = await ringX();
+      return x !== null && x0 !== null ? Math.round(x - x0) : 0;
+    })
+    .toBeGreaterThan(60);
+
+  await a.page.mouse.up();
+  await a.close();
+  await b.close();
+});

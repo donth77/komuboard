@@ -22,6 +22,8 @@ export type BoardWindow = {
     canvas?: {
       hasSelection(): boolean;
       remoteSelectionCount(): number;
+      remoteSelectionRectX(): number | null;
+      remoteGroupLabelCount(): number;
       remoteDrawCount(): number;
       transformerAnchorPos(name: string): { x: number; y: number } | null;
       nodeContentRect(id: string): { x: number; y: number; width: number; height: number } | null;
@@ -220,6 +222,37 @@ export async function injectStamp(
       order.push([opts.id]);
     });
   }, o);
+}
+
+/** Bulk-inject `n` stickies (ids `p0..p{n-1}`) on a wide grid much larger than the viewport — for the
+ *  viewport-culling / perf tests. One transaction. Grid pitch 240, each 180×180. */
+export async function injectStickyGrid(page: Page, n: number): Promise<void> {
+  await page.evaluate((count) => {
+    const doc = (window as unknown as { __komuboard: { doc: InjectDoc } }).__komuboard.doc;
+    const objects = doc.getMap("objects");
+    const order = doc.getArray("order");
+    const YMap = objects.constructor;
+    const cols = Math.ceil(Math.sqrt(count));
+    doc.transact(() => {
+      for (let i = 0; i < count; i++) {
+        const m = new YMap();
+        m.set("id", "p" + i);
+        m.set("type", "text");
+        m.set("x", (i % cols) * 240);
+        m.set("y", Math.floor(i / cols) * 240);
+        m.set("width", 180);
+        m.set("height", 180);
+        m.set("bg", "#ffec99");
+        m.set("runs", []);
+        m.set("fontFamily", "Inter");
+        m.set("fontSize", 16);
+        m.set("align", "left");
+        m.set("authorId", "e2e");
+        objects.set("p" + i, m);
+        order.push(["p" + i]);
+      }
+    });
+  }, n);
 }
 
 /** Inject a straight connector directly into the doc. */
