@@ -178,3 +178,46 @@ test("connector: dragging an endpoint moves that end", async ({ browser }) => {
     .toBeGreaterThan(25);
   await a.close();
 });
+
+const visibleConnectors = (page: import("@playwright/test").Page): Promise<number> =>
+  page.evaluate(
+    () =>
+      [...document.querySelectorAll("svg.co-connector")].filter((e) => {
+        const s = getComputedStyle(e);
+        return (
+          s.display !== "none" &&
+          s.visibility !== "hidden" &&
+          parseFloat(s.opacity) > 0.01 &&
+          e.getBoundingClientRect().width > 1
+        );
+      }).length,
+  );
+
+test("connector: a peer's body-move shows exactly one connector (no double-draw)", async ({
+  browser,
+}) => {
+  const room = uniqueRoom("conndouble");
+  const a = await connectPeer(browser, room);
+  const b = await connectPeer(browser, room);
+  await injectConnector(a.page, { id: "cn1", from: { x: 0, y: 0 }, to: { x: 200, y: 0 } });
+  await expect.poll(() => b.page.locator("svg.co-connector").count(), { timeout: 10_000 }).toBe(1);
+
+  const cal = await calibrate(a.page);
+  await a.page.keyboard.press("v");
+  const mid = worldToScreen(cal, 100, 0);
+  await a.page.mouse.click(mid.x, mid.y);
+  await expect.poll(() => hasSelection(a.page)).toBe(true);
+
+  // A holds a body-move mid-drag; on B exactly ONE connector must be visible (committed hidden
+  // while the peer's live draft shows — guards the double-draw the migration fixed).
+  await a.page.mouse.move(mid.x, mid.y);
+  await a.page.mouse.down();
+  await a.page.mouse.move(mid.x - 30, mid.y + 90, { steps: 12 });
+  await a.page.waitForTimeout(150);
+  await expect.poll(() => visibleConnectors(b.page)).toBe(1);
+  await a.page.mouse.up();
+  await expect.poll(() => visibleConnectors(b.page)).toBe(1);
+
+  await a.close();
+  await b.close();
+});

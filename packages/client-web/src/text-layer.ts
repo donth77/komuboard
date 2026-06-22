@@ -250,6 +250,9 @@ export class TextLayer {
   private readonly remoteGeom = new Map<number, Geom>();
   /** Object ids a *remote* peer is currently editing — their doc display copy stays hidden. */
   private remoteEditIds = new Set<string>();
+  /** Committed connector ids a *remote* peer is live-editing (draw/move/endpoint) — the committed
+   *  <svg> hides while the peer's glide draft (`remote:<id>`) shows, so there's no double-draw. */
+  private remoteInkHidden = new Set<string>();
   private readonly onAwareness = (): void => {
     this.renderRemoteEdits();
     this.renderRemoteSelDrag();
@@ -453,6 +456,7 @@ export class TextLayer {
         }
         this.root.appendChild(el); // (re)append in z-order
         this.paintConnector(el, obj);
+        el.style.display = this.remoteInkHidden.has(id) ? "none" : ""; // hidden while a peer edits it
         continue;
       }
       if (obj?.type !== "text") continue;
@@ -620,6 +624,19 @@ export class TextLayer {
     }
   }
 
+  /** Upsert a transient CONNECTOR draft <svg> (local arrow-tool draw, or a peer's live connector
+   *  edit) — on TOP of every committed object, NOT hit-tested. The doc commit re-renders it. */
+  upsertConnectorDraft(key: string, conn: ConnectorObject): void {
+    let el = this.draftEls.get(key);
+    if (!el) {
+      el = this.makeInkSvg(key, "connector");
+      el.classList.add("co-draft");
+      this.draftEls.set(key, el);
+    }
+    this.root.appendChild(el); // last child of root = above all committed boxes
+    this.paintConnector(el, conn, true); // draft: don't touch sizes/inkBBox
+  }
+
   /** Draw a stroke's <path> into its <svg> in local-box coords + position it. The `d` rebuild is
    *  signature-guarded so a camera change only re-runs layoutInk. Shared by committed strokes
    *  (paintStroke) and the transient drafts (which skip the sizes/inkBBox hit-test entries). */
@@ -767,12 +784,15 @@ export class TextLayer {
 
   /** Paint a connector into its <svg>: shaft <path> + endpoint caps in local coords. Rebuilt each
    *  call (connectors are few; a bound end's pull-in margin is camera-scale dependent). */
-  private paintConnector(el: SVGSVGElement, obj: ConnectorObject): void {
+  private paintConnector(el: SVGSVGElement, obj: ConnectorObject, isDraft = false): void {
     const scale = Math.max(this.opts.camera().scale, 1e-6);
     const w = obj.width;
     const selBox = this.connectorWorldBBox(obj); // AABB for hit-test + selection (NOT the cap-padded svg box)
-    this.sizes.set(obj.id, { w: selBox.width, h: selBox.height });
-    this.inkBBox.set(obj.id, selBox);
+    if (!isDraft) {
+      // Drafts (local connector draw + peers' live edits) are transient, on top, NOT hit-tested.
+      this.sizes.set(obj.id, { w: selBox.width, h: selBox.height });
+      this.inkBBox.set(obj.id, selBox);
+    }
     const pts = this.connectorPolyline(obj.kind, obj.from, obj.to);
     const n = pts.length;
     const pull = (tipI: number, prevI: number, bound: boolean): void => {
@@ -1074,6 +1094,21 @@ export class TextLayer {
     for (const id of unhidden) this.relayoutBox(id);
   }
 
+  /** Hide the committed connector <svg>s a peer is live-editing (their glide draft shows instead),
+   *  and re-show any that are no longer being edited. Mirrors setRemoteEditIds for ink. */
+  setRemoteInkHidden(next: Set<string>): void {
+    for (const id of this.remoteInkHidden) {
+      if (next.has(id)) continue;
+      const el = this.inkEls.get(id);
+      if (el) el.style.display = "";
+    }
+    this.remoteInkHidden = next;
+    for (const id of next) {
+      const el = this.inkEls.get(id);
+      if (el) el.style.display = "none";
+    }
+  }
+
   /** Re-run layout for every box + the editor + peers' live edits after a camera change. */
   syncTransform(): void {
     for (const [id, el] of this.els) {
@@ -1139,7 +1174,9 @@ export class TextLayer {
       if (obj?.type === "connector") {
         const bbox = this.inkBBox.get(id);
         if (!bbox) continue;
-        const tol = Math.max(obj.width / 2, 10);
+        // ≥10 px on screen at any zoom (matches the retired Konva hitStrokeWidth of 20/scale) so a
+        // thin connector stays easy to grab when zoomed out — the DOM hit-test is now the only one.
+        const tol = Math.max(obj.width / 2, 10 / (this.opts.camera().scale || 1));
         if (
           world.x < bbox.x - tol ||
           world.x > bbox.x + bbox.width + tol ||

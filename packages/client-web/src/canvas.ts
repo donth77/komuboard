@@ -183,11 +183,9 @@ export class BoardCanvas {
    *  with ⌘/Ctrl+C; ⌘/Ctrl+V clones them with a cascading offset. */
   private clipboard: BoardObject[] = [];
   private pasteCount = 0; // cascade-offset multiplier for repeated paste of the same clipboard
-  /** Connectors (lines/arrows) render in their own layer (above strokes, below the overlay + the
-   *  HTML shape layer) so they re-route independently of the delicate stroke render path. */
-  private readonly connectorLayer = new Konva.Layer();
-  /** Each connector is a Konva group (shaft Line + start/end cap shapes), so any cap combo renders. */
-  private readonly connectorNodes = new Map<string, Konva.Group>();
+  /** Connector ids present in the doc — connectors paint as DOM <svg> in the text layer now (ADR-0009
+   *  P3); the canvas keeps this registry only for hit-test/selection membership + iteration. */
+  private readonly connectorIds = new Set<string>();
   /** shapeId → ids of connectors with an end bound to it (for live re-routing during a shape drag). */
   private readonly connectorsByShape = new Map<string, Set<string>>();
   private readonly selectedConnectors = new Set<string>();
@@ -213,7 +211,6 @@ export class BoardCanvas {
   private readonly remoteConn = new Map<
     number,
     {
-      group: Konva.Group;
       conn: ConnectorObject;
       ta: { x: number; y: number };
       tb: { x: number; y: number };
@@ -223,15 +220,13 @@ export class BoardCanvas {
   >();
   private connGlideRaf = 0;
   private readonly remoteConnectorIds = new Set<string>();
-  /** Connector id → colour of the peer who has it selected (drives the peer-selection tint). */
-  private readonly remoteConnSel = new Map<string, string>();
   /** The edit bar shown above a single selected connector (colour / weight / style / caps). */
   private readonly connectorBar: ConnectorBar;
   /** The connector kind the shapes tool draws (set when a line/arrow menu item is picked); null =
    *  the tool places shape boxes instead. */
   private currentConnector: ConnectorKind | null = null;
-  /** In-progress connector draw: its id, resolved start end, and the live-preview group. */
-  private drawingConnector: { id: string; from: ConnectorEnd; node: Konva.Group } | null = null;
+  /** In-progress connector draw: its id and resolved start end (live preview is a DOM draft svg). */
+  private drawingConnector: { id: string; from: ConnectorEnd } | null = null;
   /** Local edit history (objects + z-order). Remote edits keep a different origin, so undo only reverts *your* changes. */
   private readonly undoManager: Y.UndoManager;
   /** Camera: owns the stage transform (pan/zoom), wheel, grid, and zoom readout. */
@@ -340,7 +335,6 @@ export class BoardCanvas {
       height: opts.container.clientHeight,
     });
     this.stage.add(this.content);
-    this.stage.add(this.connectorLayer); // above strokes, below the overlay (cursors/selections)
     this.stage.add(this.overlay);
     this.stage.add(this.uiLayer);
     // Peers' selection outlines sit in the overlay, in world space (so they pan/zoom
@@ -358,8 +352,7 @@ export class BoardCanvas {
       this.syncCursorStage(); // keep the cursor stage locked to the camera
       this.renderSelectionBoxes();
       this.renderRemoteSelections(true); // zoom changes screen-space geometry → force rebuild
-      this.textLayer.syncTransform(); // keep HTML text boxes locked to the camera
-      this.rerouteConnectors(); // re-draw connectors so their hit area + halo stay screen-constant
+      this.textLayer.syncTransform(); // keep HTML text boxes (incl. connector <svg>) locked to the camera
       this.updateConnectorChrome(); // keep the endpoint handles locked to the camera
     });
     // The text overlay positions HTML boxes in screen space from the live camera transform.
@@ -385,7 +378,9 @@ export class BoardCanvas {
           this.opts.requestTool?.("select");
       },
       onShapesMoved: () => {
-        this.rerouteConnectors(); // a shape moved/resized → re-route its arrows live
+        // The bound connector <svg>s re-route live in the text layer (rerouteBoundConnectors); the
+        // canvas only keeps the selected connector's endpoint handles glued to the new geometry.
+        this.refreshConnectorSelection();
         this.renderSelectionBoxes(); // …and keep the union group box tracking the shape's new bounds
       },
     });
@@ -653,9 +648,10 @@ export class BoardCanvas {
   }
 
   private onDocChanged(): void {
-    // Strokes paint via the text-layer (ADR-0009 P3). On each doc change: re-render connectors
-    // (Konva), then re-sync the transform box, peers' selection outlines, and prune a just-committed peer draw.
-    this.renderConnectors();
+    // Strokes + connectors paint via the text-layer (ADR-0009 P3). On each doc change: reconcile the
+    // connector registry, then re-sync the transform box, peers' selection outlines, and prune a
+    // just-committed peer draw.
+    this.reconcileConnectors();
     this.reattachTransformer();
     this.renderRemoteSelections(true);
     this.pruneCommittedDraws();
@@ -1057,236 +1053,36 @@ export class BoardCanvas {
     return [a.x, a.y, b.x, b.y];
   }
 
-  /** The Konva shapes for one endpoint cap, oriented along `angle` (the outward direction). */
-  private capShapes(
-    p: { x: number; y: number },
-    angle: number,
-    cap: ConnectorCap,
-    color: string,
-    w: number,
-  ): Konva.Shape[] {
-    if (cap === "none") return [];
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    const px = -sin;
-    const py = cos; // unit perpendicular
-    if (cap === "arrow" || cap === "triangle" || cap === "line") {
-      const len = w * 3.2;
-      const half = w * 2;
-      const bx = p.x - cos * len;
-      const by = p.y - sin * len;
-      const b1x = bx + px * half;
-      const b1y = by + py * half;
-      const b2x = bx - px * half;
-      const b2y = by - py * half;
-      if (cap === "line") {
-        // open "V" head (matches the arrow/elbow menu icons)
-        return [
-          new Konva.Line({
-            points: [b1x, b1y, p.x, p.y, b2x, b2y],
-            stroke: color,
-            strokeWidth: w,
-            lineCap: "round",
-            lineJoin: "round",
-            listening: false,
-          }),
-        ];
-      }
-      // closed triangle — filled in the line colour (arrow) or outlined + white (triangle).
-      const outline = cap === "triangle";
-      return [
-        new Konva.Line({
-          points: [p.x, p.y, b1x, b1y, b2x, b2y],
-          closed: true,
-          fill: outline ? "#ffffff" : color,
-          stroke: color,
-          strokeWidth: outline ? w * 0.8 : w * 0.5,
-          lineJoin: "round",
-          listening: false,
-        }),
-      ];
-    }
-    if (cap === "circle") {
-      return [
-        new Konva.Circle({
-          x: p.x,
-          y: p.y,
-          radius: w * 1.6,
-          stroke: color,
-          strokeWidth: w * 0.8,
-          fill: "#ffffff",
-          listening: false,
-        }),
-      ];
-    }
-    // diamond
-    const rd = w * 1.9;
-    return [
-      new Konva.Line({
-        points: [p.x, p.y - rd, p.x + rd, p.y, p.x, p.y + rd, p.x - rd, p.y],
-        closed: true,
-        stroke: color,
-        strokeWidth: w * 0.8,
-        fill: "#ffffff",
-        listening: false,
-      }),
-    ];
-  }
-
-  /** How far a solid cap's body extends back from the tip — the shaft is trimmed by this so it stops
-   *  at the cap's base instead of poking through (open "line"/none reach the tip). */
-  private capInset(cap: ConnectorCap, w: number): number {
-    if (cap === "arrow" || cap === "triangle") return w * 3.2; // triangle length
-    if (cap === "circle") return w * 1.6; // radius
-    if (cap === "diamond") return w * 1.9; // half-diagonal
-    return 0;
-  }
-
-  /** The selection-halo colour for a connector: blue when I've selected it, the selecting peer's
-   *  colour when THEY have, else null (not selected). The connector keeps its OWN colour; selection
-   *  is shown as an outline/halo, not by recolouring it. */
-  private connectorSelColor(id: string): string | null {
-    if (this.selectedConnectors.has(id)) return SELECT_BLUE;
-    return this.remoteConnSel.get(id) ?? null;
-  }
-
-  /** (Re)build a connector group: an optional selection halo, then the shaft + its two cap shapes.
-   *  The hit area is a constant ~20 px on screen so the line is easy to grab at any zoom. */
-  private drawConnector(group: Konva.Group, conn: ConnectorObject, selColor: string | null): void {
-    group.destroyChildren();
-    const w = conn.width;
-    const scale = this.stage.scaleX() || 1;
-    const pts = this.connectorPolyline(conn.kind, conn.from, conn.to);
-    const n = pts.length;
-    // A bound end attaches at the shape's side mid-edge — on its border. The connector layer paints
-    // UNDER the HTML shape overlay, so an endpoint sitting on the border gets clipped: an arrowhead
-    // reads as "cut off" and a round line cap pokes past the edge into the shape. Pull a bound end
-    // inward by half the stroke (clears the round cap) + a small margin, so the drawn cap/arrowhead
-    // stops just OUTSIDE the shape. The logical endpoint (handles, re-routing) stays on the border.
-    const pullBoundIn = (tipI: number, prevI: number, bound: boolean): void => {
-      if (!bound) return;
-      const tx = pts[tipI]!,
-        ty = pts[tipI + 1]!,
-        qx = pts[prevI]!,
-        qy = pts[prevI + 1]!;
-      const seg = Math.hypot(tx - qx, ty - qy) || 1;
-      const t = Math.min((w / 2 + 2.5 / scale) / seg, 0.45); // never cross a short connector's middle
-      pts[tipI] = tx - (tx - qx) * t;
-      pts[tipI + 1] = ty - (ty - qy) * t;
-    };
-    pullBoundIn(n - 2, n - 4, !!conn.to.shapeId);
-    pullBoundIn(0, 2, !!conn.from.shapeId);
-    const end = { x: pts[n - 2]!, y: pts[n - 1]! };
-    const endPrev = { x: pts[n - 4]!, y: pts[n - 3]! };
-    const start = { x: pts[0]!, y: pts[1]! };
-    const startNext = { x: pts[2]!, y: pts[3]! };
-    const endAngle = Math.atan2(end.y - endPrev.y, end.x - endPrev.x);
-    const startAngle = Math.atan2(start.y - startNext.y, start.x - startNext.x);
-    // Selection halo (behind): a slightly wider, semi-transparent outline. The arrowhead halo uses
-    // the cap's NORMAL size with just a fatter outline stroke (passing a bigger width scales the
-    // whole head up → the giant-arrow look).
-    if (selColor) {
-      const halo = 6 / scale; // ~3 px of halo on each side, constant on screen
-      group.add(
-        new Konva.Line({
-          points: pts,
-          stroke: selColor,
-          strokeWidth: w + halo,
-          opacity: 0.5,
-          lineCap: "round",
-          lineJoin: "round",
-          listening: false,
-        }),
-      );
-      for (const cap of [
-        ...this.capShapes(end, endAngle, conn.endCap, selColor, w),
-        ...this.capShapes(start, startAngle, conn.startCap, selColor, w),
-      ]) {
-        cap.strokeWidth((cap.strokeWidth() || 0) + halo); // fatten the outline, not the whole head
-        cap.opacity(0.5);
-        group.add(cap);
-      }
-    }
-    // The shaft stops at a solid cap's base (trim its endpoints inward); caps still sit at the tips.
-    const shaft = pts.slice();
-    const trim = (tipI: number, prevI: number, inset: number): void => {
-      if (inset <= 0) return;
-      const tx = pts[tipI]!;
-      const ty = pts[tipI + 1]!;
-      const qx = pts[prevI]!;
-      const qy = pts[prevI + 1]!;
-      const seg = Math.hypot(tx - qx, ty - qy) || 1;
-      const t = Math.min(inset / seg, 0.95);
-      shaft[tipI] = tx - (tx - qx) * t;
-      shaft[tipI + 1] = ty - (ty - qy) * t;
-    };
-    trim(n - 2, n - 4, this.capInset(conn.endCap, w));
-    trim(0, 2, this.capInset(conn.startCap, w));
-    group.add(
-      new Konva.Line({
-        points: shaft,
-        stroke: conn.color,
-        strokeWidth: w,
-        dash: conn.style === "dashed" ? [w * 2.5, w * 2] : [],
-        lineCap: "round",
-        lineJoin: "round",
-        hitStrokeWidth: Math.max(w, 20 / scale), // ≥20 px on screen → easy to grab at any zoom
-        listening: true,
-      }),
-    );
-    for (const s of this.capShapes(end, endAngle, conn.endCap, conn.color, w)) group.add(s);
-    for (const s of this.capShapes(start, startAngle, conn.startCap, conn.color, w)) group.add(s);
-  }
-
-  /** Reconcile connector groups with the doc (full pass — from the doc observer). */
-  private renderConnectors(): void {
+  /** Reconcile the connector registry with the doc (full pass — from the doc observer). Connectors
+   *  paint as DOM <svg> in the text layer now (ADR-0009 P3); the canvas keeps only the id set (for
+   *  selection/hit-test) + the shape→connector index (for live re-routing) + the endpoint chrome. */
+  private reconcileConnectors(): void {
     const seen = new Set<string>();
     this.connectorsByShape.clear();
     this.objects.forEach((m, id) => {
       const obj = readObject(m);
       if (obj?.type !== "connector") return;
       seen.add(id);
+      this.connectorIds.add(id);
       for (const e of [obj.from, obj.to]) {
         if (!e.shapeId) continue;
         let set = this.connectorsByShape.get(e.shapeId);
         if (!set) this.connectorsByShape.set(e.shapeId, (set = new Set()));
         set.add(id);
       }
-      let group = this.connectorNodes.get(id);
-      if (!group) {
-        group = new Konva.Group();
-        group.setAttr(OBJ_ID_ATTR, id);
-        this.connectorLayer.add(group);
-        this.connectorNodes.set(id, group);
-      }
-      this.drawConnector(group, obj, this.connectorSelColor(id));
-      group.opacity(0); // ADR-0009 P3 step1: DOM <svg> paints the connector; group kept hittable-only
-      group.visible(!this.remoteConnectorIds.has(id)); // hidden while a peer is live-editing it
     });
-    for (const [id, group] of this.connectorNodes) {
+    for (const id of this.connectorIds) {
       if (seen.has(id)) continue;
-      group.destroy();
-      this.connectorNodes.delete(id);
+      this.connectorIds.delete(id);
       this.selectedConnectors.delete(id);
     }
-    this.connectorLayer.batchDraw();
     if (!this.connectorEndDrag) this.updateConnectorChrome();
   }
 
-  /** Re-draw connector groups (geometry + caps) — called each frame a bound shape is dragged and on
-   *  selection change. */
-  private rerouteConnectors(): void {
-    if (!this.connectorNodes.size) return;
-    for (const [id, group] of this.connectorNodes) {
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
-      if (obj?.type === "connector") this.drawConnector(group, obj, this.connectorSelColor(id));
-    }
-    this.connectorLayer.batchDraw();
-    if (!this.connectorEndDrag) this.updateConnectorChrome(); // keep handles glued (not mid-handle-drag)
-  }
+  /** Keep the selected connector's endpoint handles glued to its (possibly re-routed) geometry. The
+   *  connector <svg> re-routes live in the text layer; the canvas only owns the handle chrome. */
   private refreshConnectorSelection(): void {
-    this.rerouteConnectors(); // a redraw re-tints by the current selection
+    if (!this.connectorEndDrag) this.updateConnectorChrome();
   }
 
   /** Snap a draw point to the nearest shape connector point (side mid-edge) within ~18px on screen.
@@ -1331,9 +1127,7 @@ export class BoardCanvas {
     this.stage.on("pointerdown", () => {
       if (this.tool !== "shapes" || !this.currentConnector || this.drawingConnector) return;
       const from = this.snapConnectorEnd(this.point());
-      const group = new Konva.Group({ listening: false });
-      this.connectorLayer.add(group);
-      this.drawingConnector = { id: randomId("cn"), from, node: group };
+      this.drawingConnector = { id: randomId("cn"), from };
       this.updateDrawPreview(from);
     });
     this.stage.on("pointermove", () => {
@@ -1346,7 +1140,7 @@ export class BoardCanvas {
       this.textLayer.setSnapTarget(null);
       if (!d) return;
       if (this.currentConnector) {
-        d.node.destroy(); // the doc observer re-adds it authoritatively
+        this.textLayer.removeInkDraft("local-conn"); // the doc observer re-adds it authoritatively
         const to = this.snapConnectorEnd(this.point());
         const a = this.resolveConnectorEnd(d.from);
         const b = this.resolveConnectorEnd(to);
@@ -1371,8 +1165,6 @@ export class BoardCanvas {
           } else {
             this.opts.onPlaced?.(); // bound → collapse the mobile sheet, keep the connector tool active
           }
-        } else {
-          this.connectorLayer.batchDraw();
         }
       }
       // Always clear the live-draw preview that updateDrawPreview() streamed to peers. Without this the
@@ -1390,8 +1182,7 @@ export class BoardCanvas {
     const d = this.drawingConnector;
     if (!d) return;
     const draft = { ...this.previewConnector(d.from, to), id: d.id };
-    this.drawConnector(d.node, draft, null);
-    this.connectorLayer.batchDraw();
+    this.textLayer.upsertConnectorDraft("local-conn", draft);
     this.broadcastConnectorEdit(draft); // peers see the connector being drawn live
     const bound = to.shapeId && to.side ? to : d.from.shapeId && d.from.side ? d.from : null;
     this.textLayer.setSnapTarget(
@@ -1480,11 +1271,8 @@ export class BoardCanvas {
     const obj = m ? readObject(m) : null;
     if (obj?.type !== "connector") return;
     const draft: ConnectorObject = { ...obj, [which]: end };
-    // The visible connector is the DOM <svg> now (the Konva node is opacity 0) — repaint it live.
+    // The visible connector is the DOM <svg> — repaint it live with the dragged end.
     this.textLayer.previewConnector(id, which === "from" ? { from: end } : { to: end });
-    const group = this.connectorNodes.get(id);
-    if (group) this.drawConnector(group, draft, SELECT_BLUE);
-    this.connectorLayer.batchDraw();
     this.positionConnectorHandles(draft);
     this.broadcastConnectorEdit(draft); // peers see the endpoint being dragged live
     this.textLayer.setSnapTarget(
@@ -1511,7 +1299,6 @@ export class BoardCanvas {
     if (!this.selectedConnectors.size) return;
     this.selectedConnectors.clear();
     this.refreshConnectorSelection();
-    this.connectorLayer.batchDraw();
   }
 
   /** Apply a style change to the single selected connector (from the edit bar). */
@@ -1625,14 +1412,9 @@ export class BoardCanvas {
     const dy = p.y - cm.startY;
     if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) cm.moved = true;
     let last: ConnectorObject | null = null;
-    for (const [id, o] of cm.origins) {
-      const group = this.connectorNodes.get(id);
-      if (!group) continue;
-      const draft = this.movedConnectorDraft(o, dx, dy);
-      this.drawConnector(group, draft, SELECT_BLUE);
-      last = draft;
-    }
-    this.connectorLayer.batchDraw();
+    // The visible <svg> follows live via the text-layer move (CSS translate on the inkEl); here we
+    // only build the draft to stream to peers and reposition the endpoint handles.
+    for (const o of cm.origins.values()) last = this.movedConnectorDraft(o, dx, dy);
     if (cm.origins.size === 1 && last) this.positionConnectorHandles(last);
     if (last) this.broadcastConnectorEdit(last); // stream the live move to peers (throttled)
   }
@@ -1733,7 +1515,7 @@ export class BoardCanvas {
    *  redraw — so cursor-tick awareness churn doesn't repaint the connector layer. */
   private renderRemoteConnectors(): void {
     const local = this.opts.awareness.clientID;
-    const edited = new Set<string>();
+    const edited = new Set<string>(); // connector ids a peer is live-editing
     const seen = new Set<number>();
     this.opts.awareness.getStates().forEach((state, cid) => {
       if (cid === local) return;
@@ -1744,46 +1526,43 @@ export class BoardCanvas {
       const ta = this.resolveConnectorEnd(conn.from);
       const tb = this.resolveConnectorEnd(conn.to);
       const rc = this.remoteConn.get(cid);
-      if (rc) {
+      if (rc && rc.conn.id === conn.id) {
+        // Same connector still being edited: update the target; connGlideStep glides ca/cb → ta/tb.
         rc.conn = conn;
         rc.ta = ta;
         rc.tb = tb;
       } else {
-        const group = new Konva.Group({ listening: false });
-        this.connectorLayer.add(group);
-        this.remoteConn.set(cid, { group, conn, ta, tb, ca: { ...ta }, cb: { ...tb } });
-        // Draw it now (at the target, where the glide starts) instead of waiting for the next RAF:
-        // we hide the committed copy below in this same pass, so an empty group would leave the
-        // connector blank for one painted frame (the start-of-drag flash).
-        this.drawConnector(group, { ...conn, from: ta, to: tb }, this.connectorSelColor(conn.id));
+        if (rc) this.textLayer.removeInkDraft(`remote:${rc.conn.id}`); // peer switched to another connector
+        this.remoteConn.set(cid, { conn, ta, tb, ca: { ...ta }, cb: { ...tb } });
+        // Paint at the target now (where the glide starts) so the draft isn't blank for one frame.
+        this.textLayer.upsertConnectorDraft(`remote:${conn.id}`, { ...conn, from: ta, to: tb });
       }
     });
-    // idle: nothing live now and nothing to tear down → no redraw at all
+    // idle: nothing live now and nothing was drafted/hidden last tick → nothing to do
     if (!seen.size && !this.remoteConn.size && !this.remoteConnectorIds.size) return;
     for (const [cid, rc] of this.remoteConn) {
       if (seen.has(cid)) continue;
-      rc.group.destroy();
+      this.textLayer.removeInkDraft(`remote:${rc.conn.id}`);
       this.remoteConn.delete(cid);
     }
-    // committed-copy visibility — only touch it (and redraw) when the edited-id set actually changes
-    const changed =
-      edited.size !== this.remoteConnectorIds.size ||
-      [...edited].some((id) => !this.remoteConnectorIds.has(id));
-    if (changed) {
-      this.remoteConnectorIds.clear();
-      edited.forEach((id) => this.remoteConnectorIds.add(id));
-      for (const [id, group] of this.connectorNodes)
-        group.visible(!this.remoteConnectorIds.has(id));
+    // Hide the committed <svg> of any edited connector that already exists in the doc (a brand-new
+    // draw has none yet) so its glide draft doesn't double-draw over it; re-show all the rest.
+    this.remoteConnectorIds.clear();
+    const hideCommitted = new Set<string>();
+    for (const id of edited) {
+      this.remoteConnectorIds.add(id);
+      if (this.objects.has(id)) hideCommitted.add(id);
     }
+    this.textLayer.setRemoteInkHidden(hideCommitted);
     if (this.remoteConn.size) this.ensureConnGlide();
-    else this.connectorLayer.batchDraw(); // last preview just went away
   }
 
   private ensureConnGlide(): void {
     if (!this.connGlideRaf) this.connGlideRaf = requestAnimationFrame(this.connGlideStep);
   }
   /** Interpolate each remote connector's endpoints toward its target (LERP, like the stroke/shape
-   *  glide) and redraw — so peers' connector edits move smoothly between 30 Hz broadcasts. */
+   *  glide) and repaint its draft <svg> — so peers' connector edits move smoothly between 30 Hz
+   *  broadcasts. (The selecting peer's halo lives in the separate remote-selection overlay.) */
   private readonly connGlideStep = (): void => {
     this.connGlideRaf = 0;
     let active = false;
@@ -1803,17 +1582,12 @@ export class BoardCanvas {
       } else {
         active = true;
       }
-      // draw between the interpolated endpoints (free points) in the connector's own colour, but keep
-      // the selecting peer's halo on it: the committed, tinted copy is hidden while it's being edited
-      // (remoteConnectorIds), so without re-applying the selection colour here the highlight would
-      // vanish on every peer's screen the instant the drag starts.
-      this.drawConnector(
-        rc.group,
-        { ...rc.conn, from: { x: rc.ca.x, y: rc.ca.y }, to: { x: rc.cb.x, y: rc.cb.y } },
-        this.connectorSelColor(rc.conn.id),
-      );
+      this.textLayer.upsertConnectorDraft(`remote:${rc.conn.id}`, {
+        ...rc.conn,
+        from: { x: rc.ca.x, y: rc.ca.y },
+        to: { x: rc.cb.x, y: rc.cb.y },
+      });
     }
-    this.connectorLayer.batchDraw();
     if (active) this.ensureConnGlide();
   };
 
@@ -1875,22 +1649,14 @@ export class BoardCanvas {
       }
       this.textTapEdit = null;
       this.textSelectAt = null;
-      // Resolve the hit object id BEFORE clearing the connector selection. clearConnectorSelection()
-      // re-renders connectors via drawConnector → group.destroyChildren(), which detaches e.target;
-      // calling objIdOf(e.target) afterwards would then walk an orphaned node (getParent() === null)
-      // and return null. That turned a press on an already-selected connector into a deselect +
-      // marquee — the "I can't click-then-drag a line, only one quick motion works" bug.
+      // Everything visible is a DOM object now (ADR-0009 P3): the precise text-layer hit-test (`tid`,
+      // above — now screen-constant for connectors) is the only object hit-test, so a connector click
+      // is already handled there. A press reaching here missed every object → clear and fall through
+      // to the marquee. (`id` below is the Konva e.target, used only by the dead legacy stroke path.)
       const id = this.objIdOf(e.target);
       if (!shift) {
-        this.textLayer.clearSelection(); // clicking strokes/empty drops the text + connector selection
+        this.textLayer.clearSelection(); // clicking empty space drops the text + connector selection
         this.clearConnectorSelection();
-      }
-      if (id && this.connectorNodes.has(id)) {
-        // The DOM hit-test narrowly missed a connector that the Konva node caught → select it in the
-        // text layer (the unified path), same as a `tid` hit. ADR-0009 P3.
-        if (shift || !this.textLayer.isSelected(id)) this.textLayer.selectText(id, shift);
-        this.textLayer.beginMove(this.point());
-        return;
       }
       if (id) {
         if (shift) {
@@ -1954,7 +1720,6 @@ export class BoardCanvas {
     if (this.selectedConnectors.size) {
       this.selectedConnectors.clear();
       this.refreshConnectorSelection();
-      this.connectorLayer.batchDraw();
     }
     if (!this.selected.size) return;
     this.selected.clear();
@@ -1964,9 +1729,8 @@ export class BoardCanvas {
   selectAll(): void {
     this.setSelection([]); // strokes select via the text-layer now (ADR-0009 P3); canvas.selected unused
     this.textLayer.selectAll();
-    for (const id of this.connectorNodes.keys()) this.selectedConnectors.add(id);
+    for (const id of this.connectorIds) this.selectedConnectors.add(id);
     this.refreshConnectorSelection();
-    this.connectorLayer.batchDraw();
     // All subsystems settled — re-evaluate the transform box vs the union group box (a board with any
     // non-stroke object makes ⌘A a mixed selection → union box, transform box detached) and redraw it.
     this.reattachTransformer();
@@ -2029,11 +1793,8 @@ export class BoardCanvas {
     const connIds = clones.filter((o) => o.type === "connector").map((o) => o.id);
     if (strokeIds.length) this.setSelection(strokeIds); // strokes → transformer + notify + publish
     for (const id of textIds) this.textLayer.selectText(id, true); // additive
-    for (const id of connIds) if (this.connectorNodes.has(id)) this.selectedConnectors.add(id);
-    if (connIds.length) {
-      this.refreshConnectorSelection();
-      this.connectorLayer.batchDraw();
-    }
+    for (const id of connIds) if (this.connectorIds.has(id)) this.selectedConnectors.add(id);
+    if (connIds.length) this.refreshConnectorSelection();
     this.notifySelection();
     this.publishSelection();
   }
@@ -2383,7 +2144,7 @@ export class BoardCanvas {
     if (!this.marqueeAdditive)
       for (const id of [...this.selectedConnectors]) this.selectedConnectors.delete(id);
     if (box.width >= 2 || box.height >= 2) {
-      for (const id of this.connectorNodes.keys()) {
+      for (const id of this.connectorIds) {
         const m = this.objects.get(id);
         const obj = m ? readObject(m) : null;
         if (obj?.type !== "connector") continue;
@@ -2508,13 +2269,8 @@ export class BoardCanvas {
     const seen = new Set<string>();
     // Reuse one rect per (peer, object): update attrs in place rather than destroy + recreate,
     // so the per-frame outline refresh during an interpolated remote drag/resize is allocation-free.
-    const newConnSel = new Map<string, string>(); // connector id → selecting peer's colour
     const seenGroups = new Set<number>();
     for (const { clientId, color, ids } of peers) {
-      // A peer-selected connector is shown by re-tinting the connector in their colour (no box) —
-      // record it whether the selection is single or a group.
-      for (const id of ids) if (this.connectorNodes.has(id)) newConnSel.set(id, color);
-
       if (ids.length >= 2) {
         // Multi-node selection → ONE group box (in the peer's colour) around the whole union,
         // mirroring the local group/transform box. No per-node rects (the box represents them all).
@@ -2540,11 +2296,10 @@ export class BoardCanvas {
         continue;
       }
 
-      // Single selection → outline the one stroke (text/shape/sticky/stamp get their ring from the
-      // text layer; connectors are ringed separately). Strokes paint as DOM <svg> now, so their world
-      // rect comes from the text-layer (ADR-0009 P3 — the Konva stroke pipeline is gone).
+      // Single selection → outline the one stroke (text/shape/sticky/stamp/connector all get their
+      // ring from the text layer). Strokes paint as DOM <svg> now, so their world rect comes from the
+      // text-layer too (ADR-0009 P3 — the Konva stroke + connector pipelines are gone).
       for (const id of ids) {
-        if (this.connectorNodes.has(id)) continue;
         const m = this.objects.get(id);
         const o = m ? readObject(m) : null;
         if (o?.type !== "stroke") continue;
@@ -2582,15 +2337,6 @@ export class BoardCanvas {
       this.remoteSelGroupRects.delete(cid);
     }
     this.overlay.batchDraw();
-    // re-tint connectors only when the peer-selection set actually changed
-    const connSelChanged =
-      newConnSel.size !== this.remoteConnSel.size ||
-      [...newConnSel].some(([id, c]) => this.remoteConnSel.get(id) !== c);
-    if (connSelChanged) {
-      this.remoteConnSel.clear();
-      for (const [id, c] of newConnSel) this.remoteConnSel.set(id, c);
-      this.rerouteConnectors();
-    }
   }
 
   /** Union AABB of an arbitrary id list (a peer's selection) across every node type — strokes,
@@ -2893,10 +2639,12 @@ export class BoardCanvas {
     if (this.connectorMove || this.connectorEndDrag || this.drawingConnector) {
       this.connectorMove = null;
       this.connectorEndDrag = null;
-      this.drawingConnector?.node.destroy();
+      if (this.drawingConnector) this.textLayer.removeInkDraft("local-conn");
       this.drawingConnector = null;
       this.broadcastConnectorEdit(null); // cancelled → stop the live connector preview
-      this.renderConnectors(); // restore the committed geometry
+      // Committed connectors are DOM <svg> repainted authoritatively by the doc observer, and any
+      // in-progress endpoint/body preview is cleared by previewConnector/effectiveGeom reset — so
+      // dropping the live drafts above fully restores the committed view.
     }
   }
 
