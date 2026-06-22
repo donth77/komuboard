@@ -102,3 +102,79 @@ test("connector: a bound end follows its shape (reroute)", async ({ browser }) =
 
   await a.close();
 });
+
+const connectorCount = (page: import("@playwright/test").Page): Promise<number> =>
+  page.evaluate(() => {
+    let c = 0;
+    for (const v of (
+      window as unknown as {
+        __coboard: {
+          doc: { getMap(n: string): { values(): Iterable<{ toJSON(): { type?: string } }> } };
+        };
+      }
+    ).__coboard.doc
+      .getMap("objects")
+      .values())
+      if (v.toJSON().type === "connector") c++;
+    return c;
+  });
+
+async function drawConnector(page: import("@playwright/test").Page): Promise<void> {
+  const board = (await page.locator("#board").boundingBox())!;
+  await page.getByRole("button", { name: /shapes/i }).click();
+  await page.waitForTimeout(250);
+  await page.getByText("Arrow", { exact: true }).first().click();
+  await page.waitForTimeout(200);
+  const cx = board.x + board.width / 2;
+  const cy = board.y + board.height / 2;
+  await page.mouse.move(cx - 100, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx - 20, cy + 12, { steps: 6 });
+  await page.mouse.move(cx + 100, cy, { steps: 6 });
+  await page.mouse.up();
+}
+
+test("connector: draw with the arrow tool creates a connector (local draft → commit)", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("conndraw"));
+  await drawConnector(a.page);
+  await expect.poll(() => connectorCount(a.page)).toBe(1);
+  await a.close();
+});
+
+test("connector: a peer's drawn connector arrives (remote handoff)", async ({ browser }) => {
+  const room = uniqueRoom("conndrawremote");
+  const a = await connectPeer(browser, room);
+  const b = await connectPeer(browser, room);
+  await drawConnector(a.page);
+  await expect.poll(() => connectorCount(b.page), { timeout: 10_000 }).toBe(1);
+  await expect.poll(() => b.page.locator("svg.co-connector").count()).toBe(1);
+  await a.close();
+  await b.close();
+});
+
+test("connector: dragging an endpoint moves that end", async ({ browser }) => {
+  const a = await connectPeer(browser, uniqueRoom("connendpoint"));
+  await injectConnector(a.page, { id: "cn1", from: { x: 0, y: 0 }, to: { x: 200, y: 0 } });
+  await expect.poll(() => a.page.locator("svg.co-connector").count()).toBe(1);
+  const cal = await calibrate(a.page);
+  await a.page.keyboard.press("v");
+  // select via the shaft midpoint (100,0)
+  const mid = worldToScreen(cal, 100, 0);
+  await a.page.mouse.click(mid.x, mid.y);
+  await expect.poll(() => hasSelection(a.page)).toBe(true);
+  // drag the `to` endpoint (200,0) down-right
+  const end = worldToScreen(cal, 200, 0);
+  await a.page.mouse.move(end.x, end.y);
+  await a.page.mouse.down();
+  await a.page.mouse.move(end.x + 60, end.y + 50, { steps: 8 });
+  await a.page.mouse.up();
+  await expect
+    .poll(async () => {
+      const t = (await objJSON(a.page, "cn1"))!.to as { y: number };
+      return Math.round(t.y);
+    })
+    .toBeGreaterThan(25);
+  await a.close();
+});
