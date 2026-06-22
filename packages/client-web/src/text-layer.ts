@@ -284,6 +284,8 @@ export class TextLayer {
   /** Peers' in-progress rotation (box id → degrees), applied straight to the render; cleared on release. */
   private remoteRotate = new Map<string, number>();
   private lastRotateSent = 0;
+  /** Throttle for streaming a host's attached-stamp glide (groupresize) during its rotate/resize. */
+  private lastAttachSent = 0;
   /** Handle box for a single text selection (created lazily), + the in-progress resize. */
   private resizeEl: HTMLDivElement | null = null;
   /** Transform box for a MULTI-node group (ADR-0009 Phase 3: replaces the Konva proxy + Transformer).
@@ -368,6 +370,8 @@ export class TextLayer {
   private moveState: { startX: number; startY: number; dx: number; dy: number } | null = null;
   /** Stamps stuck to a host that's being dragged — they glide along live (committed via the schema). */
   private movingAttached = new Set<string>();
+  /** Stamps stuck to a host being rotated/resized — they glide live (committed by transformAttachedStamps). */
+  private transformAttached = new Set<string>();
   /** Hover card (Open / Edit) shown when the pointer is over a link — committed box or editor. */
   private linkCard: HTMLDivElement | null = null;
   private linkCardFor: HTMLAnchorElement | null = null;
@@ -2010,45 +2014,79 @@ export class TextLayer {
     return out;
   }
 
-  /** Carry a host's attached stamps through its box transform (old → new): each stamp's centre is
-   *  re-mapped (un-rotate by old → scale per axis → rotate by new), its size scales by the geometric
-   *  mean of the axis scales, and the rotation delta is added. Drives sticky/shape rotate + resize so
-   *  the stamps stay stuck. Boxes are {cx, cy, w, h, rot°}. Call inside the host's commit transaction. */
+  /** Map a stamp's centre / size / rotation through a host box transform (old → new): un-rotate by
+   *  old, scale per axis, rotate by new; size by the geometric mean of the axis scales; add the
+   *  rotation delta. Shared by the commit + live-preview paths. Boxes are {cx, cy, w, h, rot°}. */
+  private mapAttachedStamp(
+    obj: StampObject,
+    old: { cx: number; cy: number; w: number; h: number; rot: number },
+    neu: { cx: number; cy: number; w: number; h: number; rot: number },
+  ): { cx: number; cy: number; size: number; rot: number } {
+    const oldRad = (old.rot * Math.PI) / 180;
+    const newRad = (neu.rot * Math.PI) / 180;
+    const sx = neu.w / (old.w || 1);
+    const sy = neu.h / (old.h || 1);
+    const cu = Math.cos(-oldRad);
+    const su = Math.sin(-oldRad);
+    const cr = Math.cos(newRad);
+    const sr = Math.sin(newRad);
+    const dx = obj.x - old.cx;
+    const dy = obj.y - old.cy;
+    const lx = (cu * dx - su * dy) * sx; // un-rotate by old, then scale per axis
+    const ly = (su * dx + cu * dy) * sy;
+    return {
+      cx: neu.cx + (cr * lx - sr * ly), // …then rotate by new about the new centre
+      cy: neu.cy + (sr * lx + cr * ly),
+      size: obj.size * (Math.sqrt(Math.abs(sx * sy)) || 1),
+      rot: ((((obj.rotation ?? 0) + (neu.rot - old.rot)) % 360) + 360) % 360,
+    };
+  }
+
+  /** Commit a host's attached stamps through its box transform — sticky/shape rotate + resize. Call
+   *  inside the host's commit transaction so it is one undo step. */
   private transformAttachedStamps(
     hostId: string,
     old: { cx: number; cy: number; w: number; h: number; rot: number },
     neu: { cx: number; cy: number; w: number; h: number; rot: number },
   ): void {
-    const stamps = this.attachedStampsOf(new Set([hostId]));
-    if (!stamps.size) return;
-    const oldRad = (old.rot * Math.PI) / 180;
-    const newRad = (neu.rot * Math.PI) / 180;
-    const dRot = neu.rot - old.rot;
-    const sx = neu.w / (old.w || 1);
-    const sy = neu.h / (old.h || 1);
-    const sizeScale = Math.sqrt(Math.abs(sx * sy)) || 1;
-    const cu = Math.cos(-oldRad);
-    const su = Math.sin(-oldRad);
-    const cr = Math.cos(newRad);
-    const sr = Math.sin(newRad);
-    for (const id of stamps) {
+    for (const id of this.attachedStampsOf(new Set([hostId]))) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
       if (obj?.type !== "stamp") continue;
-      const dx = obj.x - old.cx;
-      const dy = obj.y - old.cy;
-      const lx = (cu * dx - su * dy) * sx; // un-rotate by old, then scale
-      const ly = (su * dx + cu * dy) * sy;
-      const nx = neu.cx + (cr * lx - sr * ly); // …then rotate by new about the new centre
-      const ny = neu.cy + (sr * lx + cr * ly);
-      const rot = ((((obj.rotation ?? 0) + dRot) % 360) + 360) % 360;
-      setStampGeom(this.opts.doc, id, {
-        x: nx,
-        y: ny,
-        size: obj.size * sizeScale,
-        rotation: rot,
-      });
+      const t = this.mapAttachedStamp(obj, old, neu);
+      setStampGeom(this.opts.doc, id, { x: t.cx, y: t.cy, size: t.size, rotation: t.rot });
     }
+  }
+
+  /** Live-preview the cached attached stamps (`transformAttached`) through a host box transform during
+   *  its single-object rotate/resize: apply each to its element (local glide) + return groupresize
+   *  nodes for the peer broadcast. The doc commit is written by transformAttachedStamps on release. */
+  private previewAttachedStamps(
+    old: { cx: number; cy: number; w: number; h: number; rot: number },
+    neu: { cx: number; cy: number; w: number; h: number; rot: number },
+  ): Array<{
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fontSize: number;
+    rotation: number;
+  }> {
+    const nodes = [];
+    for (const id of this.transformAttached) {
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      const el = this.els.get(id);
+      if (obj?.type !== "stamp" || !el) continue;
+      const t = this.mapAttachedStamp(obj, old, neu);
+      const x = t.cx - t.size / 2; // centre → top-left box
+      const y = t.cy - t.size / 2;
+      this.layout(el, x, y, t.size, t.size, "", "left", t.size);
+      this.applyRotation(el, t.rot);
+      nodes.push({ id, x, y, width: t.size, height: t.size, fontSize: t.size, rotation: t.rot });
+    }
+    return nodes;
   }
   /** Live drag: offset the selected boxes in the overlay (committed to the doc on release).
    *  `broadcast` is false during a canvas-driven group move — the canvas sends ONE unified "drag"
@@ -2572,7 +2610,11 @@ export class TextLayer {
       string,
       { cx: number; cy: number; w: number; h: number; rot: number; font: number }
     >();
-    for (const id of this.selected) {
+    // The selected objects + any stamps stuck to a selected host (so a group rotate/resize carries the
+    // attached stamps through the SAME transform fn — preview, broadcast, and commit all for free).
+    const ids = new Set(this.selected);
+    for (const sid of this.attachedStampsOf(this.selected)) ids.add(sid);
+    for (const id of ids) {
       const box = this.boxGeomOf(id);
       if (box)
         g.set(id, {
@@ -2903,6 +2945,7 @@ export class TextLayer {
     const obj = m ? readObject(m) : null;
     const size = this.sizes.get(id);
     if (!size) return;
+    this.transformAttached = this.attachedStampsOf(new Set([id])); // stamps that glide with the host
     if (obj?.type === "stamp") {
       // Anchor the resize math on the box TOP-LEFT (centre − half-size), square, opposite-corner-fixed.
       this.resizing = {
@@ -3151,6 +3194,24 @@ export class TextLayer {
       }
       this.opts.awareness.setLocalStateField("textresize", payload);
     }
+    // Glide any attached stamps with the host's resized box (rotation unchanged); stream throttled.
+    if (this.transformAttached.size) {
+      const ho = this.objects.get(rs.id);
+      const hobj = ho ? readObject(ho) : null;
+      const rot = hobj?.type === "text" ? (hobj.rotation ?? 0) : 0;
+      const ow = rs.ow ?? rs.baseW;
+      const oh = rs.oh ?? ow;
+      const nW = width ?? ow;
+      const nH = height ?? nW;
+      const nodes = this.previewAttachedStamps(
+        { cx: rs.ox + ow / 2, cy: rs.oy + oh / 2, w: ow, h: oh, rot },
+        { cx: x + nW / 2, cy: y + nH / 2, w: nW, h: nH, rot },
+      );
+      if (nodes.length && now - this.lastAttachSent >= EDIT_BROADCAST_MS) {
+        this.lastAttachSent = now;
+        this.opts.awareness.setLocalStateField("groupresize", { nodes });
+      }
+    }
   };
 
   private readonly onResizeUp = (): void => {
@@ -3222,6 +3283,8 @@ export class TextLayer {
     }
     // Stop the live preview last, so the committed render overlaps the cleared preview on peers.
     this.opts.awareness.setLocalStateField("textresize", null);
+    if (this.transformAttached.size) this.opts.awareness.setLocalStateField("groupresize", null);
+    this.transformAttached = new Set();
     this.updateSelectionBar(); // resizing cleared → re-show the toolbar for the selected box
   };
 
@@ -3256,6 +3319,7 @@ export class TextLayer {
       startAngle: Math.atan2(e.clientY - cy, e.clientX - cx),
       startRotation: obj.type === "stroke" ? 0 : (obj.rotation ?? 0),
     };
+    this.transformAttached = this.attachedStampsOf(new Set([id])); // stamps that glide with the host
     this.updateSelectionBar(); // hide the floating toolbar while rotating
     window.addEventListener("pointermove", this.onRotateMove);
     window.addEventListener("pointerup", this.onRotateUp);
@@ -3277,11 +3341,30 @@ export class TextLayer {
       if (el) this.applyRotation(el, deg); // live: spin the box without a full re-render
     }
     if (this.resizeEl) this.applyRotation(this.resizeEl, deg); // the chrome box spins with it
+    // Glide any attached stamps live about the host centre (rotation-invariant, so old/new share it).
+    let stampNodes: ReturnType<typeof this.previewAttachedStamps> = [];
+    if (this.transformAttached.size) {
+      const box = this.boxGeomOf(rs.id);
+      if (box) {
+        const c = {
+          cx: box.x + box.width / 2,
+          cy: box.y + box.height / 2,
+          w: box.width,
+          h: box.height,
+        };
+        stampNodes = this.previewAttachedStamps(
+          { ...c, rot: rs.startRotation },
+          { ...c, rot: deg },
+        );
+      }
+    }
     // Stream the live rotation to peers (throttled) — ephemeral; the doc commits on release.
     const now = Date.now();
     if (now - this.lastRotateSent >= EDIT_BROADCAST_MS) {
       this.lastRotateSent = now;
       this.opts.awareness.setLocalStateField("textrotate", { id: rs.id, rotation: deg });
+      if (stampNodes.length)
+        this.opts.awareness.setLocalStateField("groupresize", { nodes: stampNodes });
     }
   };
 
@@ -3330,6 +3413,8 @@ export class TextLayer {
       });
     } else if (obj) setTextGeometry(this.opts.doc, rs.id, { rotation: deg }); // e.g. a connector
     this.opts.awareness.setLocalStateField("textrotate", null); // …then drop the live preview
+    if (this.transformAttached.size) this.opts.awareness.setLocalStateField("groupresize", null);
+    this.transformAttached = new Set();
     this.updateSelectionBar();
   };
 

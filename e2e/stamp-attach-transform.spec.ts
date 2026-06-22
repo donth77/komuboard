@@ -95,3 +95,73 @@ test("rotating a host shape orbits + spins its attached stamp", async ({ browser
   expect(moved).toBeGreaterThan(20);
   await a.close();
 });
+
+const selectionSize = (page: Page): Promise<number> =>
+  page.evaluate(
+    () =>
+      (window as unknown as BoardWindow).__coboard.awareness.getLocalState()?.selection?.length ??
+      0,
+  );
+
+test("group-resizing a selection that includes a host scales its (unselected) attached stamp", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("groupattach"));
+  const stampId = await shapeWithStamp(a.page, { x: 100, y: 80 }); // centre of sh (0,0,200×160)
+  await injectShape(a.page, { id: "sh2", x: 300, y: 0, width: 160, height: 120, bg: "#b2f2bb" });
+  await expect.poll(() => a.page.locator('[data-id="sh2"]').count()).toBe(1);
+  const before = (await objJSON(a.page, stampId))!;
+
+  const cal = await calibrate(a.page);
+  // Shift-click both shapes by corners clear of the stamp → a 2-object group; the stamp stays UNselected.
+  await a.page.mouse.click(worldToScreen(cal, 20, 20).x, worldToScreen(cal, 20, 20).y);
+  await a.page.keyboard.down("Shift");
+  await a.page.mouse.click(worldToScreen(cal, 380, 60).x, worldToScreen(cal, 380, 60).y);
+  await a.page.keyboard.up("Shift");
+  await expect.poll(() => selectionSize(a.page)).toBe(2);
+
+  // Drag the group's bottom-right handle outward → both shapes + the attached stamp scale up.
+  const u = (await a.page.evaluate(() =>
+    (window as unknown as BoardWindow).__coboard.canvas!.selectionUnionRect(),
+  ))!;
+  const h = worldToScreen(cal, u.x + u.width, u.y + u.height);
+  await a.page.mouse.move(h.x, h.y);
+  await a.page.mouse.down();
+  await a.page.mouse.move(h.x + 160, h.y + 130, { steps: 12 });
+  await a.page.mouse.up();
+
+  expect((await objJSON(a.page, stampId))!.size as number).toBeGreaterThan(
+    (before.size as number) + 5,
+  );
+  await a.close();
+});
+
+test("an attached stamp glides live during the host rotate (not just on release)", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("liveglide"));
+  const stampId = await shapeWithStamp(a.page, { x: 175, y: 80 }); // far from the centre → clear orbit
+  const cal = await calibrate(a.page);
+  await a.page.mouse.click(worldToScreen(cal, 18, 18).x, worldToScreen(cal, 18, 18).y);
+  await expect.poll(() => hasSelection(a.page)).toBe(true);
+
+  const restX = (await a.page.locator(`[data-id="${stampId}"]`).boundingBox())!.x;
+  const zoneLoc = a.page.locator(".co-text-rotate.r-se");
+  const z = (await zoneLoc.boundingBox())!;
+  const centre = worldToScreen(cal, 100, 80);
+  const r = Math.hypot(z.x + z.width / 2 - centre.x, z.y + z.height / 2 - centre.y);
+  const a0 = Math.atan2(z.y + z.height / 2 - centre.y, z.x + z.width / 2 - centre.x);
+  const aT = a0 + Math.PI / 2;
+  await zoneLoc.hover();
+  await a.page.mouse.down();
+  await a.page.mouse.move(centre.x + r * Math.cos(aT), centre.y + r * Math.sin(aT), { steps: 16 });
+  // HOLD mid-gesture: the stamp element has already orbited, BEFORE any release commit.
+  await expect
+    .poll(async () => {
+      const b = await a.page.locator(`[data-id="${stampId}"]`).boundingBox();
+      return b ? Math.abs(b.x - restX) : 0;
+    })
+    .toBeGreaterThan(20);
+  await a.page.mouse.up();
+  await a.close();
+});
