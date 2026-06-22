@@ -120,16 +120,6 @@ interface DrawState {
   opacity: number;
 }
 
-/** One node's live transform (position + scale) in a *remote* peer's in-progress resize. */
-interface ResizeNode {
-  id: string;
-  x: number;
-  y: number;
-  sx: number;
-  sy: number;
-  rotation: number;
-}
-
 const MAX_PREVIEW_VERTS = 128; // cap broadcast live-stroke vertices (cost); the committed stroke is full-res
 /** Stride a flat [x,y,…] list down to ≤ maxVerts vertices, always keeping the last (the pen tip). */
 function downsamplePoints(pts: number[], maxVerts: number): number[] {
@@ -290,15 +280,6 @@ export class BoardCanvas {
   private lastResizeSent = 0;
   /** True while the local user is actively resizing via the transformer handles. */
   private resizing = false;
-  /** Live transform (position + scale) showing a *remote* peer's in-progress drag or resize,
-   *  per object id. A drag carries scale 1; a resize carries the scale too. */
-  private readonly remoteXforms = new Map<
-    string,
-    { x: number; y: number; sx: number; sy: number; rotation: number }
-  >();
-  /** Ids whose remote drag/resize has already committed to the doc — guards against the
-   *  (briefly) still-present awareness re-applying the transform on top of the baked geometry. */
-  private readonly committedXforms = new Set<string>();
   /** Throttle clock for the live in-progress-stroke broadcast (ms). */
   private lastDrawSent = 0;
   /** Ephemeral preview lines for *remote* peers' in-progress strokes, keyed by stroke id. */
@@ -317,11 +298,10 @@ export class BoardCanvas {
   private readonly onAwarenessChange = (): void => {
     this.syncCursors();
     this.yieldSelectionToPeers(); // release any node a peer has just taken over (selected/dragged)…
-    const xformsMoved = this.renderRemoteXforms(); // …then apply peers' live drags + resizes…
     this.renderRemoteDraws(); // peers' in-progress strokes
     this.renderRemoteConnectors(); // peers' in-progress connector draws / moves / endpoint drags
     // force the outline rebuild when geometry moved OR a peer is live-editing a connector
-    this.renderRemoteSelections(xformsMoved || this.remoteConn.size > 0);
+    this.renderRemoteSelections(this.remoteConn.size > 0);
   };
   /** Window listeners kept as fields so destroy() can detach them (else they leak / fire on a dead stage). */
   private readonly onWindowBlur = (): void => {
@@ -2800,92 +2780,6 @@ export class BoardCanvas {
   }
 
   /**
-   * Track every *remote* peer's in-progress drag AND resize: record their live transform (position
-   * + scale) as a per-node interpolation target that the rAF loop glides toward, so moves/resizes
-   * stream over awareness like cursors and the doc only commits on release. Returns true if a node
-   * was snapped here (a cancelled gesture) so the caller refreshes outlines; ongoing gestures glide
-   * in the loop, which refreshes outlines itself. Commit handoff is reconciled in renderObjects.
-   */
-  private renderRemoteXforms(): boolean {
-    const self = this.opts.awareness.clientID;
-    const next = new Map<
-      string,
-      { x: number; y: number; sx: number; sy: number; rotation: number }
-    >();
-    const active = new Set<string>(); // ids in any peer's drag/resize, committed or not
-    this.opts.awareness.getStates().forEach((state, clientId) => {
-      if (clientId === self) return;
-      // drag: one shared offset across the moved ids
-      const d = state["drag"] as { ids?: string[]; dx?: number; dy?: number } | undefined;
-      if (d?.ids?.length) {
-        const x = d.dx ?? 0;
-        const y = d.dy ?? 0;
-        for (const id of d.ids) {
-          active.add(id);
-          if (this.committedXforms.has(id)) continue;
-          next.set(id, { x, y, sx: 1, sy: 1, rotation: 0 });
-        }
-      }
-      // resize: a per-node position + scale + rotation
-      const r = state["resize"] as { nodes?: Partial<ResizeNode>[] } | undefined;
-      if (r?.nodes?.length) {
-        for (const n of r.nodes) {
-          if (!n?.id) continue;
-          active.add(n.id);
-          if (!this.committedXforms.has(n.id)) {
-            next.set(n.id, {
-              x: n.x ?? 0,
-              y: n.y ?? 0,
-              sx: n.sx ?? 1,
-              sy: n.sy ?? 1,
-              rotation: n.rotation ?? 0,
-            });
-          }
-        }
-      }
-    });
-    // release each commit guard once its peer's gesture awareness has fully cleared
-    for (const id of this.committedXforms) if (!active.has(id)) this.committedXforms.delete(id);
-
-    const localOwns = (id: string): boolean =>
-      (this.moveState !== null || this.resizing) && this.selected.has(id);
-
-    let changed = false;
-    // reset nodes whose remote gesture ended without a doc commit (e.g. the peer cancelled)
-    for (const id of [...this.remoteXforms.keys()]) {
-      if (next.has(id)) continue;
-      this.remoteXforms.delete(id);
-      const node = this.nodeById.get(id);
-      if (
-        node &&
-        (node.x() !== 0 ||
-          node.y() !== 0 ||
-          node.scaleX() !== 1 ||
-          node.scaleY() !== 1 ||
-          node.rotation() !== 0)
-      ) {
-        node.position({ x: 0, y: 0 });
-        node.scale({ x: 1, y: 1 });
-        node.rotation(0);
-        this.rectCache.delete(id); // cached client rect is now stale → let the outline recompute
-        changed = true;
-      }
-    }
-    // record each peer's transform as the interpolation *target*; the rAF loop glides nodes
-    // toward it (same LERP as cursors → the object stays glued under the peer's caret) rather
-    // than snapping at the 30 Hz awareness rate, which looked stepped on fast gestures.
-    for (const [id, xf] of next) {
-      if (localOwns(id)) continue; // a local gesture owns this node
-      if (this.nodeById.has(id)) this.remoteXforms.set(id, xf);
-    }
-    if (this.remoteXforms.size) this.ensureAnim();
-    if (changed) {
-      this.content.batchDraw();
-    }
-    return changed;
-  }
-
-  /**
    * Render every *remote* peer's in-progress stroke as an ephemeral preview so drawing streams
    * live (the doc only commits the finished stroke via addStroke). Previews are keyed by the
    * eventual stroke id and dropped the moment the committed node appears (here or in
@@ -3135,51 +3029,6 @@ export class BoardCanvas {
         moving = true;
       });
       // remote-dragged / resized objects (position + scale)
-      let contentMoved = false;
-      this.remoteXforms.forEach((tf, id) => {
-        const node = this.nodeById.get(id);
-        if (!node) return;
-        const x = node.x();
-        const y = node.y();
-        const sx = node.scaleX();
-        const sy = node.scaleY();
-        const r = node.rotation();
-        const dx = tf.x - x;
-        const dy = tf.y - y;
-        const dsx = tf.sx - sx;
-        const dsy = tf.sy - sy;
-        // LERP rotation along the SHORTEST arc (so position + rotation glide together — snapping
-        // rotation while the position glides made a peer's rotating selection box shake at 30 Hz).
-        let dr = tf.rotation - r;
-        while (dr > 180) dr -= 360;
-        while (dr < -180) dr += 360;
-        if (
-          Math.abs(dx) < 0.05 &&
-          Math.abs(dy) < 0.05 &&
-          Math.abs(dsx) < 0.0005 &&
-          Math.abs(dsy) < 0.0005 &&
-          Math.abs(dr) < 0.1
-        ) {
-          if (x !== tf.x || y !== tf.y || sx !== tf.sx || sy !== tf.sy || r !== tf.rotation) {
-            node.position({ x: tf.x, y: tf.y });
-            node.scale({ x: tf.sx, y: tf.sy });
-            node.rotation(tf.rotation);
-            this.rectCache.delete(id);
-            contentMoved = true;
-          }
-          return;
-        }
-        node.position({ x: x + dx * LERP, y: y + dy * LERP });
-        node.scale({ x: sx + dsx * LERP, y: sy + dsy * LERP });
-        node.rotation(r + dr * LERP);
-        this.rectCache.delete(id);
-        moving = true;
-        contentMoved = true;
-      });
-      if (contentMoved) {
-        this.content.batchDraw();
-        this.renderRemoteSelections(true); // keep peers' outlines glued to the gliding nodes
-      }
       this.cursorLayer.batchDraw(); // cursors glided this frame (their own top stage)
       this.overlay.batchDraw();
       if (moving) {
