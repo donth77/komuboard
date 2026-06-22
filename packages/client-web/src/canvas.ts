@@ -163,7 +163,6 @@ export class BoardCanvas {
   private readonly overlay = new Konva.Layer();
   /** Top layer for selection chrome (marquee + transform box) — never wiped by renderObjects. */
   private readonly uiLayer = new Konva.Layer();
-  private readonly transformer: Konva.Transformer;
   /** Light-blue per-node outlines drawn under the union transform box for multi-selections. */
   private readonly highlightGroup = new Konva.Group({ listening: false });
   private readonly objects: Y.Map<Y.Map<unknown>>;
@@ -284,25 +283,6 @@ export class BoardCanvas {
    *  Coordinates the three per-type move subsystems; `start` is the grab point for the shared delta. */
   private groupMoving = false;
   private groupMoveStart: { x: number; y: number } | null = null;
-  /** Active while rotating a group by dragging just outside a corner (no rotate handle). Records the
-   *  group centre and the pointer's start angle; the proxy is spun by the angle delta each tick. */
-  private rotateGesture: {
-    center: { x: number; y: number };
-    startAngle: number;
-    angle: number;
-  } | null = null;
-  /** Invisible Konva rect the transformer drives when resizing/rotating a MIXED group (strokes + text
-   *  + connectors): the Konva transformer can only attach to Konva nodes, so the proxy stands in for
-   *  the whole group and its transform is replayed onto every selected node of every type. */
-  private groupProxy: Konva.Rect | null = null;
-  /** Start state captured at transformstart of a group transform: the proxy's inverse start matrix
-   *  (to derive the live delta) plus each node's pre-transform geometry, applied forward each tick. */
-  private groupXform: {
-    startInv: Konva.Transform;
-    strokes: Map<string, number[]>; // id → start world points
-    texts: Map<string, { cx: number; cy: number; w: number; h: number; rot: number; font: number }>;
-    connectors: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
-  } | null = null;
   /** A tap on an already-sole-selected text/sticky box → edit it on release (FigJam two-click:
    *  first click selects the box, second click enters its text). Cleared if the tap becomes a drag. */
   private textTapEdit: { id: string; x: number; y: number } | null = null;
@@ -354,8 +334,7 @@ export class BoardCanvas {
     this.opts.awareness.setLocalStateField("cursor", null);
   };
   private readonly onWindowPointerUp = (): void => {
-    if (this.rotateGesture) this.endGroupRotate();
-    else if (this.groupMoving) this.endGroupMove();
+    if (this.groupMoving) this.endGroupMove();
     else if (this.textLayer.isMoving()) this.textLayer.endMove();
     else if (this.moveState) this.endMove();
     else if (this.connectorMove) this.endConnectorMove();
@@ -401,66 +380,15 @@ export class BoardCanvas {
     // Peers' in-progress strokes now render as transient DOM drafts (ADR-0009 P3).
     this.overlay.add(this.remoteSelections);
 
-    this.transformer = new Konva.Transformer({
-      rotateEnabled: true,
-      rotationSnaps: [0, 90, 180, 270], // light snap to the right angles (hold to fine-tune between)
-      // Keep the selection box axis-aligned even for a single ROTATED stroke node. Otherwise
-      // the box tilts with the node, its corners fall inside the AABB that rotationCornerOf() tests,
-      // and the rotate cursor stops appearing — so you can't rotate it again. Also makes the box match
-      // what peers draw for it (their box is the axis-aligned union of the same nodes).
-      useSingleNodeRotation: false,
-      enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
-      borderStroke: SELECT_BLUE,
-      borderStrokeWidth: 1.5,
-      anchorStroke: SELECT_BLUE,
-      anchorStrokeWidth: 1.5,
-      anchorFill: "#ffffff",
-      anchorSize: 9,
-      anchorCornerRadius: 2,
-      padding: 4,
-      // Never let a resize collapse the box to nothing.
-      boundBoxFunc: (oldBox, newBox) => (newBox.width < 6 || newBox.height < 6 ? oldBox : newBox),
-    });
-    this.transformer.on("transformstart", () => {
-      this.resizing = true;
-      if (this.transformerOnProxy()) this.beginGroupTransform();
-    });
-    this.transformer.on("transform", () => {
-      if (this.transformerOnProxy()) {
-        this.updateGroupTransform(); // replay the proxy's transform onto every node of the group
-        this.publishCursor(this.point());
-        return;
-      }
-      this.renderSelectionBoxes();
-      // A transformer-anchor drag captures the pointer, so the stage's normal pointermove (which
-      // publishes the cursor) doesn't fire — publish here too, else the resizer's cursor freezes
-      // for peers. publishCursor self-throttles, so calling it every transform tick is fine.
-      this.publishCursor(this.point());
-      // Stream the live resize to peers (throttled). Ephemeral — commitTransform bakes it on end.
-      const now = Date.now();
-      if (now - this.lastResizeSent >= 1000 / CURSOR_HZ) {
-        this.lastResizeSent = now;
-        this.broadcastResize();
-      }
-    });
-    this.transformer.on("transformend", () => {
-      this.resizing = false;
-      if (this.transformerOnProxy()) {
-        this.endGroupTransform(); // bake the group transform into every node (one undo step)
-        return;
-      }
-      this.commitTransform(); // bake the scale into points (→ doc) first…
-      this.opts.awareness.setLocalStateField("resize", null); // …then end the live preview
-    });
+    // ADR-0009 P3 Step 4: the Konva.Transformer + group proxy are retired — every object (single or
+    // multi-node group) resizes/rotates via the text-layer's DOM chrome.
     this.uiLayer.add(this.highlightGroup);
-    this.uiLayer.add(this.transformer);
 
     // Camera owns the stage transform; re-sync our viewport-dependent chrome on any change.
     this.viewport = new ViewportController(this.stage, opts.container, () => {
       this.cull(); // re-cull for the new viewport before the redraw below
       this.scaleCursors();
       this.syncCursorStage(); // keep the cursor stage locked to the camera
-      this.refreshTransformer();
       this.renderSelectionBoxes();
       this.renderRemoteSelections(true); // zoom changes screen-space geometry → force rebuild
       this.textLayer.syncTransform(); // keep HTML text boxes locked to the camera
@@ -2050,14 +1978,15 @@ export class BoardCanvas {
     this.stage.on("pointerdown", (e) => {
       if (this.tool !== "select") return;
       this.hidePeerTip(); // a press starts an interaction → drop the hover tooltip
-      if (this.isOnTransformer(e.target)) return; // a handle drag → let the transformer resize
       this.cancelMarquee(); // drop any marquee orphaned by a missed pointerup before starting fresh
       const shift = (e.evt as PointerEvent).shiftKey;
       // Text lives in the HTML overlay (not the Konva hit graph), so hit-test it first.
       const tid = this.textLayer.hitTest(this.point());
       // Group rotate: pressing just outside a group corner rotates the whole selection (no handle).
+      // ADR-0009 P3 Step 4: the rotation is driven by the text-layer's DOM group chrome; the canvas
+      // just owns the band detection (rotationCornerOf) and hands off the gesture.
       if (!shift && this.rotationCornerOf(this.point())) {
-        this.beginGroupRotate();
+        this.textLayer.beginGroupRotate(e.evt as PointerEvent);
         return;
       }
       // Group move: a multi-node selection drags as one unit. Pressing on a SELECTED member, or on the
@@ -2140,8 +2069,7 @@ export class BoardCanvas {
         const d = Math.hypot(p.x - this.textTapEdit.x, p.y - this.textTapEdit.y);
         if (d > this.textLayer.tapSlop()) this.textTapEdit = null; // became a drag → move, don't edit
       }
-      if (this.rotateGesture) this.updateGroupRotate();
-      else if (this.groupMoving) this.updateGroupMove();
+      if (this.groupMoving) this.updateGroupMove();
       else if (this.textLayer.isMoving()) this.textLayer.moveTo(this.point());
       else if (this.moveState) this.updateMove();
       else if (this.connectorMove) this.updateConnectorMove();
@@ -2168,15 +2096,6 @@ export class BoardCanvas {
       n = n.getParent();
     }
     return null;
-  }
-
-  private isOnTransformer(node: Konva.Node): boolean {
-    let n: Konva.Node | null = node;
-    while (n && n !== this.stage) {
-      if (n === this.transformer) return true;
-      n = n.getParent();
-    }
-    return false;
   }
 
   private setSelection(ids: string[]): void {
@@ -2342,29 +2261,25 @@ export class BoardCanvas {
   /** Test/debug hook: the screen-space (container-relative) centre of a transformer anchor
    *  (e.g. "bottom-right"), or null if nothing is selected. */
   transformerAnchorPos(name: string): { x: number; y: number } | null {
-    // ADR-0009 P3: ink + DOM objects resize via the text-layer's DOM chrome, not the Konva
-    // transformer. Prefer the DOM resize handle for this corner; fall back to the transformer
-    // (the multi-node group proxy still uses it).
+    // ADR-0009 P3 Step 4: every selection resizes via the text-layer's DOM chrome. For a multi-node
+    // group use the group box's handle; otherwise the single box's handle (the other chrome is hidden).
     const corner = (
       { "top-left": "nw", "top-right": "ne", "bottom-left": "sw", "bottom-right": "se" } as Record<
         string,
         string | undefined
       >
     )[name];
-    if (corner) {
-      const handle = document.querySelector<HTMLElement>(`.co-text-handle.h-${corner}`);
-      if (handle) {
-        const hr = handle.getBoundingClientRect();
-        const ref = (
-          document.getElementById("board") ?? this.stage.container()
-        ).getBoundingClientRect();
-        return { x: hr.x + hr.width / 2 - ref.x, y: hr.y + hr.height / 2 - ref.y };
-      }
-    }
-    const anchor = this.transformer.findOne(`.${name}`);
-    if (!anchor) return null;
-    const r = anchor.getClientRect({ relativeTo: this.stage });
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    if (!corner) return null;
+    const group = this.textLayer.selectedCount() >= 2;
+    const handle = document.querySelector<HTMLElement>(
+      group ? `.co-group-handle.g-${corner}` : `.co-text-handle.h-${corner}`,
+    );
+    if (!handle) return null;
+    const hr = handle.getBoundingClientRect();
+    const ref = (
+      document.getElementById("board") ?? this.stage.container()
+    ).getBoundingClientRect();
+    return { x: hr.x + hr.width / 2 - ref.x, y: hr.y + hr.height / 2 - ref.y };
   }
   /** Test/debug hook: a rendered object's content-relative bounding rect (null if not drawn). */
   nodeContentRect(id: string): Rect | null {
@@ -2422,95 +2337,19 @@ export class BoardCanvas {
     this.opts.awareness.setLocalStateField("selection", ids.length ? ids : null);
   }
 
-  /** Point the transformer at the currently-selected nodes (called after every render). */
+  /** Reconcile selection chrome after every render: prune ids whose nodes vanished, then redraw the
+   *  selection outlines and republish. (Named for the retired Konva.Transformer it once drove; the
+   *  transform box itself is now the text-layer's DOM chrome — see the P3 Step 4 note below.) */
   private reattachTransformer(): void {
     for (const id of [...this.selected]) if (!this.nodeById.has(id)) this.selected.delete(id);
-    const strokeNodes = [...this.selected]
-      .map((id) => this.nodeById.get(id))
-      .filter((n): n is Konva.Line => !!n);
-    const konvaNodes = [...strokeNodes];
-    const nonStroke = this.textLayer.selectedCount() + this.selectedConnectors.size;
-    // No floating rotate handle (the "5th node") on anything — every Konva selection, lone or group,
-    // rotates by dragging just outside a corner (rotationCornerAt + beginGroupRotate), matching the
-    // HTML text/shape boxes. The native rotater is never shown.
-    this.transformer.rotateEnabled(false);
-    // A group that includes non-stroke nodes can't go in the Konva transformer (text/connectors aren't
-    // Konva nodes), so the transformer drives an invisible proxy sized to the whole union instead; its
-    // transform is replayed onto every node by begin/update/endGroupTransform. Pure-stroke selections
-    // (and single nodes) attach the transformer natively. Never re-home the proxy mid-gesture.
-    const useProxy = konvaNodes.length + nonStroke >= 2 && nonStroke > 0;
-    if (useProxy && !this.resizing) {
-      const u = this.selectionUnionRect();
-      if (u) {
-        const proxy = this.ensureGroupProxy();
-        proxy.setAttrs({
-          x: u.x + u.width / 2,
-          y: u.y + u.height / 2,
-          width: u.width,
-          height: u.height,
-          offsetX: u.width / 2, // origin at the centre → resize/rotate pivots on the group centre
-          offsetY: u.height / 2,
-          scaleX: 1,
-          scaleY: 1,
-          rotation: 0,
-        });
-        this.transformer.nodes([proxy]);
-      } else {
-        this.transformer.nodes([]);
-      }
-    } else if (!this.resizing) {
-      this.transformer.nodes(konvaNodes);
-    }
-    this.refreshTransformer();
+    // ADR-0009 P3 Step 4: every object (single OR group) resizes/rotates via the text-layer's DOM
+    // chrome — the Konva transformer/proxy is never attached. notifySelection() drives the text-layer
+    // to show its single-box or multi-node group transform box for the current selection.
     this.renderSelectionBoxes();
     this.notifySelection();
     this.publishSelection();
   }
 
-  private ensureGroupProxy(): Konva.Rect {
-    if (!this.groupProxy) {
-      // No fill/stroke → invisible, but a real sized node so the transformer renders handles on it.
-      this.groupProxy = new Konva.Rect({ listening: false });
-      this.uiLayer.add(this.groupProxy);
-    }
-    return this.groupProxy;
-  }
-  /** True while the transformer is driving the group proxy (a mixed/non-stroke group), not real nodes. */
-  private transformerOnProxy(): boolean {
-    return this.groupProxy != null && this.transformer.nodes()[0] === this.groupProxy;
-  }
-  /** Re-size the group proxy (and its transform box) to the selection's current union — call while the
-   *  group moves so the mixed-group box tracks the nodes (a transform resets it via reattach instead). */
-  private repositionGroupProxy(): void {
-    if (!this.groupProxy || !this.transformerOnProxy()) return;
-    const u = this.selectionUnionRect();
-    if (!u) return;
-    this.groupProxy.setAttrs({
-      x: u.x + u.width / 2,
-      y: u.y + u.height / 2,
-      width: u.width,
-      height: u.height,
-      offsetX: u.width / 2,
-      offsetY: u.height / 2,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-    });
-    this.transformer.forceUpdate();
-  }
-
-  /**
-   * Re-derive the transform box after a camera change. Konva draws the box border + handles
-   * in screen space, so they keep a constant size at any zoom on their own — only the box's
-   * position/size needs refreshing here. The chrome dimensions (anchorSize, padding, stroke
-   * widths) are set once at construction; scaling them by 1/zoom was a double-compensation
-   * that ballooned the box when zoomed far out.
-   */
-  private refreshTransformer(): void {
-    this.transformer.forceUpdate();
-  }
-
-  // ---- move (drag the whole selection as one unit) ----
   private beginMove(): void {
     const p = this.point();
     this.moveState = { startX: p.x, startY: p.y, dx: 0, dy: 0 };
@@ -2524,7 +2363,6 @@ export class BoardCanvas {
     for (const id of this.selected) {
       this.nodeById.get(id)?.position({ x: this.moveState.dx, y: this.moveState.dy });
     }
-    this.transformer.forceUpdate();
     this.renderSelectionBoxes();
     this.content.batchDraw();
     // Stream the in-progress move to peers (throttled like cursors). The doc only commits
@@ -2582,7 +2420,7 @@ export class BoardCanvas {
     if (this.textLayer.isMoving()) this.textLayer.moveTo(p, false); // text (broadcast suppressed)
     if (this.connectorMove) this.updateConnectorMove(); // connectors (own awareness field)
     this.renderSelectionBoxes(); // faint per-stroke outlines follow the moving strokes
-    this.repositionGroupProxy(); // and the mixed-group transform box tracks the moving union
+    // The DOM group box tracks the moving union via textLayer.moveTo → updateGroupChrome.
     // One unified live "drag" for every stroke + text id (same shared delta) so peers move the whole
     // group together — the per-subsystem broadcasts above are suppressed so they don't overwrite it.
     if (!this.groupMoveStart) return;
@@ -2608,242 +2446,10 @@ export class BoardCanvas {
     this.stage.container().style.cursor = this.tool === "select" ? CURSOR_URL : "grab";
   }
 
-  // ---- resize bake: fold the transformer's scale/translate into the points ----
-  /** Broadcast each selected node's live transform (position + scale) so peers can mirror an
-   *  in-progress resize. Cleared on transformend, where commitTransform bakes it into the doc. */
-  private broadcastResize(): void {
-    const nodes: ResizeNode[] = [];
-    for (const id of this.selected) {
-      const node = this.nodeById.get(id);
-      if (!node) continue;
-      nodes.push({
-        id,
-        x: node.x(),
-        y: node.y(),
-        sx: node.scaleX(),
-        sy: node.scaleY(),
-        rotation: node.rotation(),
-      });
-    }
-    this.opts.awareness.setLocalStateField("resize", nodes.length ? { nodes } : null);
-  }
-
-  private commitTransform(): void {
-    const updates: { id: string; points: number[] }[] = [];
-    for (const id of this.selected) {
-      const node = this.nodeById.get(id);
-      if (!node) continue;
-      const tr = node.getTransform(); // full local matrix — position + rotation + scale, all baked in
-      const pts = node.points();
-      const out: number[] = [];
-      for (let i = 0; i < pts.length; i += 2) {
-        const moved = tr.point({ x: pts[i] ?? 0, y: pts[i + 1] ?? 0 });
-        out.push(moved.x, moved.y);
-      }
-      // Reset the live transform now that the points encode it, so a re-render that reuses this node
-      // (the incremental path) doesn't apply the rotation/scale a second time on top of baked coords.
-      node.position({ x: 0, y: 0 });
-      node.rotation(0);
-      node.scale({ x: 1, y: 1 });
-      updates.push({ id, points: out });
-    }
-    if (updates.length) setObjectsPoints(this.opts.doc, updates); // → re-render at baked coords
-  }
-
-  // ---- group transform: replay the proxy's resize/rotate onto every node of a mixed selection ----
-  /** Capture each node's pre-transform geometry + the proxy's start matrix, so each tick maps the
-   *  proxy's delta forward onto strokes (points), text/shape boxes, and connector endpoints. */
-  private beginGroupTransform(): void {
-    const proxy = this.groupProxy;
-    if (!proxy) return;
-    const startInv = proxy.getTransform().copy().invert();
-    const strokes = new Map<string, number[]>();
-    for (const id of this.selected) {
-      const node = this.nodeById.get(id);
-      if (node) strokes.set(id, [...node.points()]); // strokes render at world points (position 0)
-    }
-    const texts = new Map<
-      string,
-      { cx: number; cy: number; w: number; h: number; rot: number; font: number }
-    >();
-    for (const id of this.textLayer.selectedIds()) {
-      const g = this.textLayer.boxGeomOf(id);
-      if (g)
-        texts.set(id, {
-          cx: g.x + g.width / 2,
-          cy: g.y + g.height / 2,
-          w: g.width,
-          h: g.height,
-          rot: g.rotation,
-          font: g.fontSize,
-        });
-    }
-    const connectors = new Map<
-      string,
-      { a: { x: number; y: number }; b: { x: number; y: number } }
-    >();
-    for (const id of this.selectedConnectors) {
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
-      if (obj?.type !== "connector") continue;
-      connectors.set(id, {
-        a: this.resolveConnectorEnd(obj.from),
-        b: this.resolveConnectorEnd(obj.to),
-      });
-    }
-    this.groupXform = { startInv, strokes, texts, connectors };
-  }
-
-  /** The proxy's live delta: a world→world matrix `D` for points, plus scalar scale (started at 1)
-   *  and rotation° (started at 0) for box width/height/font/rotation. null if no transform is active. */
-  private groupDelta(): {
-    D: Konva.Transform;
-    sx: number;
-    sy: number;
-    s: number;
-    rotDeg: number;
-  } | null {
-    const gx = this.groupXform;
-    const proxy = this.groupProxy;
-    if (!gx || !proxy) return null;
-    // A corner ROTATE drives D from the gesture angle about the group centre (the proxy box is kept
-    // axis-aligned so it matches the union box peers draw). A handle RESIZE drives D from the proxy.
-    const rg = this.rotateGesture;
-    if (rg) {
-      const rad = (rg.angle * Math.PI) / 180;
-      const D = new Konva.Transform()
-        .translate(rg.center.x, rg.center.y)
-        .rotate(rad)
-        .translate(-rg.center.x, -rg.center.y);
-      return { D, sx: 1, sy: 1, s: 1, rotDeg: rg.angle };
-    }
-    const D = proxy.getTransform().copy().multiply(gx.startInv.copy()); // D = nowMatrix · startMatrix⁻¹
-    const sx = Math.abs(proxy.scaleX());
-    const sy = Math.abs(proxy.scaleY());
-    return { D, sx, sy, s: (sx + sy) / 2, rotDeg: proxy.rotation() };
-  }
-
-  private updateGroupTransform(): void {
-    const gx = this.groupXform;
-    const d = this.groupDelta();
-    if (!gx || !d) return;
-    for (const [id, pts] of gx.strokes) {
-      const node = this.nodeById.get(id);
-      if (!node) continue;
-      const out: number[] = [];
-      for (let i = 0; i + 1 < pts.length; i += 2) {
-        const p = d.D.point({ x: pts[i]!, y: pts[i + 1]! });
-        out.push(p.x, p.y);
-      }
-      node.points(out);
-    }
-    this.content.batchDraw();
-    if (gx.texts.size) {
-      const preview = new Map<
-        string,
-        { x: number; y: number; width: number; height: number; fontSize: number; rotation: number }
-      >();
-      for (const [id, g] of gx.texts) {
-        const c = d.D.point({ x: g.cx, y: g.cy });
-        const w = g.w * d.sx;
-        const h = g.h * d.sy;
-        preview.set(id, {
-          x: c.x - w / 2,
-          y: c.y - h / 2,
-          width: w,
-          height: h,
-          fontSize: g.font * d.s,
-          rotation: g.rot + d.rotDeg,
-        });
-      }
-      this.textLayer.setGroupPreview(preview);
-    }
-    for (const [id, ends] of gx.connectors) {
-      const group = this.connectorNodes.get(id);
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
-      if (!group || obj?.type !== "connector") continue;
-      const a = d.D.point(ends.a);
-      const b = d.D.point(ends.b);
-      this.drawConnector(
-        group,
-        { ...obj, from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } },
-        SELECT_BLUE,
-      );
-    }
-    this.connectorLayer.batchDraw();
-    this.renderSelectionBoxes();
-    this.broadcastGroupXform(d, gx); // stream the live transform to peers (strokes)
-  }
-
-  /** Stream a live group transform to peers via the shared "resize" channel — the matrix `D` is the
-   *  same node transform for every stroke (offset 0). Text and connectors converge on the doc commit
-   *  (no live preview). Throttled like cursors. */
-  private broadcastGroupXform(
-    d: { D: Konva.Transform; sx: number; sy: number; s: number; rotDeg: number },
-    gx: {
-      strokes: Map<string, number[]>;
-    },
-  ): void {
-    const now = Date.now();
-    if (now - this.lastResizeSent < 1000 / CURSOR_HZ) return;
-    this.lastResizeSent = now;
-    const tr = d.D.getTranslation();
-    const nodes: ResizeNode[] = [];
-    for (const id of gx.strokes.keys())
-      nodes.push({ id, x: tr.x, y: tr.y, sx: d.sx, sy: d.sy, rotation: d.rotDeg });
-    this.opts.awareness.setLocalStateField("resize", nodes.length ? { nodes } : null);
-  }
-
-  private endGroupTransform(): void {
-    const gx = this.groupXform;
-    const d = this.groupDelta();
-    this.groupXform = null;
-    if (gx && d) {
-      // Bake the whole group transform into the doc in ONE transaction → a single undo step.
-      this.opts.doc.transact(() => {
-        const sUpd: { id: string; points: number[] }[] = [];
-        for (const [id, pts] of gx.strokes) {
-          const out: number[] = [];
-          for (let i = 0; i + 1 < pts.length; i += 2) {
-            const p = d.D.point({ x: pts[i]!, y: pts[i + 1]! });
-            out.push(p.x, p.y);
-          }
-          sUpd.push({ id, points: out });
-        }
-        if (sUpd.length) setObjectsPoints(this.opts.doc, sUpd);
-        for (const [id, g] of gx.texts) {
-          const c = d.D.point({ x: g.cx, y: g.cy });
-          const w = g.w * d.sx;
-          const h = g.h * d.sy;
-          this.textLayer.commitGroupTransform(id, {
-            x: c.x - w / 2,
-            y: c.y - h / 2,
-            width: w,
-            height: h,
-            rotation: g.rot + d.rotDeg,
-            fontSize: g.font * d.s,
-          });
-        }
-        for (const [id, ends] of gx.connectors) {
-          const a = d.D.point(ends.a);
-          const b = d.D.point(ends.b);
-          setConnectorEnds(this.opts.doc, id, { from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } });
-        }
-      });
-    }
-    // Doc committed above → now end the live peer preview (peers apply the committed geometry, then
-    // drop the transform; the committedXforms guard bridges any ordering, like the native resize).
-    this.opts.awareness.setLocalStateField("resize", null);
-    this.textLayer.clearGroupPreview();
-    this.reattachTransformer(); // reset the proxy to the new union bounds + redraw chrome
-  }
-
-  // ---- group rotate: drag just outside a corner to rotate the whole selection (no rotate handle) ----
-  /** Whether `world` sits in a rotation zone — just outside one of the group selection's corners. */
+  /** Which corner (if any) a point falls into the rotate-band of — a corner-drag just outside a
+   *  multi-selection's union box rotates the whole group (single boxes use the text layer's own
+   *  rotate handles). Returns null for an empty or single-object selection. */
   private rotationCornerOf(world: { x: number; y: number }): RotateCorner | null {
-    // Any selection that includes a Konva node (stroke) — lone or grouped — rotates by a
-    // corner-drag; a lone HTML box (text/sticky/shape) keeps the text layer's own rotate handles.
     if (this.selected.size === 0 && !this.isGroupSelection()) return null;
     const u = this.selectionUnionRect();
     if (!u) return null;
@@ -2876,75 +2482,6 @@ export class BoardCanvas {
     return best;
   }
 
-  private beginGroupRotate(): void {
-    const u = this.selectionUnionRect();
-    if (!u) return;
-    const center = { x: u.x + u.width / 2, y: u.y + u.height / 2 };
-    // Always drive the proxy for rotation (even for a native pure-stroke group) so the box spins
-    // cleanly and every node type is transformed via begin/update/endGroupTransform.
-    const proxy = this.ensureGroupProxy();
-    proxy.setAttrs({
-      x: center.x,
-      y: center.y,
-      width: u.width,
-      height: u.height,
-      offsetX: u.width / 2,
-      offsetY: u.height / 2,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-    });
-    this.transformer.nodes([proxy]);
-    this.refreshTransformer();
-    this.beginGroupTransform();
-    const p = this.point();
-    this.rotateGesture = {
-      center,
-      startAngle: Math.atan2(p.y - center.y, p.x - center.x),
-      angle: 0,
-    };
-    this.stage.container().style.cursor = ROTATE_CURSORS[this.rotationCornerOf(p) ?? "ne"];
-  }
-
-  private updateGroupRotate(): void {
-    const g = this.rotateGesture;
-    const proxy = this.groupProxy;
-    if (!g || !proxy) return;
-    const p = this.point();
-    const a = Math.atan2(p.y - g.center.y, p.x - g.center.x);
-    let deg = ((a - g.startAngle) * 180) / Math.PI;
-    const snapped = Math.round(deg / 15) * 15; // gentle 15° magnetism near the common angles
-    if (Math.abs(deg - snapped) < 3) deg = snapped;
-    g.angle = deg;
-    this.updateGroupTransform(); // groupDelta() builds the rotation matrix from g.angle about the centre
-    // Re-fit the (axis-aligned) box to the freshly-rotated content so it matches the union box peers
-    // draw — instead of the larger AABB of a rotated proxy rectangle.
-    const u = this.selectionUnionRect();
-    if (u) {
-      proxy.setAttrs({
-        x: u.x + u.width / 2,
-        y: u.y + u.height / 2,
-        width: u.width,
-        height: u.height,
-        offsetX: u.width / 2,
-        offsetY: u.height / 2,
-        scaleX: 1,
-        scaleY: 1,
-        rotation: 0,
-      });
-      this.transformer.forceUpdate();
-    }
-  }
-
-  private endGroupRotate(): void {
-    // Commit FIRST (groupDelta still reads the gesture angle), THEN clear it — otherwise the proxy is
-    // already reset to the upright box and the bake would be a no-op.
-    this.endGroupTransform(); // commit every node in one transaction + restore the chrome
-    this.rotateGesture = null;
-    this.stage.container().style.cursor = this.tool === "select" ? CURSOR_URL : "grab";
-  }
-
-  // ---- marquee (rubber-band) selection — resolves live while you drag ----
   private beginMarquee(additive: boolean): void {
     const p = this.point();
     this.marqueeStart = p;
@@ -3037,9 +2574,8 @@ export class BoardCanvas {
   /** Light-blue per-node outlines for a multi-selection (the union gets the transform box). */
   private renderSelectionBoxes(): void {
     this.highlightGroup.destroyChildren();
-    // Faint per-stroke outlines for a multi-stroke selection (each member, inside the group box). The
-    // group box itself is the Konva transformer — attached to the stroke nodes for a pure-stroke
-    // selection, or to the invisible group proxy (sized to the whole union) for a mixed selection.
+    // Faint per-node outlines for any residual multi-node Konva selection. The union transform box
+    // is now the text-layer's DOM group chrome (updateGroupChrome), not a Konva transformer/proxy.
     if (this.selected.size > 1) {
       const sw = this.viewport.screenPx(1.2);
       for (const id of this.selected) {
@@ -3589,7 +3125,6 @@ export class BoardCanvas {
       for (const id of this.selected) this.nodeById.get(id)?.position({ x: 0, y: 0 });
       this.moveState = null;
       this.opts.awareness.setLocalStateField("drag", null); // cancelled → stop the live preview
-      this.transformer.forceUpdate();
       this.content.batchDraw();
     }
     if (this.resizing) {

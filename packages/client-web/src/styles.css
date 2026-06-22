@@ -2392,6 +2392,64 @@ input[type="range"] {
   z-index: 2;
   pointer-events: none;
 }
+/* ADR-0009 Phase 3 Step 4: the multi-node group transform box (DOM — replaces the Konva proxy +
+   Konva.Transformer). An outline + 8 resize handles over the union of every selected object. */
+.co-group-box {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px #4a9eff;
+}
+.co-group-handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: #fff;
+  border: 1.5px solid #4a9eff;
+  border-radius: 2px;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+.co-group-handle.g-nw {
+  left: 0;
+  top: 0;
+  cursor: nwse-resize;
+}
+.co-group-handle.g-ne {
+  left: 100%;
+  top: 0;
+  cursor: nesw-resize;
+}
+.co-group-handle.g-sw {
+  left: 0;
+  top: 100%;
+  cursor: nesw-resize;
+}
+.co-group-handle.g-se {
+  left: 100%;
+  top: 100%;
+  cursor: nwse-resize;
+}
+.co-group-handle.g-w {
+  left: 0;
+  top: 50%;
+  cursor: ew-resize;
+}
+.co-group-handle.g-e {
+  left: 100%;
+  top: 50%;
+  cursor: ew-resize;
+}
+.co-group-handle.g-n {
+  left: 50%;
+  top: 0;
+  cursor: ns-resize;
+}
+.co-group-handle.g-s {
+  left: 50%;
+  top: 100%;
+  cursor: ns-resize;
+}
 /* Connector attach points — the 4 round dots floating just outside a shape's sides (one per side).
    Positioned in screen space by the text layer; purely visual (snapping is computed from geometry). */
 .co-connector-dots {

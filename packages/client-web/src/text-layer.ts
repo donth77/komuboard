@@ -283,6 +283,29 @@ export class TextLayer {
   private lastRotateSent = 0;
   /** Handle box for a single text selection (created lazily), + the in-progress resize. */
   private resizeEl: HTMLDivElement | null = null;
+  /** Transform box for a MULTI-node group (ADR-0009 Phase 3: replaces the Konva proxy + Transformer).
+   *  Resizes/rotates every selected object as one unit via setGroupPreview/commitGroupTransform. */
+  private groupEl: HTMLDivElement | null = null;
+  private groupGeom: Map<
+    string,
+    { cx: number; cy: number; w: number; h: number; rot: number; font: number }
+  > | null = null;
+  private groupResize: {
+    handle: string;
+    startX: number;
+    startY: number;
+    ux: number;
+    uy: number;
+    uw: number;
+    uh: number;
+  } | null = null;
+  private groupRotate: {
+    cx: number;
+    cy: number;
+    wcx: number;
+    wcy: number;
+    startAngle: number;
+  } | null = null;
   /** Container for connector "dots" (the 4 side attach points) drawn on shapes; created lazily. */
   private dotsEl: HTMLDivElement | null = null;
   /** True while the connector (line/arrow) tool is active → show every shape's dots, not just the
@@ -2270,9 +2293,13 @@ export class TextLayer {
   ): void {
     this.groupPreview = preview;
     for (const id of preview.keys()) {
-      const el = this.els.get(id);
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
+      if (obj?.type === "stroke" || obj?.type === "connector") {
+        this.relayoutBox(id); // re-lay-out the ink svg from its previewed (group) geom
+        continue;
+      }
+      const el = this.els.get(id);
       if (!el || (obj?.type !== "text" && obj?.type !== "stamp")) continue;
       const g = this.effectiveGeom(id, obj);
       const fontFamily = obj.type === "text" ? obj.fontFamily : "";
@@ -2355,6 +2382,229 @@ export class TextLayer {
     setTextStyle(this.opts.doc, id, { fontSize: geom.fontSize });
   }
 
+  // ---- group transform: a DOM box over the selection union resizes/rotates every selected object as
+  //      one unit (ADR-0009 Phase 3 Step 4 — replaces the Konva group proxy + Konva.Transformer) ----
+
+  /** World-space bounding box of the whole selection (union of every selected object's rect). */
+  groupUnionRect(): { x: number; y: number; width: number; height: number } | null {
+    const rects = this.selectedWorldRects();
+    if (!rects.length) return null;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (const r of rects) {
+      if (r.x < minX) minX = r.x;
+      if (r.y < minY) minY = r.y;
+      if (r.x + r.width > maxX) maxX = r.x + r.width;
+      if (r.y + r.height > maxY) maxY = r.y + r.height;
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  private ensureGroupEl(): HTMLDivElement {
+    if (this.groupEl) return this.groupEl;
+    const box = document.createElement("div");
+    box.className = "co-group-box";
+    for (const h of ["nw", "ne", "sw", "se", "w", "e", "n", "s"]) {
+      const hd = document.createElement("div");
+      hd.className = `co-group-handle g-${h}`;
+      hd.addEventListener("pointerdown", (e) => this.beginGroupResize(e, h));
+      box.appendChild(hd);
+    }
+    this.root.appendChild(box);
+    this.groupEl = box;
+    return box;
+  }
+
+  /** Show/position the group transform box over the selection union (2+ objects), else hide it. */
+  private updateGroupChrome(): void {
+    const u = this.selected.size >= 2 && !this.edit ? this.groupUnionRect() : null;
+    if (!u) {
+      if (this.groupEl) this.groupEl.style.display = "none";
+      return;
+    }
+    const box = this.ensureGroupEl();
+    box.style.display = "";
+    const cam = this.opts.camera();
+    box.style.left = `${u.x * cam.scale + cam.x}px`;
+    box.style.top = `${u.y * cam.scale + cam.y}px`;
+    box.style.width = `${u.width * cam.scale}px`;
+    box.style.height = `${u.height * cam.scale}px`;
+  }
+
+  /** Snapshot each selected box's centre+size+rotation+font — the start state for a group gesture. */
+  private captureGroupGeom(): void {
+    const g = new Map<
+      string,
+      { cx: number; cy: number; w: number; h: number; rot: number; font: number }
+    >();
+    for (const id of this.selected) {
+      const box = this.boxGeomOf(id);
+      if (box)
+        g.set(id, {
+          cx: box.x + box.width / 2,
+          cy: box.y + box.height / 2,
+          w: box.width,
+          h: box.height,
+          rot: box.rotation,
+          font: box.fontSize,
+        });
+    }
+    this.groupGeom = g;
+  }
+
+  /** Transform the captured group geom by `fn`, preview it live (all types) + broadcast to peers. */
+  private applyGroupPreview(
+    fn: (g: { cx: number; cy: number; w: number; h: number; rot: number; font: number }) => {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      fontSize: number;
+      rotation: number;
+    },
+  ): void {
+    if (!this.groupGeom) return;
+    const preview = new Map<
+      string,
+      { x: number; y: number; width: number; height: number; fontSize: number; rotation: number }
+    >();
+    for (const [id, g0] of this.groupGeom) preview.set(id, fn(g0));
+    this.setGroupPreview(preview);
+    this.updateGroupChrome();
+    const now = Date.now();
+    if (now - this.lastResizeSent >= EDIT_BROADCAST_MS) {
+      this.lastResizeSent = now;
+      const nodes = [...preview.entries()].map(([id, p]) => ({ id, ...p }));
+      this.opts.awareness.setLocalStateField("groupresize", { nodes });
+    }
+  }
+
+  private commitGroupPreview(): void {
+    const gp = this.groupPreview;
+    this.opts.doc.transact(() => {
+      if (gp) for (const [id, geom] of gp) this.commitGroupTransform(id, geom);
+    });
+    this.clearGroupPreview();
+    this.opts.awareness.setLocalStateField("groupresize", null);
+    this.refreshSelectionChrome();
+  }
+
+  private beginGroupResize(e: PointerEvent, handle: string): void {
+    e.preventDefault();
+    e.stopPropagation();
+    const u = this.groupUnionRect();
+    if (!u || this.selected.size < 2) return;
+    this.captureGroupGeom();
+    this.groupResize = {
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      ux: u.x,
+      uy: u.y,
+      uw: u.width,
+      uh: u.height,
+    };
+    window.addEventListener("pointermove", this.onGroupResizeMove);
+    window.addEventListener("pointerup", this.onGroupResizeUp);
+  }
+
+  private readonly onGroupResizeMove = (e: PointerEvent): void => {
+    const gr = this.groupResize;
+    if (!gr) return;
+    this.publishCursorAt(e.clientX, e.clientY);
+    const scale = Math.max(this.opts.camera().scale, 1e-6);
+    const wdx = (e.clientX - gr.startX) / scale;
+    const wdy = (e.clientY - gr.startY) / scale;
+    const MIN = 8;
+    const h = gr.handle;
+    let nw = gr.uw;
+    let nh = gr.uh;
+    if (h.includes("e")) nw = Math.max(MIN, gr.uw + wdx);
+    if (h.includes("w")) nw = Math.max(MIN, gr.uw - wdx);
+    if (h.includes("s")) nh = Math.max(MIN, gr.uh + wdy);
+    if (h.includes("n")) nh = Math.max(MIN, gr.uh - wdy);
+    const sx = nw / (gr.uw || 1);
+    const sy = nh / (gr.uh || 1);
+    const anchorX = h.includes("w") ? gr.ux + gr.uw : gr.ux; // the corner/edge opposite the handle is fixed
+    const anchorY = h.includes("n") ? gr.uy + gr.uh : gr.uy;
+    const s = (sx + sy) / 2;
+    this.applyGroupPreview((g0) => {
+      const cx = anchorX + (g0.cx - anchorX) * sx;
+      const cy = anchorY + (g0.cy - anchorY) * sy;
+      const w = g0.w * sx;
+      const hh = g0.h * sy;
+      return {
+        x: cx - w / 2,
+        y: cy - hh / 2,
+        width: w,
+        height: hh,
+        fontSize: g0.font * s,
+        rotation: g0.rot,
+      };
+    });
+  };
+
+  private readonly onGroupResizeUp = (): void => {
+    window.removeEventListener("pointermove", this.onGroupResizeMove);
+    window.removeEventListener("pointerup", this.onGroupResizeUp);
+    if (this.groupResize) this.commitGroupPreview();
+    this.groupResize = null;
+    this.groupGeom = null;
+  };
+
+  /** Begin a group rotation — called by the canvas when a pointerdown lands in the rotate band just
+   *  outside the group's corners (canvas keeps owning that band detection via rotationCornerOf). */
+  beginGroupRotate(e: PointerEvent): void {
+    if (this.selected.size < 2) return;
+    const u = this.groupUnionRect();
+    if (!u) return;
+    const cam = this.opts.camera();
+    const wcx = u.x + u.width / 2;
+    const wcy = u.y + u.height / 2;
+    const cx = wcx * cam.scale + cam.x;
+    const cy = wcy * cam.scale + cam.y;
+    this.captureGroupGeom();
+    this.groupRotate = { cx, cy, wcx, wcy, startAngle: Math.atan2(e.clientY - cy, e.clientX - cx) };
+    window.addEventListener("pointermove", this.onGroupRotateMove);
+    window.addEventListener("pointerup", this.onGroupRotateUp);
+  }
+
+  private readonly onGroupRotateMove = (e: PointerEvent): void => {
+    const gr = this.groupRotate;
+    if (!gr) return;
+    this.publishCursorAt(e.clientX, e.clientY);
+    const angle = Math.atan2(e.clientY - gr.cy, e.clientX - gr.cx);
+    let deg = ((angle - gr.startAngle) * 180) / Math.PI;
+    if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+    const rad = (deg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    this.applyGroupPreview((g0) => {
+      const dx = g0.cx - gr.wcx;
+      const dy = g0.cy - gr.wcy;
+      const cx = gr.wcx + cos * dx - sin * dy;
+      const cy = gr.wcy + sin * dx + cos * dy;
+      return {
+        x: cx - g0.w / 2,
+        y: cy - g0.h / 2,
+        width: g0.w,
+        height: g0.h,
+        fontSize: g0.font,
+        rotation: g0.rot + deg,
+      };
+    });
+  };
+
+  private readonly onGroupRotateUp = (): void => {
+    window.removeEventListener("pointermove", this.onGroupRotateMove);
+    window.removeEventListener("pointerup", this.onGroupRotateUp);
+    if (this.groupRotate) this.commitGroupPreview();
+    this.groupRotate = null;
+    this.groupGeom = null;
+  };
+
   // ---- resize (a handle box around a single selected box — text isn't a Konva node, so the
   //      Konva transformer can't bound it; side handles change width, corners scale the font) ----
 
@@ -2427,6 +2677,7 @@ export class TextLayer {
       const rotatable = obj?.type === "text" || obj?.type === "stamp";
       this.applyRotation(box, rotatable ? this.effectiveGeom(id, obj).rotation : 0);
     }
+    this.updateGroupChrome(); // the multi-node group's own transform box (2+ selected)
     this.updateConnectorDots(); // dots also show in connector mode with no/multi selection
   }
 
@@ -2991,6 +3242,25 @@ export class TextLayer {
         typeof trot.rotation === "number"
       ) {
         rotate.set(trot.id, trot.rotation);
+      }
+      // A peer's in-progress GROUP transform (ADR-0009 P3 Step 4): one node per selected object,
+      // each carrying its previewed box geom + rotation — fed into the same resize/rotate glide maps.
+      const grp = (st as { groupresize?: { nodes?: unknown } }).groupresize;
+      if (grp && Array.isArray(grp.nodes)) {
+        for (const n of grp.nodes as Array<Record<string, unknown>>) {
+          if (typeof n.id !== "string" || !(this.els.has(n.id) || this.inkEls.has(n.id))) continue;
+          if (typeof n.x === "number" && typeof n.fontSize === "number") {
+            const g: ResizeGeom = {
+              x: n.x,
+              width: typeof n.width === "number" ? n.width : undefined,
+              fontSize: n.fontSize,
+            };
+            if (typeof n.y === "number") g.y = n.y;
+            if (typeof n.height === "number") g.height = n.height;
+            resize.set(n.id, g);
+          }
+          if (typeof n.rotation === "number") rotate.set(n.id, n.rotation);
+        }
       }
     }
     // Idle fast-path: nothing remote now or before → skip the chrome/layout passes.
