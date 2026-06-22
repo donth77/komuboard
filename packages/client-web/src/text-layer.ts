@@ -2308,6 +2308,43 @@ export class TextLayer {
       });
       return;
     }
+    if (obj?.type === "stroke" || obj?.type === "connector") {
+      // Ink carries no box geometry — bake the group's box affine into the points / free endpoints:
+      // scale the old AABB into the new box, then rotate about the new centre (mirrors onResizeUp +
+      // onRotateUp, combined). A connector's bound end is left alone — it reroutes with its shape.
+      const oldBox =
+        this.inkBBox.get(id) ?? (obj.type === "stroke" ? this.strokeWorldBBox(obj) : null);
+      if (oldBox) {
+        const sx = geom.width / (oldBox.width || 1);
+        const sy = geom.height / (oldBox.height || 1);
+        const rad = (geom.rotation * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const ncx = geom.x + geom.width / 2;
+        const ncy = geom.y + geom.height / 2;
+        const map = (px: number, py: number): { x: number; y: number } => {
+          const mx = geom.x + (px - oldBox.x) * sx;
+          const my = geom.y + (py - oldBox.y) * sy;
+          const dx = mx - ncx;
+          const dy = my - ncy;
+          return { x: ncx + cos * dx - sin * dy, y: ncy + sin * dx + cos * dy };
+        };
+        if (obj.type === "stroke") {
+          const pts = obj.points.slice();
+          for (let i = 0; i + 1 < pts.length; i += 2) {
+            const q = map(pts[i] as number, pts[i + 1] as number);
+            pts[i] = q.x;
+            pts[i + 1] = q.y;
+          }
+          setObjectsPoints(this.opts.doc, [{ id, points: pts }]);
+        } else {
+          const mapEnd = (e: typeof obj.from): typeof obj.from =>
+            e.shapeId ? e : { ...e, ...map(e.x, e.y) };
+          setConnectorEnds(this.opts.doc, id, { from: mapEnd(obj.from), to: mapEnd(obj.to) });
+        }
+      }
+      return;
+    }
     setTextGeometry(this.opts.doc, id, {
       x: geom.x,
       y: geom.y,

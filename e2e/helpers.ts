@@ -8,7 +8,10 @@ export type BoardWindow = {
         size: number;
         keys(): IterableIterator<string>;
         values(): IterableIterator<{ get(key: string): unknown }>;
+        get(key: string): { toJSON(): Record<string, unknown> } | undefined;
       };
+      getArray(name: string): { toArray(): string[] };
+      transact(fn: () => void): void;
     };
     provider: { wsconnected: boolean };
     awareness: {
@@ -23,6 +26,10 @@ export type BoardWindow = {
       transformerAnchorPos(name: string): { x: number; y: number } | null;
       nodeContentRect(id: string): { x: number; y: number; width: number; height: number } | null;
       getZoomPercent(): number;
+      point(): { x: number; y: number };
+      rotationCornerOf(w: { x: number; y: number }): string | null;
+      selectionUnionRect(): { x: number; y: number; width: number; height: number } | null;
+      textLayer: { selectedIds(): string[]; selectedCount(): number };
     };
   };
 };
@@ -80,4 +87,106 @@ export function hasSelection(page: Page): Promise<boolean> {
   return page.evaluate(
     () => (window as unknown as BoardWindow).__coboard.canvas?.hasSelection() ?? false,
   );
+}
+
+// ── ADR-0009 Phase 3 coverage helpers (connectors + group transform) ──────────────────────────
+// The shapes/arrow flyout is flaky under synthetic input, so shapes/connectors are injected
+// straight into the Yjs doc via its own Y types; geometry is asserted in world space.
+
+/** Maps world→screen. Calibrated from the board centre (assumes the default 100% zoom). */
+export type Cal = { ox: number; oy: number; scale: number };
+
+export async function calibrate(page: Page): Promise<Cal> {
+  const box = await page.locator("#board").boundingBox();
+  if (!box) throw new Error("canvas not found");
+  const sx = Math.round(box.x + box.width / 2);
+  const sy = Math.round(box.y + box.height / 2);
+  await page.mouse.move(sx, sy);
+  const r = await page.evaluate(() => {
+    const c = (window as unknown as BoardWindow).__coboard.canvas!;
+    const p = c.point();
+    return { wx: p.x, wy: p.y, scale: c.getZoomPercent() / 100 };
+  });
+  return { ox: sx - r.wx * r.scale, oy: sy - r.wy * r.scale, scale: r.scale };
+}
+
+export function worldToScreen(cal: Cal, wx: number, wy: number): { x: number; y: number } {
+  return { x: wx * cal.scale + cal.ox, y: wy * cal.scale + cal.oy };
+}
+
+/** An object's plain JSON from a page's doc (or null if absent). */
+export function objJSON(page: Page, id: string): Promise<Record<string, unknown> | null> {
+  return page.evaluate((i) => {
+    const v = (window as unknown as BoardWindow).__coboard.doc.getMap("objects").get(i);
+    return v ? v.toJSON() : null;
+  }, id);
+}
+
+// Loose view of the doc for injecting Y types (the YMap ctor isn't on the typed surface).
+type InjectDoc = {
+  getMap(n: string): { constructor: new () => { set(k: string, v: unknown): void } } & {
+    set(k: string, v: unknown): void;
+  };
+  getArray(n: string): { push(v: unknown[]): void };
+  transact(fn: () => void): void;
+};
+export type ConnectorEnd = { x: number; y: number; shapeId?: string; side?: string };
+
+/** Inject a rectangle shape directly into the doc. */
+export async function injectShape(
+  page: Page,
+  o: { id: string; x: number; y: number; width?: number; height?: number; bg?: string },
+): Promise<void> {
+  await page.evaluate((opts) => {
+    const doc = (window as unknown as { __coboard: { doc: InjectDoc } }).__coboard.doc;
+    const objects = doc.getMap("objects");
+    const order = doc.getArray("order");
+    const YMap = objects.constructor;
+    doc.transact(() => {
+      const r = new YMap();
+      r.set("id", opts.id);
+      r.set("type", "text");
+      r.set("shape", "rectangle");
+      r.set("x", opts.x);
+      r.set("y", opts.y);
+      r.set("width", opts.width ?? 160);
+      r.set("height", opts.height ?? 120);
+      r.set("bg", opts.bg ?? "#ffec99");
+      r.set("runs", []); // PLAIN array — a Y.Array is rejected by readText
+      r.set("fontFamily", "Inter");
+      r.set("fontSize", 16);
+      r.set("align", "center");
+      r.set("authorId", "e2e");
+      objects.set(opts.id, r);
+      order.push([opts.id]);
+    });
+  }, o);
+}
+
+/** Inject a straight connector directly into the doc. */
+export async function injectConnector(
+  page: Page,
+  o: { id: string; from: ConnectorEnd; to: ConnectorEnd },
+): Promise<void> {
+  await page.evaluate((opts) => {
+    const doc = (window as unknown as { __coboard: { doc: InjectDoc } }).__coboard.doc;
+    const objects = doc.getMap("objects");
+    const order = doc.getArray("order");
+    const YMap = objects.constructor;
+    doc.transact(() => {
+      const c = new YMap();
+      c.set("id", opts.id);
+      c.set("type", "connector");
+      c.set("from", opts.from);
+      c.set("to", opts.to);
+      c.set("kind", "straight");
+      c.set("color", "#1f2933");
+      c.set("width", 2);
+      c.set("style", "solid");
+      c.set("startCap", "none");
+      c.set("endCap", "arrow");
+      objects.set(opts.id, c);
+      order.push([opts.id]);
+    });
+  }, o);
 }
