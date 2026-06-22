@@ -59,12 +59,6 @@ export interface CanvasOptions {
 
 const CURSOR_HZ = 30;
 const LERP = 0.3;
-// At/above this many strokes the board viewport-culls (hides off-screen nodes so a
-// dense board only draws what's near the screen). Smaller boards draw everything —
-// zero overhead, no behavior change. Tunable.
-const CULL_MIN_OBJECTS = 1200;
-// Off-screen pre-warm ring as a fraction of the viewport, so nothing pops at the edge.
-const CULL_MARGIN = 0.25;
 const SELECT_BLUE = "#4a9eff";
 // Konva attr that tags a rendered node with its object id (the select tool's hit→id contract).
 // One const so the writer (renderObjects) and reader (objIdOf) can't drift on a string literal.
@@ -349,12 +343,6 @@ export class BoardCanvas {
   private resizeObserver: ResizeObserver | null = null;
   /** Cache of content-relative client rects per object id; cleared whenever geometry rebuilds. */
   private readonly rectCache = new Map<string, Rect>();
-  /** Drawn object ids in z-order from the last render — a same-order change updates nodes in place. */
-  private renderedOrder: string[] = [];
-  /** World-space bbox per object id, for viewport culling (populated only on dense boards). */
-  private readonly cullRects = new Map<string, Rect>();
-  /** True while off-screen nodes are hidden — lets us restore them once if the board shrinks. */
-  private culled = false;
   private raf = 0;
   private animating = false;
   private selectionListener: ((count: number) => void) | null = null;
@@ -386,7 +374,6 @@ export class BoardCanvas {
 
     // Camera owns the stage transform; re-sync our viewport-dependent chrome on any change.
     this.viewport = new ViewportController(this.stage, opts.container, () => {
-      this.cull(); // re-cull for the new viewport before the redraw below
       this.scaleCursors();
       this.syncCursorStage(); // keep the cursor stage locked to the camera
       this.renderSelectionBoxes();
@@ -445,18 +432,14 @@ export class BoardCanvas {
     this.cursorStage.add(this.cursorLayer);
     this.syncCursorStage();
 
-    this.renderObjects();
-    // Stamps render in the HTML overlay now (ADR-0009 Phase 1) so they z-order per-object with
-    // text/shapes/stickies by placement order; the text-layer's own observer paints them.
-    this.objects.observeDeep(() => {
-      this.renderObjects();
-      this.renderConnectors();
-    });
+    this.onDocChanged();
+    // Strokes paint as DOM <svg> via the text-layer now (ADR-0009 Phase 3 — the Konva stroke pipeline
+    // is gone); the canvas only re-renders connectors + re-syncs selection/remote chrome per change.
+    this.objects.observeDeep(() => this.onDocChanged());
 
     this.bindPointer();
     // Hand-pan moves the viewport without a zoom transform, so re-cull + re-sync text on drag too.
     this.stage.on("dragmove", () => {
-      this.cull();
       this.textLayer.syncTransform();
     });
     this.bindSelection();
@@ -629,7 +612,22 @@ export class BoardCanvas {
   }
   /** Frame all content in view (or reset when the board is empty). */
   zoomToFit(): void {
-    this.viewport.zoomToFitBox(this.content.getClientRect({ skipTransform: true }));
+    // Strokes/connectors/text all live in the text-layer now (ADR-0009 P3) — frame the union of
+    // every object's world rect instead of the (now-empty) Konva content layer.
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const id of orderArray(this.opts.doc).toArray()) {
+      const r = this.textLayer.worldRectOf(id);
+      if (!r) continue;
+      minX = Math.min(minX, r.x);
+      minY = Math.min(minY, r.y);
+      maxX = Math.max(maxX, r.x + r.width);
+      maxY = Math.max(maxY, r.y + r.height);
+    }
+    if (minX > maxX) return;
+    this.viewport.zoomToFitBox({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
   }
 
   private point(): { x: number; y: number } {
@@ -649,8 +647,7 @@ export class BoardCanvas {
     return r;
   }
 
-  /** World-space bbox of a stroke straight from its points (+ stroke half-width).
-      Visibility-independent (no getClientRect), so culling never depends on draw state. */
+  /** World-space bbox of a stroke straight from its points (+ stroke half-width). */
   private strokeBBox(obj: StrokeObject): Rect {
     const p = obj.points;
     let minX = Infinity;
@@ -675,146 +672,13 @@ export class BoardCanvas {
     };
   }
 
-  /**
-   * Viewport culling — dense boards only (≥ CULL_MIN_OBJECTS). Hides Konva nodes whose
-   * world bbox is outside the viewport expanded by a margin ring, so a big board only
-   * *draws* what's near the screen. Selected nodes stay visible (the transform box needs
-   * their bounds; off-screen nodes can't be clicked/marquee'd anyway). Sparse boards keep
-   * everything visible — no overhead, no behavior change. Cheap (one AABB test per node)
-   * and runs on every viewport change (zoom, pan) + render.
-   */
-  private cull(): void {
-    if (this.nodeById.size < CULL_MIN_OBJECTS) {
-      if (!this.culled) return; // sparse and nothing hidden → nothing to do
-      for (const n of this.nodeById.values()) n.visible(true); // dropped below threshold → restore all
-      this.culled = false;
-      this.content.batchDraw();
-      return;
-    }
-    this.culled = true;
-    const v = this.viewport.worldViewport();
-    const mx = v.width * CULL_MARGIN;
-    const my = v.height * CULL_MARGIN;
-    const view: Rect = {
-      x: v.x - mx,
-      y: v.y - my,
-      width: v.width + mx * 2,
-      height: v.height + my * 2,
-    };
-    for (const [id, node] of this.nodeById) {
-      const r = this.cullRects.get(id);
-      node.visible(this.selected.has(id) || !r || rectsIntersect(r, view));
-    }
-    this.content.batchDraw();
-  }
-
-  // ---- stroke styling (shared by stored strokes + the live preview) ----
-  private lineConfig(
-    color: string,
-    width: number,
-    style: StrokeStyle,
-    opacity: number,
-  ): Konva.LineConfig {
-    // brush (highlight) and dash are independent: `highlight-dashed` is both at once.
-    const highlight = style === "highlight" || style === "highlight-dashed";
-    const dashed = style === "dashed" || style === "highlight-dashed";
-    return {
-      stroke: color,
-      strokeWidth: highlight ? width * 1.6 : width,
-      opacity: highlight ? Math.min(opacity, 0.4) : opacity,
-      dash: dashed ? [Math.max(2, width * 2.5), Math.max(2, width * 2)] : [],
-      lineCap: "round",
-      lineJoin: "round",
-      globalCompositeOperation: highlight ? "multiply" : "source-over",
-      listening: false,
-    };
-  }
-
-  private renderObjects(): void {
-    this.rectCache.clear(); // geometry is about to change → drop cached client rects
-    this.cullRects.clear();
-    const order = orderArray(this.opts.doc).toArray();
-    // Resolve the drawable strokes in z-order.
-    const drawn: string[] = [];
-    const objById = new Map<string, StrokeObject>();
-    for (const id of order) {
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
-      if (obj?.type === "stroke") {
-        drawn.push(id);
-        objById.set(id, obj);
-      }
-    }
-    const dense = drawn.length >= CULL_MIN_OBJECTS; // compute cull bboxes only when culling is on
-    // Fast path: same ids in the same z-order (a move/resize/no-op) → update the existing
-    // Konva.Lines in place instead of destroying + recreating every node. Structural changes
-    // (add / remove / reorder) fall back to a full rebuild.
-    const sameOrder =
-      drawn.length === this.renderedOrder.length &&
-      drawn.every((id, i) => id === this.renderedOrder[i]);
-    if (sameOrder) {
-      for (const id of drawn) {
-        const obj = objById.get(id);
-        const line = this.nodeById.get(id);
-        if (!obj || !line) continue;
-        if (dense) this.cullRects.set(id, this.strokeBBox(obj));
-        // A prior local drag/resize leaves a transform on the node; the doc stores baked
-        // absolute coords, so clear the transform before re-applying geometry + style. If a
-        // *remote* peer is mid drag/resize on this node, a changed head OR tail vertex means
-        // their gesture just committed (a scale pins at most one vertex, so head+tail can't both
-        // be unchanged) → drop the live transform. Unchanged = an unrelated edit landed mid-
-        // gesture → keep the preview so it doesn't snap back.
-        const xf = this.remoteXforms.get(id);
-        const old = line.points();
-        const np = obj.points;
-        const committed =
-          !!xf &&
-          (old[0] !== np[0] ||
-            old[1] !== np[1] ||
-            old[old.length - 2] !== np[np.length - 2] ||
-            old[old.length - 1] !== np[np.length - 1]);
-        line.setAttrs(this.lineConfig(obj.color, obj.width, obj.style, obj.opacity));
-        line.listening(true);
-        line.points(np);
-        line.hitStrokeWidth(Math.max(obj.width, 14));
-        line.opacity(0); // ADR-0009 P3 step1: the DOM <svg> is the visible paint; this node stays only for hit-testing
-        if (!xf || committed) {
-          line.position({ x: 0, y: 0 });
-          line.scale({ x: 1, y: 1 });
-          line.rotation(0); // committed points already bake any rotation — drop the live spin too
-          if (xf) {
-            this.remoteXforms.delete(id);
-            this.committedXforms.add(id); // until the lagging awareness clears
-          }
-        }
-        // else: an ongoing remote gesture — leave the rAF-interpolated transform in place
-      }
-    } else {
-      this.content.destroyChildren();
-      this.nodeById.clear();
-      for (const id of drawn) {
-        const obj = objById.get(id);
-        if (!obj) continue;
-        if (dense) this.cullRects.set(id, this.strokeBBox(obj));
-        const line = new Konva.Line({
-          points: obj.points,
-          ...this.lineConfig(obj.color, obj.width, obj.style, obj.opacity),
-        });
-        // Make stored strokes selectable: hittable along their stroke + tagged with id.
-        line.listening(true);
-        line.hitStrokeWidth(Math.max(obj.width, 14));
-        line.setAttr(OBJ_ID_ATTR, obj.id);
-        line.opacity(0); // ADR-0009 P3 step1: DOM <svg> paints; node kept hittable-only
-        this.content.add(line);
-        this.nodeById.set(obj.id, line);
-      }
-      this.renderedOrder = drawn;
-    }
-    this.cull(); // hide off-screen nodes (dense boards) before the draw
-    this.content.batchDraw();
+  private onDocChanged(): void {
+    // Strokes paint via the text-layer (ADR-0009 P3). On each doc change: re-render connectors
+    // (Konva), then re-sync the transform box, peers' selection outlines, and prune a just-committed peer draw.
+    this.renderConnectors();
     this.reattachTransformer();
-    this.renderRemoteSelections(true); // objects moved/resized/deleted/added → force (geometry not in the cache key)
-    this.pruneCommittedDraws(); // a peer's stroke just committed → drop its live preview (no double-draw)
+    this.renderRemoteSelections(true);
+    this.pruneCommittedDraws();
   }
 
   /** Remove any remote-draw preview now backed by a committed node (clean draw→commit handoff). */
@@ -2103,7 +1967,6 @@ export class BoardCanvas {
     for (const id of ids) {
       if (this.nodeById.has(id)) this.selected.add(id);
     }
-    this.cull(); // keep selected (possibly off-screen) nodes visible so the transform box bounds them
     this.reattachTransformer();
   }
   clearSelection(): void {
@@ -2115,7 +1978,6 @@ export class BoardCanvas {
     }
     if (!this.selected.size) return;
     this.selected.clear();
-    this.cull(); // re-hide any off-screen nodes that were kept visible only because selected
     this.reattachTransformer();
   }
   /** Select every object on the board (⌘A). */
@@ -2698,12 +2560,16 @@ export class BoardCanvas {
         continue;
       }
 
-      // Single selection → outline the one node (text boxes get their ring from the text layer).
+      // Single selection → outline the one stroke (text/shape/sticky/stamp get their ring from the
+      // text layer; connectors are ringed separately). Strokes paint as DOM <svg> now, so their world
+      // rect comes from the text-layer (ADR-0009 P3 — the Konva stroke pipeline is gone).
       for (const id of ids) {
         if (this.connectorNodes.has(id)) continue;
-        const node = this.nodeById.get(id);
-        if (!node || !node.visible()) continue; // skip culled (off-screen) peers' selections
-        const r = this.nodeRect(id, node);
+        const m = this.objects.get(id);
+        const o = m ? readObject(m) : null;
+        if (o?.type !== "stroke") continue;
+        const r = this.textLayer.worldRectOf(id);
+        if (!r) continue;
         const rkey = `${clientId}:${id}`;
         seen.add(rkey);
         let rect = this.remoteSelRects.get(rkey);
@@ -2926,7 +2792,6 @@ export class BoardCanvas {
         changed = true;
       }
       if (changed) {
-        this.cull(); // re-hide any off-screen node kept visible only because it was selected
         this.reattachTransformer(); // detach the box from the yielded nodes
         this.publishSelection(); // rebroadcast my now-reduced selection (peers + my own awareness)
       }
