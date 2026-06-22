@@ -366,12 +366,17 @@ export class TextLayer {
   private readonly selected = new Set<string>();
   /** In-progress drag of the text selection (world-space offset from the grab point). */
   private moveState: { startX: number; startY: number; dx: number; dy: number } | null = null;
+  /** Stamps stuck to a host that's being dragged — they glide along live (committed via the schema). */
+  private movingAttached = new Set<string>();
   /** Hover card (Open / Edit) shown when the pointer is over a link — committed box or editor. */
   private linkCard: HTMLDivElement | null = null;
   private linkCardFor: HTMLAnchorElement | null = null;
   private cardHideTimer = 0;
   /** Translucent sticky-note placement preview that tracks the cursor while the sticky tool is on. */
   private stickyGhost: HTMLElement | null = null;
+  /** Translucent stamp placement preview — a DOM `.co-stamp` in the overlay so it stacks ABOVE
+   *  committed objects (the old Konva ghost sat under the DOM layer → previewed beneath stickies). */
+  private stampGhost: HTMLElement | null = null;
 
   constructor(private readonly opts: TextLayerOptions) {
     this.objects = objectsMap(opts.doc);
@@ -426,7 +431,7 @@ export class TextLayer {
           el.dataset.id = id;
           this.els.set(id, el);
         }
-        this.paintStamp(el, obj);
+        this.paintStamp(el, obj.src);
         this.root.appendChild(el); // (re)append in z-order
         const g = this.effectiveGeom(id, obj);
         // A stamp is a fixed square box (size×size); reuse the box layout (fontFamily/align unused).
@@ -492,6 +497,7 @@ export class TextLayer {
     this.refreshSelectionChrome();
     if (this.edit) this.root.appendChild(this.edit.el); // keep the editor on top of the re-stacked boxes
     if (this.stickyGhost) this.root.appendChild(this.stickyGhost); // …and the placement ghost above all
+    if (this.stampGhost) this.root.appendChild(this.stampGhost); // stamp preview stays above objects too
   }
 
   /** Hide the doc display copy of any box currently being edited (locally or by a peer). */
@@ -516,7 +522,7 @@ export class TextLayer {
   /** Paint a stamp's image into its `.co-stamp` box. Emoji srcs are white-outlined (shared sticker
    *  renderer, cached); marks carry a baked border; an `img:` avatar is its data URL. The outline +
    *  CSS drop-shadow give the placed sticker look. Cheap-guarded so a repaint reuses the same <img>. */
-  private paintStamp(el: HTMLDivElement, obj: StampObject): void {
+  private paintStamp(el: HTMLDivElement, src: string): void {
     let img = el.querySelector<HTMLImageElement>("img");
     if (!img) {
       img = document.createElement("img");
@@ -524,10 +530,9 @@ export class TextLayer {
       img.alt = "";
       el.appendChild(img);
     }
-    if (el.dataset.src === obj.src) return; // already showing this sticker
-    el.dataset.src = obj.src;
+    if (el.dataset.src === src) return; // already showing this sticker
+    el.dataset.src = src;
     const image = img;
-    const src = obj.src;
     const i = src.indexOf(":");
     const kind = src.slice(0, i);
     const val = src.slice(i + 1);
@@ -1342,6 +1347,31 @@ export class TextLayer {
     this.stickyGhost?.remove();
     this.stickyGhost = null;
   }
+  /** Show/move a translucent stamp preview centred on the world point. Renders as a `.co-stamp` in
+   *  this.root (re-appended last by render() → above every committed object), painted + laid out
+   *  with the SAME path the placed stamp uses, so the preview is pixel-identical to the result. */
+  showStampGhost(
+    world: { x: number; y: number },
+    src: string,
+    size: number,
+    rotation: number,
+  ): void {
+    let g = this.stampGhost;
+    if (!g) {
+      g = document.createElement("div");
+      g.className = "co-stamp co-text-ghost";
+      this.root.appendChild(g);
+      this.stampGhost = g;
+    }
+    this.paintStamp(g as HTMLDivElement, src);
+    // Centre-anchored square box (x/y = top-left), mirroring effectiveGeom's stamp branch + render.
+    this.layout(g, world.x - size / 2, world.y - size / 2, size, size, "", "left", size);
+    this.applyRotation(g, rotation);
+  }
+  hideStampGhost(): void {
+    this.stampGhost?.remove();
+    this.stampGhost = null;
+  }
 
   private beginEdit(id: string, selectAll = false, caretAt?: { x: number; y: number }): void {
     const m = this.objects.get(id);
@@ -1367,34 +1397,25 @@ export class TextLayer {
   /** Sticky tool: drop a new sticky note at the point (or edit the box already there). */
   stickyAt(world: { x: number; y: number }, color: string): void {
     if (this.edit) this.commit();
-    const hit = this.hitTest(world);
-    if (hit) {
-      if (this.remoteEditIds.has(hit)) return; // a peer owns this box
-      this.beginEdit(hit);
-    } else {
-      // The square note is dropped centred on the cursor (matching the placement ghost).
-      this.openEditor({
-        id: null,
-        x: world.x - DEFAULT_STICKY_SIZE / 2,
-        y: world.y - DEFAULT_STICKY_SIZE / 2,
-        width: DEFAULT_STICKY_SIZE,
-        fontSize: DEFAULT_STICKY_TEXT_SIZE,
-        fontFamily: DEFAULT_TEXT_FONT,
-        align: "left",
-        bg: color,
-      });
-    }
+    // Always CREATE (FigJam-style): a tap drops a NEW note centred on the cursor (matching the ghost),
+    // stacking on top even over an existing object — it must never drop into another box's text.
+    this.openEditor({
+      id: null,
+      x: world.x - DEFAULT_STICKY_SIZE / 2,
+      y: world.y - DEFAULT_STICKY_SIZE / 2,
+      width: DEFAULT_STICKY_SIZE,
+      fontSize: DEFAULT_STICKY_TEXT_SIZE,
+      fontFamily: DEFAULT_TEXT_FONT,
+      align: "left",
+      bg: color,
+    });
   }
 
-  /** Shapes tool: drop a new shape box (fixed width×height) centred on the point + open for a label. */
+  /** Shapes tool: drop a new shape box (fixed width×height) centred on the point + open for a label.
+   *  Always CREATES (FigJam-style) — placing over an existing object stacks a new shape on top rather
+   *  than dropping into that object's text (or no-op'ing over a non-editable stamp/stroke). */
   shapeAt(world: { x: number; y: number }, kind: ShapeKind, fill: string): void {
     if (this.edit) this.commit();
-    const hit = this.hitTest(world);
-    if (hit) {
-      if (this.remoteEditIds.has(hit)) return; // a peer owns this box
-      this.beginEdit(hit);
-      return;
-    }
     const w = DEFAULT_SHAPE_W;
     const h = DEFAULT_SHAPE_H;
     this.openEditor({
@@ -1964,7 +1985,20 @@ export class TextLayer {
   beginMove(world: { x: number; y: number }): void {
     if (!this.selected.size) return;
     this.moveState = { startX: world.x, startY: world.y, dx: 0, dy: 0 };
+    this.movingAttached = this.attachedStampsOf(this.selected); // stickers ride their host live
     this.updateSelectionBar(); // hide the floating toolbar while dragging (re-shows on release)
+  }
+
+  /** Stamps stuck to any object in `hosts` (and not themselves a host) — they ride a host's drag. */
+  private attachedStampsOf(hosts: Set<string>): Set<string> {
+    const out = new Set<string>();
+    if (!hosts.size) return out;
+    this.objects.forEach((m, id) => {
+      if (hosts.has(id) || m.get("type") !== "stamp") return;
+      const att = m.get("attachedTo");
+      if (typeof att === "string" && hosts.has(att)) out.add(id);
+    });
+    return out;
   }
   /** Live drag: offset the selected boxes in the overlay (committed to the doc on release).
    *  `broadcast` is false during a canvas-driven group move — the canvas sends ONE unified "drag"
@@ -2007,6 +2041,17 @@ export class TextLayer {
         obj.height, // keep a shape's fixed height while moving (else it collapses then snaps back)
       );
     }
+    for (const id of this.movingAttached) {
+      // A stamp stuck to a dragged host glides with it (effectiveGeom folds in the host's offset).
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (obj?.type !== "stamp") continue;
+      const el = this.els.get(id);
+      if (!el) continue;
+      const g = this.effectiveGeom(id, obj);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
+      this.applyRotation(el, g.rotation);
+    }
     this.updateResizeChrome(); // keep the handles glued to the box while it moves
     this.opts.onShapesMoved?.(); // re-route connectors bound to the moving shapes (live)
     this.rerouteBoundConnectors(); // …and re-paint the visible DOM connectors so they follow too
@@ -2015,7 +2060,7 @@ export class TextLayer {
     if (broadcast && now - this.lastTextDragSent >= EDIT_BROADCAST_MS) {
       this.lastTextDragSent = now;
       this.opts.awareness.setLocalStateField("drag", {
-        ids: [...this.selected],
+        ids: [...this.selected, ...this.movingAttached], // peers glide the riding stamps too
         dx: mv.dx,
         dy: mv.dy,
       });
@@ -2025,6 +2070,7 @@ export class TextLayer {
   endMove(): void {
     const mv = this.moveState;
     this.moveState = null;
+    this.movingAttached = new Set(); // the commit (translateObjects) carries the stamps in the doc
     if (mv && (Math.abs(mv.dx) >= 0.01 || Math.abs(mv.dy) >= 0.01)) {
       // One transaction → one undo step for a mixed move. Connectors commit specially (a bound end
       // detaches to a free point unless its shape moves too); everything else offsets via translateObjects.
@@ -2059,7 +2105,7 @@ export class TextLayer {
   /** Apply the effective drag offset to a box during render/sync — the local drag if I'm moving
    *  it, else a peer's in-progress drag (so their move streams here), else none. */
   private moveOffset(id: string): { dx: number; dy: number } {
-    if (this.moveState && this.selected.has(id)) {
+    if (this.moveState && (this.selected.has(id) || this.movingAttached.has(id))) {
       return { dx: this.moveState.dx, dy: this.moveState.dy };
     }
     return this.remoteDragCurrent.get(id) ?? { dx: 0, dy: 0 };

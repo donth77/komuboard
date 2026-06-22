@@ -29,6 +29,9 @@ export type BoardWindow = {
       point(): { x: number; y: number };
       rotationCornerOf(w: { x: number; y: number }): string | null;
       selectionUnionRect(): { x: number; y: number; width: number; height: number } | null;
+      setStamp(src: string): void;
+      setShape(kind: string): void;
+      setTool(tool: string): void;
       textLayer: { selectedIds(): string[]; selectedCount(): number };
     };
   };
@@ -158,6 +161,62 @@ export async function injectShape(
       r.set("align", "center");
       r.set("authorId", "e2e");
       objects.set(opts.id, r);
+      order.push([opts.id]);
+    });
+  }, o);
+}
+
+/** Inject a sticky note (a text box with a `bg`, no `shape`) directly into the doc. */
+export async function injectSticky(
+  page: Page,
+  o: { id: string; x: number; y: number; size?: number; bg?: string },
+): Promise<void> {
+  await page.evaluate((opts) => {
+    const doc = (window as unknown as { __coboard: { doc: InjectDoc } }).__coboard.doc;
+    const objects = doc.getMap("objects");
+    const order = doc.getArray("order");
+    const YMap = objects.constructor;
+    doc.transact(() => {
+      const s = new YMap();
+      s.set("id", opts.id);
+      s.set("type", "text");
+      s.set("x", opts.x);
+      s.set("y", opts.y);
+      s.set("width", opts.size ?? 180);
+      s.set("height", opts.size ?? 180);
+      s.set("bg", opts.bg ?? "#ffec99");
+      s.set("runs", []); // PLAIN array — a Y.Array is rejected by readText
+      s.set("fontFamily", "Inter");
+      s.set("fontSize", 16);
+      s.set("align", "left");
+      s.set("authorId", "e2e");
+      objects.set(opts.id, s);
+      order.push([opts.id]);
+    });
+  }, o);
+}
+
+/** Inject a stamp (centre-anchored, square) directly into the doc — the exact shape `addStamp` writes. */
+export async function injectStamp(
+  page: Page,
+  o: { id: string; x: number; y: number; size?: number; src?: string; rotation?: number },
+): Promise<void> {
+  await page.evaluate((opts) => {
+    const doc = (window as unknown as { __coboard: { doc: InjectDoc } }).__coboard.doc;
+    const objects = doc.getMap("objects");
+    const order = doc.getArray("order");
+    const YMap = objects.constructor;
+    doc.transact(() => {
+      const st = new YMap();
+      st.set("id", opts.id);
+      st.set("type", "stamp");
+      st.set("x", opts.x);
+      st.set("y", opts.y);
+      st.set("size", opts.size ?? 64);
+      st.set("src", opts.src ?? "emoji:2705");
+      if (opts.rotation != null) st.set("rotation", opts.rotation);
+      st.set("authorId", "e2e");
+      objects.set(opts.id, st);
       order.push([opts.id]);
     });
   }, o);

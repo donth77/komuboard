@@ -164,13 +164,9 @@ export class BoardCanvas {
   private peerTip: HTMLElement | null = null;
   /** The stamp the next canvas tap places (`mark:<name>` | `emoji:<codepoint>`), or null. */
   private currentStamp: string | null = null;
-  /** Translucent placement preview of the armed stamp, tracking the cursor (overlay layer). */
-  private stampGhost: Konva.Image | null = null;
-  private stampGhostSrc: string | null = null;
-  /** Random ±15° tilt previewed by the ghost — placed stamps land at exactly this angle. */
+  /** Random ±15° tilt previewed by the ghost — placed stamps land at exactly this angle. The stamp
+   *  preview itself is a DOM `.co-stamp` rendered by the text-layer (so it stacks above objects). */
   private stampGhostRot = 0;
-  /** Decoded stamp images keyed by url — re-arming a used stamp swaps instantly (no reload flash). */
-  private readonly stampImgCache = new Map<string, HTMLImageElement | HTMLCanvasElement>();
   /** Local copy/paste buffer (in-app, not the system clipboard): a snapshot of the objects copied
    *  with ⌘/Ctrl+C; ⌘/Ctrl+V clones them with a cascading offset. */
   private clipboard: BoardObject[] = [];
@@ -324,10 +320,10 @@ export class BoardCanvas {
     });
     this.stage.add(this.overlay);
     this.stage.add(this.uiLayer);
-    // Peers' selection outlines sit in the overlay, in world space (so they pan/zoom
-    // with the board) and below the cursors (which are added to the overlay lazily).
-    // Peers' in-progress strokes now render as transient DOM drafts (ADR-0009 P3).
-    this.overlay.add(this.remoteSelections);
+    // Peers' selection outlines render on the cursor stage (z-index 2 — ABOVE the DOM object layer),
+    // in world space so they pan/zoom with the board, below the cursors (added later). On the main
+    // stage they'd sit UNDER the DOM objects now that every object is a DOM node (ADR-0009 P3).
+    this.cursorLayer.add(this.remoteSelections);
 
     // ADR-0009 P3 Step 4: the Konva.Transformer + group proxy are retired — every object (single or
     // multi-node group) resizes/rotates via the text-layer's DOM chrome.
@@ -476,71 +472,7 @@ export class BoardCanvas {
   /** The stamp/sticker the next canvas tap places (`mark:<name>` | `emoji:<codepoint>`). */
   setStamp(src: string): void {
     this.currentStamp = src;
-    this.stampGhostSrc = null; // force the cursor preview to reload the new sticker
     this.stampGhostRot = Math.round((Math.random() * 30 - 15) * 10) / 10;
-  }
-  /** Resolve a stamp src to its SVG url — emoji → /emoji/<cp>.svg, mark → /stamps/<name>.svg. */
-  private stampUrl(src: string): string {
-    const i = src.indexOf(":");
-    const kind = src.slice(0, i);
-    const val = src.slice(i + 1);
-    if (kind === "img") return val; // a data URL (e.g. the placed avatar)
-    if (kind === "emoji") return `/emoji/${val}.svg`;
-    return `/stamps/${val}.svg`;
-  }
-  private loadStampImage(src: string, node: Konva.Image): void {
-    const url = this.stampUrl(src);
-    const set = (img: HTMLImageElement | HTMLCanvasElement): void => {
-      node.image(img);
-      node.getLayer()?.batchDraw();
-    };
-    const cached = this.stampImgCache.get(url);
-    if (cached) {
-      if (cached instanceof HTMLCanvasElement || (cached.complete && cached.naturalWidth > 0))
-        set(cached);
-      else cached.addEventListener("load", () => set(cached), { once: true });
-      return;
-    }
-    const isEmoji = src.startsWith("emoji:");
-    const img = new window.Image();
-    if (!isEmoji) this.stampImgCache.set(url, img); // marks/avatar: border already baked / circular
-    img.addEventListener(
-      "load",
-      () => {
-        const out = isEmoji ? this.emojiSticker(img) : img;
-        this.stampImgCache.set(url, out);
-        set(out);
-      },
-      { once: true },
-    );
-    img.src = url;
-  }
-
-  /** Render an emoji as a white-outlined sticker (canvas) so a placed emoji reads like the colour
-   *  marks on the board. The Konva drop shadow behind it makes the white edge pop on a light board. */
-  private emojiSticker(img: HTMLImageElement): HTMLCanvasElement {
-    const S = 120;
-    const pad = 7;
-    const cv = document.createElement("canvas");
-    cv.width = cv.height = S + pad * 2;
-    const ctx = cv.getContext("2d");
-    if (!ctx) return cv;
-    // a white silhouette of the emoji, stamped around a ring of offsets → a uniform white outline
-    const sil = document.createElement("canvas");
-    sil.width = sil.height = S;
-    const sctx = sil.getContext("2d");
-    if (sctx) {
-      sctx.drawImage(img, 0, 0, S, S);
-      sctx.globalCompositeOperation = "source-in";
-      sctx.fillStyle = "#ffffff";
-      sctx.fillRect(0, 0, S, S);
-    }
-    const t = 3.5;
-    for (let a = 0; a < Math.PI * 2 - 0.01; a += Math.PI / 8) {
-      ctx.drawImage(sil, pad + Math.cos(a) * t, pad + Math.sin(a) * t, S, S);
-    }
-    ctx.drawImage(img, pad, pad, S, S);
-    return cv;
   }
   setColor(color: string): void {
     this.color = color;
@@ -788,7 +720,7 @@ export class BoardCanvas {
         lineJoin: "round",
         listening: false,
       });
-      this.overlay.add(ghost);
+      this.cursorLayer.add(ghost); // above the DOM objects (cursor stage), not under them
       this.eraserTail = { ghost, trail: [] };
     }
     this.eraserTail.trail.push({ x: p.x, y: p.y, t: Date.now() });
@@ -818,7 +750,7 @@ export class BoardCanvas {
           : ERASER_TAIL_MS;
         tail.ghost.opacity(0.32 * Math.max(0, 1 - newestAge / ERASER_TAIL_MS));
       }
-      this.overlay.batchDraw();
+      this.cursorLayer.batchDraw();
     }
     if (this.eraserTail || this.erasing) this.ensureEraserTail();
   };
@@ -872,6 +804,12 @@ export class BoardCanvas {
   private bindStamp(): void {
     this.bindTapPlace("stamp", (at) => {
       if (!this.currentStamp) return; // no stamp picked yet → the wheel is just open
+      // Dropping a stamp ON a text/sticky/shape sticks it to that object — it then rides the host's
+      // moves and is deleted with it (but stays its own node). A stamp/stroke under the cursor (or
+      // empty space) leaves it free-floating.
+      const host = this.textLayer.hitTest(at);
+      const attachedTo =
+        host && !this.textLayer.isStampId(host) && !this.textLayer.isInkId(host) ? host : undefined;
       addStamp(this.opts.doc, {
         id: randomId("sp"),
         type: "stamp",
@@ -880,6 +818,7 @@ export class BoardCanvas {
         size: DEFAULT_STAMP_SIZE,
         src: this.currentStamp,
         rotation: this.stampGhostRot, // land at exactly the previewed tilt
+        attachedTo,
         authorId: String(this.opts.awareness.clientID),
       });
       this.stampBurst(at.x, at.y, DEFAULT_STAMP_SIZE); // celebratory pop where it lands
@@ -911,7 +850,10 @@ export class BoardCanvas {
       group.add(line);
       spokes.push({ line, ux: Math.cos(a), uy: Math.sin(a) });
     }
-    this.overlay.add(group);
+    // Draw on the cursor layer (z-index 2, above the DOM object layer) — NOT the main-stage overlay,
+    // which sits beneath the objects, so the pop would otherwise burst behind the stamp it celebrates.
+    // The cursor stage mirrors the camera transform, so these world coords still line up.
+    this.cursorLayer.add(group);
     const start = performance.now();
     const DUR = 460;
     const ease = (t: number): number => 1 - Math.pow(1 - t, 3); // easeOutCubic
@@ -921,46 +863,25 @@ export class BoardCanvas {
       group.opacity(1 - t);
       for (const sp of spokes)
         sp.line.points([sp.ux * r, sp.uy * r, sp.ux * (r + len), sp.uy * (r + len)]);
-      this.overlay.batchDraw();
+      this.cursorLayer.batchDraw();
       if (t < 1) requestAnimationFrame(tick);
       else {
         group.destroy();
-        this.overlay.batchDraw();
+        this.cursorLayer.batchDraw();
       }
     };
     requestAnimationFrame(tick);
   }
 
-  /** Translucent preview of the armed stamp, centred on the cursor while the stamp tool is active. */
+  /** Track the armed stamp's preview under the cursor. The ghost is a DOM `.co-stamp` owned by the
+   *  text-layer, so it z-stacks ABOVE committed objects — exactly where the placed stamp will land
+   *  (the old Konva ghost drew on the overlay, beneath the DOM layer, so it previewed under stickies). */
   private updateStampGhost(p: { x: number; y: number }): void {
     if (!this.currentStamp) return this.hideStampGhost();
-    if (!this.stampGhost) {
-      this.stampGhost = new Konva.Image({ image: undefined, listening: false, opacity: 0.5 });
-      this.overlay.add(this.stampGhost);
-    }
-    const g = this.stampGhost;
-    const size = DEFAULT_STAMP_SIZE;
-    if (this.stampGhostSrc !== this.currentStamp) {
-      this.stampGhostSrc = this.currentStamp;
-      const cached = this.stampImgCache.get(this.stampUrl(this.currentStamp));
-      const ready =
-        cached instanceof HTMLCanvasElement ||
-        (!!cached && cached.complete && cached.naturalWidth > 0);
-      if (!ready) g.image(undefined); // don't show the previous stamp while the new one loads
-      this.loadStampImage(this.currentStamp, g);
-    }
-    g.size({ width: size, height: size });
-    g.offset({ x: size / 2, y: size / 2 }); // centred on the drop point
-    g.position({ x: p.x, y: p.y });
-    g.rotation(this.stampGhostRot);
-    g.visible(true);
-    this.overlay.batchDraw();
+    this.textLayer.showStampGhost(p, this.currentStamp, DEFAULT_STAMP_SIZE, this.stampGhostRot);
   }
   private hideStampGhost(): void {
-    if (this.stampGhost?.visible()) {
-      this.stampGhost.visible(false);
-      this.overlay.batchDraw();
-    }
+    this.textLayer.hideStampGhost();
   }
 
   private bindShapes(): void {
@@ -1929,8 +1850,8 @@ export class BoardCanvas {
       strokeWidth: this.viewport.screenPx(1),
       listening: false,
     });
-    this.uiLayer.add(this.marquee);
-    this.marquee.moveToBottom();
+    this.cursorLayer.add(this.marquee); // above the DOM objects (cursor stage) so it's never occluded
+    this.marquee.moveToBottom(); // …but below the peer rings + cursors on that stage
   }
   private updateMarquee(): void {
     if (!this.marquee || !this.marqueeStart) return;
@@ -1943,6 +1864,7 @@ export class BoardCanvas {
       height: Math.abs(p.y - s.y),
     };
     this.marquee.setAttrs(box);
+    this.cursorLayer.batchDraw(); // the marquee lives on the cursor stage now (above the DOM objects)
     this.applyMarquee(box); // show the resulting selection live, before release
   }
   private endMarquee(): void {
@@ -1998,7 +1920,7 @@ export class BoardCanvas {
     this.marquee?.destroy();
     this.marquee = null;
     this.marqueeStart = null;
-    this.uiLayer.batchDraw();
+    this.cursorLayer.batchDraw();
   }
 
   /** Light-blue per-node outlines for a multi-selection (the union gets the transform box). */
@@ -2006,7 +1928,7 @@ export class BoardCanvas {
     // Per-node multi-selection outlines were drawn here for Konva-selected strokes; every object is a
     // text-layer DOM node now (ADR-0009 P3), so there is nothing canvas-side to outline.
     this.highlightGroup.destroyChildren();
-    this.uiLayer.batchDraw();
+    this.cursorLayer.batchDraw(); // redraw the marquee (now on the cursor stage)
   }
 
   /**
@@ -2135,7 +2057,7 @@ export class BoardCanvas {
       box.destroy();
       this.remoteSelGroupRects.delete(cid);
     }
-    this.overlay.batchDraw();
+    this.cursorLayer.batchDraw();
   }
 
   /** Union AABB of an arbitrary id list (a peer's selection) across every node type — strokes,
@@ -2554,8 +2476,7 @@ export class BoardCanvas {
         moving = true;
       });
       // remote-dragged / resized objects (position + scale)
-      this.cursorLayer.batchDraw(); // cursors glided this frame (their own top stage)
-      this.overlay.batchDraw();
+      this.cursorLayer.batchDraw(); // cursors + peer rings glided this frame (the above-objects stage)
       if (moving) {
         this.raf = requestAnimationFrame(step);
       } else {

@@ -8,7 +8,7 @@ const pending = new Map<string, Promise<string>>();
 
 function render(img: HTMLImageElement): string {
   const S = 120;
-  const pad = 7;
+  const pad = 14; // ≥ outline thickness `t`, else the white ring clips at the canvas edge
   const cv = document.createElement("canvas");
   cv.width = cv.height = S + pad * 2;
   const ctx = cv.getContext("2d");
@@ -22,7 +22,7 @@ function render(img: HTMLImageElement): string {
     sctx.fillStyle = "#ffffff";
     sctx.fillRect(0, 0, S, S);
   }
-  const t = 3.5; // outline thickness
+  const t = 12; // outline thickness ≈8% of the sticker box — a chunky FigJam-style white border
   for (let a = 0; a < Math.PI * 2 - 0.01; a += Math.PI / 8) {
     ctx.drawImage(sil, pad + Math.cos(a) * t, pad + Math.sin(a) * t, S, S);
   }

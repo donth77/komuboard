@@ -84,7 +84,8 @@ export class CoStampWheel extends HTMLElement {
       if (!key) return;
       this.active = key; // light up the chosen slot (the avatar matches on the "avatar" sentinel)
       const src = key === "avatar" ? this.avatarStampSrc() : key;
-      if (src) this.dispatchEvent(new CustomEvent("stamp-pick", { detail: { src }, bubbles: true }));
+      if (src)
+        this.dispatchEvent(new CustomEvent("stamp-pick", { detail: { src }, bubbles: true }));
     });
   }
 
@@ -184,46 +185,61 @@ export class CoStampWheel extends HTMLElement {
   /** Render the user's avatar (photo, else colour + initials) to a circular PNG data URL so it can
    *  be placed as a stamp. Falls back to the (always clean) initials circle if the photo taints. */
   private avatarStampSrc(): string {
+    // Draw the avatar as a sticker: a white ring (matching the emoji/mark border) around the circular
+    // photo (or the initials disc). `withPhoto=false` is the tainted-canvas fallback (initials only).
+    const draw = (ctx: CanvasRenderingContext2D, S: number, withPhoto: boolean): void => {
+      const margin = 4; // breathing room for the CSS drop-shadow
+      const R = S / 2 - margin; // outer (white border) circle radius
+      const ring = 11; // white border thickness (≈ the emoji/mark ~8% outline)
+      const Rp = R - ring; // inner content circle radius
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(S / 2, S / 2, R, 0, Math.PI * 2);
+      ctx.fill();
+      const img = this.avatarImg;
+      if (withPhoto && img && img.naturalWidth > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(S / 2, S / 2, Rp, 0, Math.PI * 2);
+        ctx.clip();
+        const d = Rp * 2;
+        const s = Math.max(d / img.naturalWidth, d / img.naturalHeight);
+        const w = img.naturalWidth * s;
+        const h = img.naturalHeight * s;
+        ctx.drawImage(img, S / 2 - w / 2, S / 2 - h / 2, w, h);
+        ctx.restore();
+      } else {
+        this.drawInitials(ctx, S / 2, S / 2, Rp);
+      }
+    };
     const S = 128;
     const cv = document.createElement("canvas");
     cv.width = cv.height = S;
     const ctx = cv.getContext("2d");
     if (!ctx) return "";
-    const img = this.avatarImg;
-    if (img && img.naturalWidth > 0) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
-      ctx.clip();
-      const s = Math.max(S / img.naturalWidth, S / img.naturalHeight);
-      const w = img.naturalWidth * s;
-      const h = img.naturalHeight * s;
-      ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
-      ctx.restore();
-    } else {
-      this.drawInitials(ctx, S);
-    }
+    draw(ctx, S, true);
     try {
       return "img:" + cv.toDataURL("image/png");
     } catch {
       const c2 = document.createElement("canvas");
       c2.width = c2.height = S;
       const x = c2.getContext("2d");
-      if (x) this.drawInitials(x, S);
+      if (x) draw(x, S, false); // tainted photo → initials only (always exportable)
       return "img:" + c2.toDataURL("image/png");
     }
   }
 
-  private drawInitials(ctx: CanvasRenderingContext2D, S: number): void {
+  /** Draw the initials disc (colour + centred initials) of radius `r` centred at (cx, cy). */
+  private drawInitials(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
     ctx.fillStyle = this.profile?.color ?? "#8a90a2";
     ctx.beginPath();
-    ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#fff";
-    ctx.font = `600 ${Math.round(S * 0.42)}px Inter, system-ui, sans-serif`;
+    ctx.font = `600 ${Math.round(r * 0.84)}px Inter, system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(initials(this.profile?.name ?? "?"), S / 2, S / 2 + S * 0.03);
+    ctx.fillText(initials(this.profile?.name ?? "?"), cx, cy + r * 0.06);
   }
 }
 

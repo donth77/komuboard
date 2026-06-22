@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import {
   addConnector,
+  addStamp,
   addStroke,
   addText,
   cloneObject,
@@ -415,5 +416,58 @@ describe("cloneObject (copy / paste)", () => {
     const clone = asConnector(cloneObject(src, "c2", "me", 2, 2));
     expect(clone.from.shapeId).toBeUndefined();
     expect(clone.to.shapeId).toBeUndefined();
+  });
+});
+
+describe("stamp attachment", () => {
+  const stampAt = (
+    id: string,
+    x: number,
+    y: number,
+    over: Partial<Parameters<typeof addStamp>[1]> = {},
+  ) => ({ id, type: "stamp" as const, x, y, size: 30, src: "emoji:2705", authorId: "u1", ...over });
+
+  it("rides its host when the host is translated", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("host", { x: 100, y: 50 }));
+    addStamp(doc, stampAt("st", 110, 60, { attachedTo: "host" }));
+    translateObjects(doc, ["host"], 10, 20);
+    const st = readObject(objectsMap(doc).get("st")!) as Extract<BoardObject, { type: "stamp" }>;
+    expect([st.x, st.y]).toEqual([120, 80]); // followed the host's +10,+20
+  });
+
+  it("does not double-move when host + stamp are translated together (group move)", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("host", { x: 100, y: 50 }));
+    addStamp(doc, stampAt("st", 110, 60, { attachedTo: "host" }));
+    translateObjects(doc, ["host", "st"], 10, 0);
+    const st = readObject(objectsMap(doc).get("st")!) as Extract<BoardObject, { type: "stamp" }>;
+    expect(st.x).toBe(120); // moved once (+10), not twice
+  });
+
+  it("is deleted when its host is deleted, but survives as its own node otherwise", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("host"));
+    addText(doc, textObj("other"));
+    addStamp(doc, stampAt("st", 110, 60, { attachedTo: "host" }));
+    deleteObjects(doc, ["other"]); // unrelated delete leaves it
+    expect(objectsMap(doc).get("st")).toBeDefined();
+    deleteObjects(doc, ["host"]); // host delete cascades
+    expect(objectsMap(doc).get("st")).toBeUndefined();
+    expect(orderArray(doc).toArray()).not.toContain("st");
+  });
+
+  it("a free (unattached) stamp ignores a host's move + delete", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("host", { x: 100, y: 50 }));
+    addStamp(doc, stampAt("free", 110, 60)); // no attachedTo
+    translateObjects(doc, ["host"], 10, 20);
+    deleteObjects(doc, ["host"]);
+    const free = readObject(objectsMap(doc).get("free")!) as Extract<
+      BoardObject,
+      { type: "stamp" }
+    >;
+    expect([free.x, free.y]).toEqual([110, 60]); // unmoved
+    expect(objectsMap(doc).get("free")).toBeDefined(); // undeleted
   });
 });

@@ -163,10 +163,14 @@ export interface StampObject {
   src: string;
   /** Rotation in degrees (clockwise) about the centre. Absent/0 = upright. */
   rotation?: number;
+  /** Id of the text/sticky/shape this stamp is stuck to: it rides that object's moves and is deleted
+   *  with it, while staying an independent, individually selectable node. Absent = free-floating. */
+  attachedTo?: string;
   authorId: string;
 }
-/** Default placed-stamp size in canvas units (≈64 px at the 100% default zoom). */
-export const DEFAULT_STAMP_SIZE = 64;
+/** Default placed-stamp size in canvas units — a small sticker (smaller than a sticky's 150), close to
+ *  FigJam's default sticker footprint without being oversized. */
+export const DEFAULT_STAMP_SIZE = 48;
 
 export type BoardObject = StrokeObject | TextObject | ConnectorObject | StampObject;
 
@@ -465,12 +469,24 @@ export function deleteObject(doc: Y.Doc, id: string): void {
 }
 
 /** Delete several objects atomically (e.g. a multi-selection). */
+/** Ids of every stamp attached to an object already in `targets` (one level — stamps have no children). */
+function attachedStampIds(objs: Y.Map<Y.Map<unknown>>, targets: Set<string>): string[] {
+  const out: string[] = [];
+  objs.forEach((m, id) => {
+    if (targets.has(id) || m.get("type") !== "stamp") return;
+    const att = m.get("attachedTo");
+    if (typeof att === "string" && targets.has(att)) out.push(id);
+  });
+  return out;
+}
+
 export function deleteObjects(doc: Y.Doc, ids: Iterable<string>): void {
   const idSet = new Set(ids);
   if (!idSet.size) return;
   doc.transact(() => {
     const objs = objectsMap(doc);
     const order = orderArray(doc);
+    for (const sid of attachedStampIds(objs, idSet)) idSet.add(sid); // a sticker dies with its host
     for (const id of idSet) objs.delete(id);
     // One pass over the order array, deleting matching indices back-to-front so the
     // remaining indices stay valid — O(n) instead of toArray().indexOf() per id (O(n²)).
@@ -487,7 +503,9 @@ export function translateObjects(doc: Y.Doc, ids: Iterable<string>, dx: number, 
   if (!dx && !dy) return;
   doc.transact(() => {
     const objs = objectsMap(doc);
-    for (const id of ids) {
+    const set = new Set(ids);
+    for (const sid of attachedStampIds(objs, set)) set.add(sid); // a sticker rides its sticky/shape
+    for (const id of set) {
       const m = objs.get(id);
       if (!m) continue;
       if (m.get("type") === "connector") {
@@ -539,6 +557,7 @@ export function addStamp(doc: Y.Doc, s: StampObject): void {
     m.set("size", s.size);
     m.set("src", s.src);
     if (s.rotation != null) m.set("rotation", s.rotation);
+    if (s.attachedTo != null) m.set("attachedTo", s.attachedTo);
     m.set("authorId", s.authorId);
     objectsMap(doc).set(s.id, m);
     orderArray(doc).push([s.id]);
@@ -581,6 +600,8 @@ function readStamp(m: Y.Map<unknown>): StampObject | null {
   };
   const rotation = m.get("rotation");
   if (typeof rotation === "number" && Number.isFinite(rotation)) stamp.rotation = rotation;
+  const attachedTo = m.get("attachedTo");
+  if (typeof attachedTo === "string" && attachedTo) stamp.attachedTo = attachedTo;
   return stamp;
 }
 
