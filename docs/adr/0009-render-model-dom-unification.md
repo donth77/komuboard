@@ -1,7 +1,7 @@
 # ADR-0009 — Unify the 2D render model on the DOM for per-object z-order (placement stacking)
 
 - **Status:** Accepted (2026-06-21) · **Phases 0–3 Implemented (2026-06-22)** — strokes/connectors/stamps/text/shapes/stickies all render, interact, and transform on the DOM, z-ordered by `orderArray`; the `Konva.Transformer` and every Konva object layer are retired (only the camera/cursor stages + a transient-chrome overlay remain on Konva). Phase 4 (LOD at far zoom, dense-board profiling, a11y) is the only open work.
-- **Deciders:** Coboard maintainers
+- **Deciders:** Komuboard maintainers
 - **Related:** [ADR-0002 — Konva-first + documented PixiJS/WebGL trigger](README.md) ([04 §9 library table](../04-technical-architecture.md)) · [ADR-0005 — UI chrome is Web Components](0005-ui-chrome-web-components.md) · [ADR-0008 — framework/Lit ladder](0008-ui-framework-adoption-ladder.md) · [04 §1, §9](../04-technical-architecture.md) · [07 §2.1 renderer perf](../07-engineering-quality-security-accessibility.md)
 
 ## Context

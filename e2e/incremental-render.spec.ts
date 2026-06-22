@@ -29,12 +29,12 @@ test("incremental render: a move repositions the node in place (no double offset
   const [id] = await objectIds(page);
   expect(id).toBeTruthy();
   const scale = await page.evaluate(
-    () => (window as unknown as BoardWindow).__coboard.canvas!.getZoomPercent() / 100,
+    () => (window as unknown as BoardWindow).__komuboard.canvas!.getZoomPercent() / 100,
   );
 
   await page.keyboard.press("v"); // select tool
   const r0 = await page.evaluate(
-    (id) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(id),
+    (id) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(id),
     id,
   );
   expect(r0).not.toBeNull();
@@ -49,7 +49,7 @@ test("incremental render: a move repositions the node in place (no double offset
   await page.mouse.up();
 
   const r1 = await page.evaluate(
-    (id) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(id),
+    (id) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(id),
     id,
   );
   expect(r1).not.toBeNull();
@@ -91,7 +91,7 @@ test("incremental render: add then delete-all rebuild correctly", async ({ brows
   expect(ids.length).toBe(2);
   for (const id of ids) {
     const r = await page.evaluate(
-      (id) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(id),
+      (id) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(id),
       id,
     );
     expect(r, `stroke ${id} should be rendered`).not.toBeNull();
@@ -104,12 +104,12 @@ test("incremental render: add then delete-all rebuild correctly", async ({ brows
 
   await expect
     .poll(() =>
-      page.evaluate(() => (window as unknown as BoardWindow).__coboard.doc.getMap("objects").size),
+      page.evaluate(() => (window as unknown as BoardWindow).__komuboard.doc.getMap("objects").size),
     )
     .toBe(0);
   for (const id of ids) {
     const r = await page.evaluate(
-      (id) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(id),
+      (id) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(id),
       id,
     );
     expect(r, `stroke ${id} should be gone`).toBeNull();

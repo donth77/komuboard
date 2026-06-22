@@ -1,6 +1,6 @@
-# Coboard — Scaling & Cost
+# Komuboard — Scaling & Cost
 
-> _How Coboard maximizes concurrent users while running at $0: the free-tier limit math, a capacity model with explicit arithmetic, per-room sharding, cost-control techniques, the first paid upgrade, and provider comparison._
+> _How Komuboard maximizes concurrent users while running at $0: the free-tier limit math, a capacity model with explicit arithmetic, per-room sharding, cost-control techniques, the first paid upgrade, and provider comparison._
 
 **Related documents:** [README](../README.md) · [01 — Product Vision & References](./01-product-vision-and-references.md) · [02 — Features & Scope](./02-features-and-scope.md) · [03 — Visual Design / UI / UX](./03-visual-design-ui-ux.md) · [04 — Technical Architecture](./04-technical-architecture.md) · [06 — Implementation Roadmap](./06-implementation-roadmap.md) · [07 — Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md)
 
@@ -8,7 +8,7 @@
 
 ## 0. North star for this document
 
-Coboard's hard constraint (see [01 — Product Vision & References](./01-product-vision-and-references.md)): **hostable AND runnable for $0 on free tiers, at meaningful concurrency.** This document derives a defensible headline number — **~450 sustained concurrent collaborators under a balanced (~50%-active-editor) mix, scaling to ~1,000–2,000 under a realistic viewer-heavy mix, across many rooms per Cloudflare account per day for $0** (see §3.2) — and shows the arithmetic, the assumptions, and the levers that move it.
+Komuboard's hard constraint (see [01 — Product Vision & References](./01-product-vision-and-references.md)): **hostable AND runnable for $0 on free tiers, at meaningful concurrency.** This document derives a defensible headline number — **~450 sustained concurrent collaborators under a balanced (~50%-active-editor) mix, scaling to ~1,000–2,000 under a realistic viewer-heavy mix, across many rooms per Cloudflare account per day for $0** (see §3.2) — and shows the arithmetic, the assumptions, and the levers that move it.
 
 > ⚠️ **All figures change.** _(Figures in this doc are current as of June 2026.)_ Every number below is a snapshot for design purposes and **must be re-verified against current Cloudflare documentation before launch.** Cloudflare adjusts free allotments, billing ratios, and limits regularly (the WS size limit and SQLite-DO storage billing both changed in late 2025 / Jan 2026). Treat this doc as a model, not a contract. Primary sources to check:
 >
@@ -23,9 +23,9 @@ Coboard's hard constraint (see [01 — Product Vision & References](./01-product
 
 ## 1. Free-tier limits (per Cloudflare service)
 
-Coboard uses only Cloudflare services so the whole system bills against **one free account**. Static assets are served from Pages (a separate, effectively-uncapped meter), so only realtime WS + uploads + API hit the billed Workers/DO meters.
+Komuboard uses only Cloudflare services so the whole system bills against **one free account**. Static assets are served from Pages (a separate, effectively-uncapped meter), so only realtime WS + uploads + API hit the billed Workers/DO meters.
 
-| Service                               | Free-tier allotment (verify!)                                                                                                             | What consumes it in Coboard                                                                                           | Notes / billing quirks                                                                                                                                                                                             |
+| Service                               | Free-tier allotment (verify!)                                                                                                             | What consumes it in Komuboard                                                                                           | Notes / billing quirks                                                                                                                                                                                             |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Workers (requests)**                | ~100,000 requests/day (resets daily, UTC); ~10 ms CPU/request typical guidance                                                            | Initial WS upgrade (`fetch`), HTTP API calls (create room, asset presign), each **inbound** WS message routed to a DO | A WS **upgrade** = 1 request. Inbound WS **messages** bill on the DO meter (below), not here. Static assets do **not** count (served by Pages).                                                                    |
 | **Durable Objects (requests)**        | ~100,000 requests/day (shared concept with Workers free; DO now free-tier eligible when **SQLite-backed**)                                | One DO per room; each inbound WS message + each alarm/storage op = DO requests (with the WS ratio)                    | **20:1 inbound-WS ratio:** 1M inbound WS messages bill as 50k DO requests. ⇒ **100k DO requests/day ≈ 2,000,000 inbound WS messages/day.** **Outbound** WS messages are **free**. Protocol **pings** are **free**. |
@@ -62,7 +62,7 @@ Free inbound WS message ceiling     = 100,000 × 20
 | WS **upgrade** (connection open)                                | Yes (1 Worker request)           | One-time per connection; negligible vs message volume.                                                                             |
 | DO **duration** (GB-s while resident)                           | Yes — **but**                    | **Hibernation** drops resident time to ~0 while idle, so a room with no active drawers costs ~nothing even with people connected.  |
 
-> **Design corollary — "cost follows the pen, not the eyeballs."** Because outbound is free and inbound is throttled, **idle viewers are nearly free** and **active drawers are the only meaningful cost.** Coboard's pricing math is therefore dominated by _simultaneously-active-drawers_, not raw room population.
+> **Design corollary — "cost follows the pen, not the eyeballs."** Because outbound is free and inbound is throttled, **idle viewers are nearly free** and **active drawers are the only meaningful cost.** Komuboard's pricing math is therefore dominated by _simultaneously-active-drawers_, not raw room population.
 
 ### 2.3 Per-user message budget
 
@@ -178,7 +178,7 @@ flowchart TB
 
 ### 4.3 Horizontal scale via many independent rooms (the natural sharding)
 
-Coboard's normal scaling is **embarrassingly parallel**: every room is its own DO with its own memory, CPU, and isolation. 1,000 rooms = 1,000 DOs, each tiny, each hibernating when idle. There is **no shared hot path** between rooms — the platform shards by room id for free. This is why the realistic concurrency ceiling (§3.2) is dominated by the **account-wide message budget**, not by any single instance's limits.
+Komuboard's normal scaling is **embarrassingly parallel**: every room is its own DO with its own memory, CPU, and isolation. 1,000 rooms = 1,000 DOs, each tiny, each hibernating when idle. There is **no shared hot path** between rooms — the platform shards by room id for free. This is why the realistic concurrency ceiling (§3.2) is dominated by the **account-wide message budget**, not by any single instance's limits.
 
 ---
 
@@ -221,7 +221,7 @@ Flip to **Workers Paid (~$5/month base)** when the **account-wide daily message 
 
 ## 7. Alternative free realtime stacks — comparison & verdict
 
-| Stack                                               | Free realtime model                                                                                    | Idle cost                                       | Per-room isolation          | Edge/global                      | CRDT/Yjs fit                       | Verdict for Coboard                                                                                                          |
+| Stack                                               | Free realtime model                                                                                    | Idle cost                                       | Per-room isolation          | Edge/global                      | CRDT/Yjs fit                       | Verdict for Komuboard                                                                                                          |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | --------------------------- | -------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **Cloudflare DO + PartyServer** _(chosen)_          | WS in a stateful DO per room; **outbound free**, 20:1 inbound, hibernation                             | **~0 when idle** (hibernation)                  | **Native — 1 DO/room**      | **Yes, global edge**             | **First-class** (Y-PartyServer)    | ✅ **Wins:** per-room isolation, free outbound fan-out, zero idle cost, co-located SQLite persistence, $0 baseline.          |
 | **Supabase Realtime (free)**                        | Postgres-backed channels/broadcast; concurrent-connection + message caps                               | Low but connection-capped                       | Channel-based, shared infra | Regional (single region on free) | Yjs only via custom broadcast      | ❌ Connection caps + single region hurt cross-reality presence; no per-room compute isolation.                               |
@@ -229,7 +229,7 @@ Flip to **Workers Paid (~$5/month base)** when the **account-wide daily message 
 | **Ably / Pusher (free)**                            | Managed pub/sub; **message + peak-connection caps** (e.g. ~100–200 peak conns, ~ low-millions msgs/mo) | Low                                             | Channels, shared            | Global                           | Transport only (Yjs over messages) | ❌ Tight peak-connection caps throttle presence-heavy rooms; no compute/persistence layer (still need a backend).            |
 | **Self-hosted y-websocket on free VM (Fly/Render)** | Run the canonical Yjs WS server on a free-tier VM                                                      | **Pays for idle** (VM runs 24/7 or cold-starts) | Process-level, manual       | Single region                    | **Perfect** (native Yjs)           | ❌ Free VMs sleep/cold-start, single region, you operate it; **idle cost + ops burden** break the "$0, no-ops, global" goal. |
 
-**Verdict:** Cloudflare Durable Objects + PartyServer is the only option that simultaneously gives **(a)** native per-room compute isolation, **(b)** free outbound broadcast (cost scales with senders, not receivers), **(c)** **zero idle cost via hibernation**, **(d)** co-located free SQLite persistence, and **(e)** global edge placement — exactly the four properties Coboard's economics depend on. The alternatives each break at least one (idle cost, per-receiver billing, connection caps, or single-region).
+**Verdict:** Cloudflare Durable Objects + PartyServer is the only option that simultaneously gives **(a)** native per-room compute isolation, **(b)** free outbound broadcast (cost scales with senders, not receivers), **(c)** **zero idle cost via hibernation**, **(d)** co-located free SQLite persistence, and **(e)** global edge placement — exactly the four properties Komuboard's economics depend on. The alternatives each break at least one (idle cost, per-receiver billing, connection caps, or single-region).
 
 ---
 

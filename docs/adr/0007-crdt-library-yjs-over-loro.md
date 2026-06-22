@@ -1,12 +1,12 @@
 # ADR-0007 — Stay on Yjs as the CRDT; Loro evaluated and deferred
 
 - **Status:** Accepted (2026-06-20)
-- **Deciders:** Coboard maintainers
+- **Deciders:** Komuboard maintainers
 - **Related:** [04 §2 Yjs data model](../04-technical-architecture.md) · [04 §3 sync + awareness](../04-technical-architecture.md) · [04 §4 Durable Object design](../04-technical-architecture.md) · [05 — Scaling & Cost](../05-scaling-and-cost.md) · [ADR-0006 — selection ownership on awareness](0006-selection-ownership-last-writer-wins.md) · [09 — Tech-debt backlog](../09-tech-debt-and-audit-backlog.md)
 
 ## Context
 
-Yjs is Coboard's single source of truth (the intent of ADR-0001 / [04 §2](../04-technical-architecture.md)), and the realtime stack is built on it **end to end**:
+Yjs is Komuboard's single source of truth (the intent of ADR-0001 / [04 §2](../04-technical-architecture.md)), and the realtime stack is built on it **end to end**:
 
 - **`y-partyserver`** runs the entire Yjs sync protocol _inside each Durable Object_ — handshake, binary-update relay, awareness relay, hibernation handling (ADR-0004).
 - **`y-protocols/awareness`** carries all presence: cursors, selections, the live draw/drag/resize previews, and last-writer-wins selection ownership ([ADR-0006](0006-selection-ownership-last-writer-wins.md)).
@@ -22,7 +22,7 @@ The question raised: would **[Loro](https://loro.dev/)** (a Rust-core CRDT with 
 The deciding factor is **integration, not the CRDT algorithm**:
 
 1. **No Cloudflare/Durable-Objects story for Loro.** `y-partyserver` gives the server-side sync + awareness relay + hibernation for free; there is no `loro-partyserver` equivalent. Switching means hand-building that layer — the hardest, most-tested part of the system — ourselves.
-2. **Loro's headline strengths aren't needs Coboard has.** Movable tree → N/A (flat objects map + a z-order array). Rich-text Fugue → no heavy collaborative rich-text yet (Yjs has `Y.Text` + ProseMirror/Quill/CodeMirror bindings if that changes). Time-travel → not on the roadmap; `Y.UndoManager` + snapshots suffice, and M2 snapshot compaction is already planned. Raw performance → **not the bottleneck** (the M1 audits located the costs in client-side awareness/render hot paths, which a CRDT swap would not fix). Both renderers (Konva 2D, A-Frame VR) run in-browser, so Loro's cross-language edge yields nothing here.
+2. **Loro's headline strengths aren't needs Komuboard has.** Movable tree → N/A (flat objects map + a z-order array). Rich-text Fugue → no heavy collaborative rich-text yet (Yjs has `Y.Text` + ProseMirror/Quill/CodeMirror bindings if that changes). Time-travel → not on the roadmap; `Y.UndoManager` + snapshots suffice, and M2 snapshot compaction is already planned. Raw performance → **not the bottleneck** (the M1 audits located the costs in client-side awareness/render hot paths, which a CRDT swap would not fix). Both renderers (Konva 2D, A-Frame VR) run in-browser, so Loro's cross-language edge yields nothing here.
 3. **Ecosystem maturity.** Yjs ≈ 920K weekly downloads with the deepest editor-binding and provider ecosystem incl. Cloudflare/PartyServer; Loro ≈ 12K weekly downloads with a nascent server ecosystem.
 
 A migration would touch the server (`y-partyserver` → custom Loro-on-DO sync), the presence/ownership layer, persistence, the schema, and the docs — high risk for benefits the product does not currently need.

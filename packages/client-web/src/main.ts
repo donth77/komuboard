@@ -13,7 +13,7 @@ import {
   setUserProfile,
   usersMap,
   type PresenceState,
-} from "@coboard/shared";
+} from "@komuboard/shared";
 import { BoardCanvas, type ToolId } from "./canvas";
 import { createAppStore } from "./store";
 import { createDialog } from "./dialog";
@@ -41,14 +41,14 @@ import { SWATCHES } from "./palette";
 declare global {
   interface Window {
     /** Test/debug hook (used by the e2e two-client convergence test). */
-    __coboard?: { doc: Y.Doc; provider: YProvider; awareness: Awareness; canvas?: BoardCanvas };
+    __komuboard?: { doc: Y.Doc; provider: YProvider; awareness: Awareness; canvas?: BoardCanvas };
   }
 }
 
 // --------------------------------------------------------------------------
 // Theme: default to OS preference, follow it until the user picks, persist.
 // --------------------------------------------------------------------------
-const THEME_KEY = "coboard-theme";
+const THEME_KEY = "komuboard-theme";
 type Theme = "light" | "dark";
 const darkMedia = window.matchMedia("(prefers-color-scheme: dark)");
 const systemTheme = (): Theme => (darkMedia.matches ? "dark" : "light");
@@ -68,7 +68,7 @@ applyTheme(theme);
 // the doc — two people in a room can view different grids). The LOD/crossfade
 // rendering lives in styles.css + ViewportController.syncGrid().
 // --------------------------------------------------------------------------
-const GRID_KEY = "coboard-grid";
+const GRID_KEY = "komuboard-grid";
 type GridMode = "dots" | "lines";
 const storedGrid = (): GridMode | null => {
   const v = localStorage.getItem(GRID_KEY);
@@ -86,7 +86,7 @@ const applyGrid = (g: GridMode): void => {
 // --------------------------------------------------------------------------
 // The room comes from the URL (?room= or first path segment). If there's no
 // room, mint a fresh shareable one and write it into the address bar — so
-// opening Coboard with no link drops you into your own room, not a shared lobby.
+// opening Komuboard with no link drops you into your own room, not a shared lobby.
 let room = roomIdFromUrl(new URL(window.location.href), "");
 if (!room) {
   room = randomRoomId();
@@ -108,27 +108,27 @@ interface Identity {
   photo?: string;
 }
 function loadIdentity(): Identity {
-  let id = localStorage.getItem("coboard-uid");
+  let id = localStorage.getItem("komuboard-uid");
   if (!id) {
     id = randomId("u");
-    localStorage.setItem("coboard-uid", id);
+    localStorage.setItem("komuboard-uid", id);
   }
-  let name = localStorage.getItem("coboard-name");
+  let name = localStorage.getItem("komuboard-name");
   if (!name) {
     name = randomGuestName();
-    localStorage.setItem("coboard-name", name);
+    localStorage.setItem("komuboard-name", name);
   }
-  let color = localStorage.getItem("coboard-color");
+  let color = localStorage.getItem("komuboard-color");
   if (!color) {
     const seed = [...id].reduce((a, c) => a + c.charCodeAt(0), 0);
     color = pickUserColor(seed);
-    localStorage.setItem("coboard-color", color);
+    localStorage.setItem("komuboard-color", color);
   }
-  return { id, name, color, photo: localStorage.getItem("coboard-photo") ?? undefined };
+  return { id, name, color, photo: localStorage.getItem("komuboard-photo") ?? undefined };
 }
 const identity = loadIdentity();
 const user: PresenceState = { name: identity.name, color: identity.color };
-window.__coboard = { doc: ydoc, provider, awareness: provider.awareness };
+window.__komuboard = { doc: ydoc, provider, awareness: provider.awareness };
 
 // pen state — fixed palette (./palette); a trailing rainbow swatch opens the custom picker.
 const penColor = "#0e1116";
@@ -188,7 +188,7 @@ const canvas = new BoardCanvas({
     wheel?.render();
   },
 });
-if (window.__coboard) window.__coboard.canvas = canvas; // e2e hook: introspect remote presence
+if (window.__komuboard) window.__komuboard.canvas = canvas; // e2e hook: introspect remote presence
 canvas.setColor(penColor);
 canvas.setWidth(8);
 provider.awareness.setLocalStateField("id", identity.id);
@@ -550,7 +550,7 @@ function toggleAppMenu(): void {
   menu.className = "app-menu";
   menu.setAttribute("role", "menu");
   menu.innerHTML =
-    '<div class="app-menu-head"><span class="logo">◳</span> <strong>Coboard</strong></div>' +
+    '<div class="app-menu-head"><span class="logo">◳</span> <strong>Komuboard</strong></div>' +
     '<div class="app-menu-body">' +
     `<button class="app-menu-item" type="button" data-act="profile"><span>Edit profile</span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
     '<div class="app-menu-sep"></div>' +
@@ -653,10 +653,10 @@ const profile = createProfileDialog({
     identity.photo = p.photo;
     user.name = identity.name;
     user.color = identity.color;
-    localStorage.setItem("coboard-name", identity.name);
-    localStorage.setItem("coboard-color", identity.color);
-    if (identity.photo) localStorage.setItem("coboard-photo", identity.photo);
-    else localStorage.removeItem("coboard-photo");
+    localStorage.setItem("komuboard-name", identity.name);
+    localStorage.setItem("komuboard-color", identity.color);
+    if (identity.photo) localStorage.setItem("komuboard-photo", identity.photo);
+    else localStorage.removeItem("komuboard-photo");
     provider.awareness.setLocalStateField("user", identity.name);
     provider.awareness.setLocalStateField("color", identity.color);
     publishProfile();

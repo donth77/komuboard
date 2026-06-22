@@ -1,14 +1,14 @@
-# Coboard — README
+# Komuboard — README
 
 > _One whiteboard. Every screen — desktop, mobile, and VR._
 
-**Coboard** is a free-to-run, realtime, online collaborative whiteboard that works everywhere: desktop (mouse), mobile/tablet (touch), and VR headsets (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence — no signup. The same board document is the single source of truth shared by both the 2D web renderer and the immersive 3D VR renderer, so what you sketch on a phone shows up on a headset and vice versa, in real time.
+**Komuboard** is a free-to-run, realtime, online collaborative whiteboard that works everywhere: desktop (mouse), mobile/tablet (touch), and VR headsets (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence — no signup. The same board document is the single source of truth shared by both the 2D web renderer and the immersive 3D VR renderer, so what you sketch on a phone shows up on a headset and vice versa, in real time.
 
-> Note: "Coboard" is a working/placeholder name — feel free to rename it before launch. (The repository directory is currently `whiteboard-vr`, which is historical and shares a name with reference product #1 "Whiteboard VR"; the product itself is **Coboard**.)
+> Note: "Komuboard" is a working/placeholder name — feel free to rename it before launch. (The repository directory is currently `whiteboard-vr`, which is historical and shares a name with reference product #1 "Whiteboard VR"; the product itself is **Komuboard**.)
 
 ## What is this?
 
-This repository began as a **planning package** and now also carries the **M0 code foundations** under `packages/`. It holds the canonical design and architecture documents that define what Coboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. `docs/index.html` is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
+This repository began as a **planning package** and now also carries the **M0 code foundations** under `packages/`. It holds the canonical design and architecture documents that define what Komuboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. `docs/index.html` is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
 
 ## Documents
 
@@ -54,23 +54,23 @@ The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockup
 
 ## Reference products
 
-Coboard learns from four products — see [docs/01](./docs/01-product-vision-and-references.md) for what we borrow from each.
+Komuboard learns from four products — see [docs/01](./docs/01-product-vision-and-references.md) for what we borrow from each.
 
 1. [Whiteboard VR — Online Collaboration](https://devpost.com/software/whiteboard-vr-online-collaboration) ([source](https://github.com/marlon360/whiteboard-vr)) — our closest spiritual predecessor: cross-reality + room-code, no signup.
 2. [Figma FigJam](https://www.figma.com/figjam/) — cursor chat, stamps, spotlight, clean infinite canvas.
 3. [Miro](https://miro.com/online-whiteboard/) — shape/connector/template breadth, voting, timer, presentation mode.
 4. [Canva Whiteboards](https://www.canva.com/online-whiteboard/) — sticky-note Sort, colorful labeled cursors, AI summarize.
 
-**Coboard's differentiator:** truly free-to-self-host on edge infra, and a single shared document across 2D and immersive VR.
+**Komuboard's differentiator:** truly free-to-self-host on edge infra, and a single shared document across 2D and immersive VR.
 
 ## Run it for $0
 
-Coboard is designed to host **and** run for $0 on a single Cloudflare account at meaningful concurrency. Static assets (the SPA + A-Frame/VR bundles) serve from Cloudflare Pages' global CDN, which does not consume Worker requests. Realtime collaboration runs on Workers + Durable Objects: one Durable Object per room (PartyServer + Y-PartyServer), using the WebSocket Hibernation API so idle rooms stop accruing duration charges while clients stay connected. Cursor/presence traffic is ephemeral awareness, throttled and binary-encoded to respect the 20:1 inbound-WebSocket billing ratio and the free request budget; content edits persist as compact Yjs updates in the DO's SQLite storage, and uploaded images live in R2 (zero egress). See [docs/05-scaling-and-cost.md](./docs/05-scaling-and-cost.md) for the full math, capacity tables, and the upgrade path. _Exact free-tier figures change — verify against current Cloudflare docs._
+Komuboard is designed to host **and** run for $0 on a single Cloudflare account at meaningful concurrency. Static assets (the SPA + A-Frame/VR bundles) serve from Cloudflare Pages' global CDN, which does not consume Worker requests. Realtime collaboration runs on Workers + Durable Objects: one Durable Object per room (PartyServer + Y-PartyServer), using the WebSocket Hibernation API so idle rooms stop accruing duration charges while clients stay connected. Cursor/presence traffic is ephemeral awareness, throttled and binary-encoded to respect the 20:1 inbound-WebSocket billing ratio and the free request budget; content edits persist as compact Yjs updates in the DO's SQLite storage, and uploaded images live in R2 (zero egress). See [docs/05-scaling-and-cost.md](./docs/05-scaling-and-cost.md) for the full math, capacity tables, and the upgrade path. _Exact free-tier figures change — verify against current Cloudflare docs._
 
 ## Planned repo structure
 
 ```text
-coboard/
+komuboard/
 ├── README.md                 # this index
 ├── docs/                     # the planning package (01–08)
 │   ├── index.html            # interactive combined view of all docs
@@ -119,7 +119,7 @@ pnpm typecheck && pnpm lint && pnpm test   # vitest unit tests
 pnpm test:e2e                              # boots worker + web, asserts the WS echo
 
 # Deploy the realtime backend (requires a Cloudflare account)
-pnpm --filter @coboard/worker deploy
+pnpm --filter @komuboard/worker deploy
 ```
 
 Welcome aboard. Start with [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md), or open `docs/index.html` for the full interactive read.

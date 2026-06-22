@@ -1,5 +1,5 @@
 /**
- * Coboard Yjs document schema (M1).
+ * Komuboard Yjs document schema (M1).
  *
  * One Yjs document per room is the single source of truth, shared by the 2D and
  * (later) VR renderers. Geometry is stored in **canvas coordinates** only — the

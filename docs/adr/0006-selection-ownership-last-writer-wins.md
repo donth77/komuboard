@@ -1,7 +1,7 @@
 # ADR-0006 — Selection ownership is last-writer-wins on the awareness channel (clock-free, exclusive per node)
 
 - **Status:** Accepted (2026-06-19)
-- **Deciders:** Coboard maintainers
+- **Deciders:** Komuboard maintainers
 - **Related:** ADR-0001 (Yjs single source of truth, [04 §2](../04-technical-architecture.md)) · ADR-0003 (dimension-agnostic canvas + per-user viewport, shared by 2D & VR, [04 §2.5, §6.5](../04-technical-architecture.md)) · [07 §3.5](../07-engineering-quality-security-accessibility.md)
 
 ## Context

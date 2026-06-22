@@ -32,7 +32,7 @@ test("a peer's drag is visible live, before release, and lands consistently", as
 
   const rectB = (oid: string): Promise<{ x: number; y: number } | null> =>
     b.page.evaluate(
-      (i) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(i),
+      (i) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(i),
       oid,
     );
 
@@ -44,7 +44,7 @@ test("a peer's drag is visible live, before release, and lands consistently", as
   // A's screen delta → world delta via A's zoom; nodeContentRect is world-space, so B's rect
   // should shift by that world delta.
   const scaleA = await a.page.evaluate(
-    () => (window as unknown as BoardWindow).__coboard.canvas!.getZoomPercent() / 100,
+    () => (window as unknown as BoardWindow).__komuboard.canvas!.getZoomPercent() / 100,
   );
   const dxScreen = 140;
   const dyScreen = 90;
@@ -70,7 +70,7 @@ test("a peer's drag is visible live, before release, and lands consistently", as
 
   // Confirm A has NOT released yet (the doc still holds the original geometry).
   const docMovedDuringDrag = await a.page.evaluate(
-    () => (window as unknown as BoardWindow).__coboard.doc.getMap("objects").size,
+    () => (window as unknown as BoardWindow).__komuboard.doc.getMap("objects").size,
   );
   expect(docMovedDuringDrag).toBe(1);
 

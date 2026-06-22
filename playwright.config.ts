@@ -21,14 +21,14 @@ export default defineConfig({
   // (the worker via its /health endpoint) before running tests — no boot race.
   webServer: [
     {
-      command: "pnpm --filter @coboard/worker dev",
+      command: "pnpm --filter @komuboard/worker dev",
       url: "http://127.0.0.1:8787/health",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: { WRANGLER_SEND_METRICS: "false" },
     },
     {
-      command: "pnpm --filter @coboard/client-web dev",
+      command: "pnpm --filter @komuboard/client-web dev",
       url: "http://127.0.0.1:5173",
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

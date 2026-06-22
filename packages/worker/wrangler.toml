@@ -1,7 +1,7 @@
-# Coboard realtime backend — Cloudflare Worker + Durable Objects (PartyServer).
+# Komuboard realtime backend — Cloudflare Worker + Durable Objects (PartyServer).
 # Runs on the free tier: one Durable Object per room, WebSocket Hibernation,
 # SQLite-backed storage. See docs/04-technical-architecture.md and docs/05-scaling-and-cost.md.
-name = "coboard-worker"
+name = "komuboard-worker"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]

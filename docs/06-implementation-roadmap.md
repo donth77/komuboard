@@ -1,4 +1,4 @@
-# Coboard — Implementation Roadmap
+# Komuboard — Implementation Roadmap
 
 > _Purpose: the build plan — milestones M0–M5 mapped to the three canonical phases, granular GitHub-style task checklists, repo layout, CI/CD, testing strategy, a risk register, and the KPIs that define success._
 
@@ -21,7 +21,7 @@ Six milestones map onto the three canonical phases. Each milestone is shippable 
 
 ```mermaid
 gantt
-    title Coboard milestone sequence
+    title Komuboard milestone sequence
     dateFormat  X
     axisFormat %s
     section Phase 1 (MVP)
@@ -48,7 +48,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 
 **Setup**
 
-- [ ] Create the GitHub repo `coboard` and protect `main` (require PR + green CI).
+- [ ] Create the GitHub repo `komuboard` and protect `main` (require PR + green CI).
 - [x] Initialize a **pnpm workspaces** monorepo with `pnpm-workspace.yaml` referencing `packages/*`.
 - [x] Scaffold packages: `packages/client-web`, `packages/vr`, `packages/shared`, `packages/worker`.
 - [x] Add root **TypeScript** project references + a shared `tsconfig.base.json` (strict mode on).
@@ -130,7 +130,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 **Client (chrome: top bar, dock, panels, zoom, minimap)**
 
 - [ ] Render the floating **top bar** (blur backdrop) with logo/home, room pill, presence facepile, Help, and Share — _done when:_ the bar pins to the top using surface/elevation tokens and holds all five clusters without overflow at 390px.
-- [ ] Render the **Coboard brand mark + wordmark** — _done when:_ a gradient logo glyph plus the "Coboard" wordmark sit top-left and clicking routes to home/dashboard.
+- [ ] Render the **Komuboard brand mark + wordmark** — _done when:_ a gradient logo glyph plus the "Komuboard" wordmark sit top-left and clicking routes to home/dashboard.
 - [ ] Render the floating **tool dock** with `role=toolbar` and idle auto-dim — _done when:_ the dock floats (left or bottom-center per design), dims to ~70% after 3s idle, and returns to full on hover/focus.
 - [ ] Show **single-active-tool** highlighting with `aria-pressed` — _done when:_ exactly one tool shows the accent active style with `aria-pressed=true` and switching moves the highlight.
 - [ ] Add **tool dock separators / grouping** — _done when:_ hairline separators group nav, draw, shape, and media tools per the mockup.
@@ -218,7 +218,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Render the **room pill** with room name/slug and a live connection dot — _done when:_ the pill shows the current room slug (mono, disambiguated glyphs) with a green pulsing dot when the socket is connected and an amber/red state on disconnect; tapping reveals room details/rename/copy.
 - [ ] Render the **room-code copy control** — _done when:_ clicking the copy icon writes the room code/URL to the clipboard and politely announces "Copied!".
 - [ ] Render the primary **Share button** and open the **Share dialog** — _done when:_ clicking Share opens a labeled, focus-trapped, elevated card ("Share this board"), and Esc/backdrop/X closes it and returns focus to the Share button.
-- [ ] Show the read-only **room URL field** with **Copy-link** + confirmation — _done when:_ the field shows `coboard.app/r/<room-slug>` (slug = current room, selectable) and Copy writes the full URL and shows a "Copied" state.
+- [ ] Show the read-only **room URL field** with **Copy-link** + confirmation — _done when:_ the field shows `komuboard.app/r/<room-slug>` (slug = current room, selectable) and Copy writes the full URL and shows a "Copied" state.
 - [ ] Render a scannable **QR code** for the room URL with caption — _done when:_ the QR encodes the exact room URL (decodes back to it) and shows "Scan to join on mobile or VR".
 - [ ] Add **Email/mailto share** and **native share-sheet** handoff — _done when:_ Email opens a prefilled mailto with the room link and, on supported devices, a Share action invokes the OS share sheet.
 - [ ] Add the **"anyone with the link can edit" permission toggle** with "No signup required" helper — _done when:_ toggling access changes link-joiner edit rights, the state persists on the room, and the helper text + shield/check icon render.
@@ -476,7 +476,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ## 3. Planned repo layout
 
 ```text
-coboard/
+komuboard/
 ├─ pnpm-workspace.yaml
 ├─ package.json                # root scripts: dev, build, lint, typecheck, test, test:e2e, deploy
 ├─ tsconfig.base.json          # strict, shared compiler options

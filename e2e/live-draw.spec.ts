@@ -14,10 +14,10 @@ test("a peer's stroke is visible live, before it's finished", async ({ browser }
 
   const remoteDrawCount = (): Promise<number> =>
     b.page.evaluate(
-      () => (window as unknown as BoardWindow).__coboard.canvas?.remoteDrawCount() ?? -1,
+      () => (window as unknown as BoardWindow).__komuboard.canvas?.remoteDrawCount() ?? -1,
     );
   const docSize = (page = a.page): Promise<number> =>
-    page.evaluate(() => (window as unknown as BoardWindow).__coboard.doc.getMap("objects").size);
+    page.evaluate(() => (window as unknown as BoardWindow).__komuboard.doc.getMap("objects").size);
 
   // A starts drawing — pointer DOWN + several MOVES, but does NOT release yet.
   await a.page.keyboard.press("p");
@@ -46,7 +46,7 @@ test("a peer's stroke is visible live, before it's finished", async ({ browser }
   await expect
     .poll(() =>
       b.page.evaluate(
-        (i) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(i) !== null,
+        (i) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(i) !== null,
         id,
       ),
     )

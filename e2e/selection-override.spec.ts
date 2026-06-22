@@ -28,7 +28,7 @@ test("a newer selection overrides an older one (last-writer-wins ownership)", as
     .poll(
       () =>
         b.page.evaluate(
-          () => (window as unknown as BoardWindow).__coboard.doc.getMap("objects").size,
+          () => (window as unknown as BoardWindow).__komuboard.doc.getMap("objects").size,
         ),
       { timeout: 10_000 },
     )
@@ -57,7 +57,7 @@ test("a newer selection overrides an older one (last-writer-wins ownership)", as
       () =>
         a.page.evaluate(
           () =>
-            (window as unknown as BoardWindow).__coboard.awareness.getLocalState()?.selection ??
+            (window as unknown as BoardWindow).__komuboard.awareness.getLocalState()?.selection ??
             null,
         ),
       { timeout: 5_000 },

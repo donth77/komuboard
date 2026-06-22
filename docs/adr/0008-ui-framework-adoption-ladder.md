@@ -1,16 +1,16 @@
 # ADR-0008 — UI stays framework-free for now; the framework/Lit adoption ladder & triggers
 
 - **Status:** Accepted (2026-06-20)
-- **Deciders:** Coboard maintainers
+- **Deciders:** Komuboard maintainers
 - **Related:** [ADR-0005 — UI chrome is Web Components](0005-ui-chrome-web-components.md) · [04 §9 library table](../04-technical-architecture.md) · [07 §2.7 bundle budget](../07-engineering-quality-security-accessibility.md) · [09 §Organization — O1/O3](../09-tech-debt-and-audit-backlog.md) · [README "React optional, not canonical"](../../README.md)
 
 ## Context
 
-A recurring question: should Coboard's UI move to a framework (React/Svelte/Solid), or at least adopt **Lit**? [ADR-0005](0005-ui-chrome-web-components.md) chose native Web Components in light DOM and named Lit as an _optional_ escape hatch — but never said **when**. This ADR makes the answer criteria-driven rather than vibe-driven.
+A recurring question: should Komuboard's UI move to a framework (React/Svelte/Solid), or at least adopt **Lit**? [ADR-0005](0005-ui-chrome-web-components.md) chose native Web Components in light DOM and named Lit as an _optional_ escape hatch — but never said **when**. This ADR makes the answer criteria-driven rather than vibe-driven.
 
 Two facts frame it:
 
-1. **A framework would not touch Coboard's two hardest layers.** The 2D board is a **Konva canvas** (pixels, not DOM) and VR is **A-Frame/WebXR** (its own scene graph) — both imperative renderers bound to Yjs. React/Svelte/Solid render/diff DOM, so they only ever apply to the **DOM chrome** (top bar, tool dock, draw-bar, panels, dialogs, presence facepile). The board, VR, and the perf-sensitive hot paths (the awareness tick, render loop) are untouched by a UI framework.
+1. **A framework would not touch Komuboard's two hardest layers.** The 2D board is a **Konva canvas** (pixels, not DOM) and VR is **A-Frame/WebXR** (its own scene graph) — both imperative renderers bound to Yjs. React/Svelte/Solid render/diff DOM, so they only ever apply to the **DOM chrome** (top bar, tool dock, draw-bar, panels, dialogs, presence facepile). The board, VR, and the perf-sensitive hot paths (the awareness tick, render loop) are untouched by a UI framework.
 2. **The chrome is already sound; the real debt is organizational.** Audits rated the `<co-*>` Web Components good (consistent, injection-safe, no leaks, guarded hot paths). What hurts is `main.ts` being a ~677-line god-module and a few **patterns** copy-pasted across components (swatch render, floating popover, mobile sheet-handle) — see [09 O1/O3](../09-tech-debt-and-audit-backlog.md). Those are fixed by plain extraction, **not** by a framework or by Lit.
 
 ## Decision

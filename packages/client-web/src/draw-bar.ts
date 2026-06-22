@@ -5,7 +5,7 @@
 // <co-color-picker>. See docs/adr/0005.
 
 import { icon, iconFilled, lineWeightIcon } from "./icons";
-import type { StrokeStyle } from "@coboard/shared";
+import type { StrokeStyle } from "@komuboard/shared";
 import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
 import { wireSheetHandle } from "./mobile-sheet";

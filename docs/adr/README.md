@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs)
 
-This folder holds Coboard's **Architecture Decision Records** — short documents
+This folder holds Komuboard's **Architecture Decision Records** — short documents
 that capture an architecturally significant decision, its context, and its
 consequences. The practice is referenced in
 [07 — Engineering Quality §3.5](../07-engineering-quality-security-accessibility.md).

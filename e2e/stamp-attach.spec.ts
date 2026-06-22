@@ -16,14 +16,14 @@ import {
  */
 
 const orderIds = (page: Page): Promise<string[]> =>
-  page.evaluate(() => (window as unknown as BoardWindow).__coboard.doc.getArray("order").toArray());
+  page.evaluate(() => (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray());
 
 async function placeStampOnSticky(page: Page): Promise<string> {
   await injectSticky(page, { id: "s1", x: 0, y: 0, size: 180, bg: "#ffec99" });
   await expect.poll(() => page.locator('[data-id="s1"]').count()).toBe(1);
   const cal = await calibrate(page);
   await page.evaluate(() => {
-    const c = (window as unknown as BoardWindow).__coboard.canvas!;
+    const c = (window as unknown as BoardWindow).__komuboard.canvas!;
     c.setStamp("emoji:2705");
     c.setTool("stamp");
   });
@@ -77,7 +77,7 @@ test("deleting the host sticky deletes the attached stamp (but it's its own node
   await expect
     .poll(() =>
       a.page.evaluate(
-        () => (window as unknown as BoardWindow).__coboard.canvas!.textLayer.selectedIds().length,
+        () => (window as unknown as BoardWindow).__komuboard.canvas!.textLayer.selectedIds().length,
       ),
     )
     .toBe(1);

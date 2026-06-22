@@ -22,7 +22,7 @@ async function spoofPlatform(page: Page, uaPlatform: string, navPlatform: string
 
 async function openShortcuts(page: Page) {
   await page.goto(`/?room=${uniqueRoom("sc")}`);
-  await page.waitForFunction(() => !!(window as unknown as { __coboard?: unknown }).__coboard);
+  await page.waitForFunction(() => !!(window as unknown as { __komuboard?: unknown }).__komuboard);
   await page.keyboard.press("?"); // opens the shortcuts overlay
   const dialog = page.locator("dialog[open]");
   await expect(dialog).toBeVisible();

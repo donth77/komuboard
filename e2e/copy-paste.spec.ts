@@ -3,7 +3,7 @@ import { type BoardWindow, connectPeer, drawStroke, objectIds, uniqueRoom } from
 
 const rectOf = (page: import("@playwright/test").Page, id: string) =>
   page.evaluate(
-    (id) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(id),
+    (id) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(id),
     id,
   );
 

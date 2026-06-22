@@ -1,7 +1,7 @@
 # ADR-0005 — UI chrome is built from native Web Components (light-DOM custom elements)
 
 - **Status:** Accepted (2026-06-19)
-- **Deciders:** Coboard maintainers
+- **Deciders:** Komuboard maintainers
 - **Related:** [07 §3.5](../07-engineering-quality-security-accessibility.md) · [03 §4 component inventory](../03-visual-design-ui-ux.md) · [04 §9 library table](../04-technical-architecture.md)
 
 ## Context
@@ -13,7 +13,7 @@ The 2D board is a Konva **canvas**; the VR scene is **A-Frame** (already a custo
 Build the chrome from **native Web Components (custom elements), in light DOM** — no UI framework, no Shadow DOM.
 
 1. **Custom elements are the unit of chrome** — `<co-*>` (e.g. `<co-dialog>`, `<co-avatar-presence-row>`), with `connectedCallback` / `disconnectedCallback` lifecycle and **property-in / `CustomEvent`-out** interfaces. App glue does the Yjs/awareness wiring; elements are presentation + local interaction.
-2. **Light DOM, not Shadow DOM.** Elements render into their own light DOM and **share Coboard's global design system** — the CSS tokens (`--accent`, `--surface`, …) _and_ the utility classes (`.btn-primary`, `.swatches`, `.kbd`, `.avatar`, …) in `styles.css`. Shadow DOM was considered and **rejected**: CSS custom properties pierce a shadow boundary but **class selectors do not**, so Shadow DOM would force per-component duplication of the shared utilities (and the global `prefers-reduced-motion` reset would stop applying inside each root).
+2. **Light DOM, not Shadow DOM.** Elements render into their own light DOM and **share Komuboard's global design system** — the CSS tokens (`--accent`, `--surface`, …) _and_ the utility classes (`.btn-primary`, `.swatches`, `.kbd`, `.avatar`, …) in `styles.css`. Shadow DOM was considered and **rejected**: CSS custom properties pierce a shadow boundary but **class selectors do not**, so Shadow DOM would force per-component duplication of the shared utilities (and the global `prefers-reduced-motion` reset would stop applying inside each root).
 3. **Vanilla now; [Lit](https://lit.dev) optional.** Start dependency-free (see `dialog.ts`, `avatar-presence-row.ts`). If attribute/state boilerplate grows, adopt Lit (~6 KB gzip, MIT) — still within the ≤250 KB core-bundle budget ([07 §2.7]). Custom elements interoperate with React 19 if the React-optional escape hatch is ever taken.
 
 ## Consequences

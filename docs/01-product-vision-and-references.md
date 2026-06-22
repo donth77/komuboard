@@ -1,10 +1,10 @@
-# Coboard — Product Vision & References
+# Komuboard — Product Vision & References
 
-> _Why Coboard exists, who it serves, and the products that inspired it: a free-to-run, realtime, cross-reality collaborative whiteboard._
+> _Why Komuboard exists, who it serves, and the products that inspired it: a free-to-run, realtime, cross-reality collaborative whiteboard._
 
 **Related documents:** [README](../README.md) · [02 — Features & Scope](./02-features-and-scope.md) · [03 — Visual Design / UI-UX](./03-visual-design-ui-ux.md) · [04 — Technical Architecture](./04-technical-architecture.md) · [05 — Scaling & Cost](./05-scaling-and-cost.md) · [06 — Implementation Roadmap](./06-implementation-roadmap.md) · [07 — Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md)
 
-> **Naming note:** "Coboard" is a working placeholder. The user may rename the product; treat every occurrence as a stand-in for the final name.
+> **Naming note:** "Komuboard" is a working placeholder. The user may rename the product; treat every occurrence as a stand-in for the final name.
 
 ---
 
@@ -12,7 +12,7 @@
 
 **One whiteboard. Every screen — desktop, mobile, and VR.**
 
-Coboard is a free-to-run, realtime, online collaborative whiteboard. Anyone opens a link, instantly lands in a room, and draws together with no signup. The exact same board document is rendered by a 2D web canvas (mouse + touch) and an immersive 3D WebXR scene — a single source of truth shared across realities. Live labeled cursors, presence, and avatar poses are first-class, so a room always feels inhabited. The entire system is designed to be **hosted and operated for $0** on free edge tiers, at meaningful concurrency.
+Komuboard is a free-to-run, realtime, online collaborative whiteboard. Anyone opens a link, instantly lands in a room, and draws together with no signup. The exact same board document is rendered by a 2D web canvas (mouse + touch) and an immersive 3D WebXR scene — a single source of truth shared across realities. Live labeled cursors, presence, and avatar poses are first-class, so a room always feels inhabited. The entire system is designed to be **hosted and operated for $0** on free edge tiers, at meaningful concurrency.
 
 ---
 
@@ -26,7 +26,7 @@ Collaborative whiteboards are everywhere, yet every mainstream option fails at l
 | **Not cross-reality**     | 2D-only canvas; VR is a separate product (or absent). VR tools rarely share one document with the 2D web. | A VR participant and a laptop participant cannot truly be on the _same_ board. |
 | **Gated behind accounts** | Signup/login walls, seat limits, time-boxed guest access.                                                 | Friction kills spontaneous "open a link and draw" collaboration.               |
 
-The open-source predecessor closest to our spirit (Whiteboard VR) nailed _no-signup + cross-reality_ but is a smaller-scale prototype on an older realtime stack. Coboard's wedge is to combine **all three** missing properties — **free-to-self-host, cross-reality with a single shared document, and anonymous no-signup rooms** — on modern edge infrastructure that stays inside free tiers at real concurrency.
+The open-source predecessor closest to our spirit (Whiteboard VR) nailed _no-signup + cross-reality_ but is a smaller-scale prototype on an older realtime stack. Komuboard's wedge is to combine **all three** missing properties — **free-to-self-host, cross-reality with a single shared document, and anonymous no-signup rooms** — on modern edge infrastructure that stays inside free tiers at real concurrency.
 
 ---
 
@@ -41,7 +41,7 @@ The open-source predecessor closest to our spirit (Whiteboard VR) nailed _no-sig
 | **VR meetups / spatial collab**       | When we gather in headsets, I want to draw on a shared 3D board with embodied avatars and laser pointers, so remote people feel co-present, not just on a call.                        |
 | **Casual sketching / "napkin" ideas** | When inspiration hits, I want to open a board with zero setup and maybe share it with a friend, so capturing an idea costs nothing and no login.                                       |
 
-**Common thread:** every segment benefits from _zero-friction entry_, _realtime presence_, and _device freedom_ — the three things Coboard optimizes for.
+**Common thread:** every segment benefits from _zero-friction entry_, _realtime presence_, and _device freedom_ — the three things Komuboard optimizes for.
 
 ---
 
@@ -58,7 +58,7 @@ The open-source predecessor closest to our spirit (Whiteboard VR) nailed _no-sig
 
 ## 5. References & inspiration
 
-Four reference products and one open-source repository shape Coboard. For each we list the link, a short description, and **exactly which ideas Coboard adopts**. (Feature claims below are kept consistent with the project research; exact figures for any product can change and should be re-verified against current sources.)
+Four reference products and one open-source repository shape Komuboard. For each we list the link, a short description, and **exactly which ideas Komuboard adopts**. (Feature claims below are kept consistent with the project research; exact figures for any product can change and should be re-verified against current sources.)
 
 ### 5.1 Whiteboard VR — Online Collaboration _(closest spiritual predecessor)_
 
@@ -67,13 +67,13 @@ Four reference products and one open-source repository shape Coboard. For each w
 
 A web-based collaborative whiteboard that is platform independent — touch on phones/tablets, mouse on desktop, and VR headsets in the browser. Opening the site auto-places you in a room with a room code; share the code and others draw on the same board, with no signup. It is built on A-Frame + Three.js with realtime via Socket.io, and it is open source.
 
-**Coboard adopts:**
+**Komuboard adopts:**
 
 - The **room-code / no-signup** model — land in a room instantly, share a code/URL.
 - **Cross-reality from one site** — the same board reachable on touch, mouse, and VR.
 - **A-Frame + Three.js (WebXR)** as the VR rendering foundation.
 - The ethos of being **open source** and small enough to self-host.
-- _Coboard's evolution beyond it:_ swap Socket.io for a **Yjs CRDT + Cloudflare Durable Objects** backbone so 2D and VR share one persistent document at edge scale, instead of a single-server broadcast prototype.
+- _Komuboard's evolution beyond it:_ swap Socket.io for a **Yjs CRDT + Cloudflare Durable Objects** backbone so 2D and VR share one persistent document at edge scale, instead of a single-server broadcast prototype.
 
 ### 5.2 Figma FigJam
 
@@ -81,7 +81,7 @@ A web-based collaborative whiteboard that is platform independent — touch on p
 
 FigJam is Figma's collaborative whiteboard for ideation: sticky notes, shapes and connectors with snapping, sections, and freehand drawing on a clean infinite canvas. It is known for delightful social presence — live multi-user cursors, **cursor chat**, stamps/emotes and high-fives, audio + live chat, comments, spotlight mode, and a large template library, plus AI helpers.
 
-**Coboard adopts:**
+**Komuboard adopts:**
 
 - **Cursor chat** (type right at your cursor) and **stamps / reactions / high-five** as lightweight social presence.
 - **Spotlight / follow mode** for guiding a room's attention.
@@ -94,7 +94,7 @@ FigJam is Figma's collaborative whiteboard for ideation: sticky notes, shapes an
 
 Miro is a broad infinite-canvas collaboration platform: a pen tool with color/thickness and stylus support, selection, undo/redo, copy/paste, text, file upload (images/PDF/Office), sticky notes, a rich shape set, connection lines, and an extensive template catalog (flowchart, retro, roadmap, business model canvas, user-story map, and more). It also offers voting, timers, reactions, and presentation mode.
 
-**Coboard adopts:**
+**Komuboard adopts:**
 
 - **Shape + connector breadth** (rectangles, ellipses, lines, arrows, brackets, quote bubbles) and connection lines.
 - A **template catalog** (kanban, retro, mindmap, flowchart) to make rooms instantly useful.
@@ -107,16 +107,16 @@ Miro is a broad infinite-canvas collaboration platform: a pen tool with color/th
 
 Canva's whiteboard offers an infinite/expanding canvas with real-time collaboration shown through **colorful, labeled cursors**, comments, a large template gallery (Kanban, roadmaps, diagrams), a rich media/graphics library, and AI helpers. A standout is **sticky-note Sort** — reorganize stickies by color, author, reactions, or AI-detected themes — plus real-time reactions on stickies.
 
-**Coboard adopts:**
+**Komuboard adopts:**
 
 - **Colorful, labeled cursors** as the default presence treatment.
 - **Sticky-note Sort** (by color / author / reactions / theme) for fast clustering.
 - **AI "summarize the board"** and auto-cluster stickies as a cross-cutting stretch goal.
 - Real-time **reactions on objects**.
 
-### 5.5 Synthesis — what makes Coboard distinct
+### 5.5 Synthesis — what makes Komuboard distinct
 
-Coboard borrows the **room-code / no-signup + cross-reality** model from Whiteboard VR; **cursor chat, stamps, spotlight, and a clean infinite canvas** from FigJam; **shape/connector/template breadth plus voting/timer/presentation** from Miro; and **sticky Sort, colorful labeled cursors, and AI summarize** from Canva. Its **differentiator** is being **truly free to self-host on edge infrastructure** while serving a **single shared document across both 2D and immersive VR**. Feature-to-reference traceability is detailed in [02 — Features & Scope](./02-features-and-scope.md).
+Komuboard borrows the **room-code / no-signup + cross-reality** model from Whiteboard VR; **cursor chat, stamps, spotlight, and a clean infinite canvas** from FigJam; **shape/connector/template breadth plus voting/timer/presentation** from Miro; and **sticky Sort, colorful labeled cursors, and AI summarize** from Canva. Its **differentiator** is being **truly free to self-host on edge infrastructure** while serving a **single shared document across both 2D and immersive VR**. Feature-to-reference traceability is detailed in [02 — Features & Scope](./02-features-and-scope.md).
 
 ---
 
@@ -126,13 +126,13 @@ Legend: ✅ yes · ⚠️ partial / limited · ❌ no. Cells reflect the project
 
 | Product               | Realtime cursors |         VR / WebXR         |   Free self-host   |    No-signup rooms    | Open source | Templates |            Voice            |
 | --------------------- | :--------------: | :------------------------: | :----------------: | :-------------------: | :---------: | :-------: | :-------------------------: |
-| **Coboard**           |        ✅        | ✅ (immersive, shared doc) | ✅ ($0 edge tiers) |  ✅ (room code/URL)   |     ✅      |    ✅     | ⚠️ (WebRTC, optional P2/P3) |
+| **Komuboard**           |        ✅        | ✅ (immersive, shared doc) | ✅ ($0 edge tiers) |  ✅ (room code/URL)   |     ✅      |    ✅     | ⚠️ (WebRTC, optional P2/P3) |
 | **FigJam**            |        ✅        |             ❌             |         ❌         | ⚠️ (24h guest access) |     ❌      |    ✅     |      ✅ (audio + chat)      |
 | **Miro**              |        ✅        |             ❌             |         ❌         |   ⚠️ (guest links)    |     ❌      |    ✅     |    ⚠️ (via integrations)    |
 | **Canva Whiteboards** |   ✅ (labeled)   |             ❌             |         ❌         |   ⚠️ (share links)    |     ❌      |    ✅     |             ❌              |
 | **Whiteboard VR**     |        ✅        |             ✅             |         ✅         |          ✅           |     ✅      |    ❌     |             ❌              |
 
-**Reading the table:** the mainstream SaaS products win on polish and breadth but lose on _self-host_, _open source_, and _true VR_. Whiteboard VR matches Coboard on the hard constraints (VR, free self-host, no-signup, open) but lacks templates, voice, and modern scale. Coboard aims to keep the full hard-constraint column **and** close the feature-breadth gap.
+**Reading the table:** the mainstream SaaS products win on polish and breadth but lose on _self-host_, _open source_, and _true VR_. Whiteboard VR matches Komuboard on the hard constraints (VR, free self-host, no-signup, open) but lacks templates, voice, and modern scale. Komuboard aims to keep the full hard-constraint column **and** close the feature-breadth gap.
 
 ---
 
@@ -153,7 +153,7 @@ Legend: ✅ yes · ⚠️ partial / limited · ❌ no. Cells reflect the project
 **Adoption success**
 
 - The repo is **forkable and self-hostable** by a solo developer in an afternoon.
-- Coboard is a credible, modern successor to Whiteboard VR — cited by it, improving on it.
+- Komuboard is a credible, modern successor to Whiteboard VR — cited by it, improving on it.
 
 ---
 
@@ -163,12 +163,12 @@ Legend: ✅ yes · ⚠️ partial / limited · ❌ no. Cells reflect the project
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Room**                                      | A shareable, anonymous collaboration space. The share URL carries a high-entropy **room id** (the capability); a short, human-typable **join code** is a rate-limited alias for entering the same room from another device (see [04 §8](./04-technical-architecture.md)). One room maps to one backend Durable Object and one board document. |
 | **Board**                                     | The visual document of a room — strokes, sticky notes, shapes, text, connectors, frames. Rendered identically by the 2D web and 3D VR renderers because both read the same Yjs doc.                                                                                                                                                           |
-| **CRDT** (Conflict-free Replicated Data Type) | A data structure that lets many clients edit concurrently and converge to the same state without a central lock. Coboard uses **Yjs**, which ships tiny binary updates.                                                                                                                                                                       |
+| **CRDT** (Conflict-free Replicated Data Type) | A data structure that lets many clients edit concurrently and converge to the same state without a central lock. Komuboard uses **Yjs**, which ships tiny binary updates.                                                                                                                                                                       |
 | **Awareness**                                 | Yjs's `y-protocols/awareness` channel for **ephemeral** presence — cursors, selections, user color/name, cursor-chat text, and VR avatar head+hands poses. Broadcast to peers but **never persisted**.                                                                                                                                        |
 | **Awareness vs. document**                    | The **document** is durable, persisted board _content_ (Yjs updates saved to DO storage). **Awareness** is throwaway _presence_ that vanishes when a user leaves. Keeping them separate is what lets cursors update at high frequency without bloating saved history.                                                                         |
-| **Durable Object (DO)**                       | A Cloudflare primitive: a single-threaded, globally-addressable, stateful instance with co-located storage. Coboard runs **one DO per room**, holding the room's WebSocket connections and persisting its Yjs doc.                                                                                                                            |
+| **Durable Object (DO)**                       | A Cloudflare primitive: a single-threaded, globally-addressable, stateful instance with co-located storage. Komuboard runs **one DO per room**, holding the room's WebSocket connections and persisting its Yjs doc.                                                                                                                            |
 | **Party**                                     | A PartyServer concept that wraps a Durable Object as an easy realtime "room" (connection lifecycle + broadcasting), routed by an arbitrary room-id string. **One Party === one Durable Object.**                                                                                                                                              |
-| **WebXR**                                     | The browser API for VR/AR experiences. Coboard's VR mode uses **A-Frame + Three.js** over WebXR so it runs on Quest/Vive and other headsets, with desktop/mobile fallback.                                                                                                                                                                    |
+| **WebXR**                                     | The browser API for VR/AR experiences. Komuboard's VR mode uses **A-Frame + Three.js** over WebXR so it runs on Quest/Vive and other headsets, with desktop/mobile fallback.                                                                                                                                                                    |
 | **Hibernation**                               | Cloudflare's WebSocket Hibernation API: clients stay connected while the Durable Object is evicted from memory, so duration (GB-s) charges stop accruing during idle periods — essential for $0 operation.                                                                                                                                    |
 
 ---

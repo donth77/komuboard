@@ -14,7 +14,7 @@ import type { CoColorPicker } from "./color-picker";
 import { COLOR_NAMES } from "./draw-bar";
 import { lineWeightIcon } from "./icons";
 import { SWATCHES } from "./palette";
-import type { BorderStyle, ShapeKind, TextAlign } from "@coboard/shared";
+import type { BorderStyle, ShapeKind, TextAlign } from "@komuboard/shared";
 
 export interface TextBarHost {
   setFontFamily(css: string): void;

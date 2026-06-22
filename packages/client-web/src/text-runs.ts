@@ -9,7 +9,7 @@
 // <span style> / <b> / <a> etc.; elementToRuns() flattens whatever the browser produced back into
 // runs by resolving each text node's effective marks from its ancestors.
 
-import type { TextRun } from "@coboard/shared";
+import type { TextRun } from "@komuboard/shared";
 
 type Marks = Omit<TextRun, "text">;
 

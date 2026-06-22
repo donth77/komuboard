@@ -1,4 +1,4 @@
-// Flat ESLint config for the Coboard monorepo (TypeScript).
+// Flat ESLint config for the Komuboard monorepo (TypeScript).
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 

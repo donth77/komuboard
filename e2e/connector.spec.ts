@@ -20,7 +20,7 @@ import {
 
 const connRectY = (page: import("@playwright/test").Page): Promise<number | null> =>
   page.evaluate(() => {
-    const r = (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect("cn1");
+    const r = (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect("cn1");
     return r ? r.y : null;
   });
 
@@ -108,11 +108,11 @@ const connectorCount = (page: import("@playwright/test").Page): Promise<number> 
     let c = 0;
     for (const v of (
       window as unknown as {
-        __coboard: {
+        __komuboard: {
           doc: { getMap(n: string): { values(): Iterable<{ toJSON(): { type?: string } }> } };
         };
       }
-    ).__coboard.doc
+    ).__komuboard.doc
       .getMap("objects")
       .values())
       if (v.toJSON().type === "connector") c++;

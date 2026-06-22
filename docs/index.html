@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Coboard — Planning Package</title>
-<meta name="description" content="Coboard — a free-to-run, realtime, cross-reality collaborative whiteboard. Interactive planning package." />
+<title>Komuboard — Planning Package</title>
+<meta name="description" content="Komuboard — a free-to-run, realtime, cross-reality collaborative whiteboard. Interactive planning package." />
 <style>
 :root {
   /* ── Color palette — light (from doc-03 §2.1) ── */
@@ -496,7 +496,7 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-vis
   </button>
   <div class="brand">
     <span class="logo">◧</span>
-    <span>Coboard <small>Planning Package</small></span>
+    <span>Komuboard <small>Planning Package</small></span>
   </div>
   <div class="topbar-spacer"></div>
   <div class="search-wrap">
@@ -520,7 +520,7 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-vis
   <section id="hero" style="padding: var(--space-7) var(--space-7) 0;">
     <div class="hero-card">
       <span class="hero-eyebrow">One whiteboard · Every screen</span>
-      <h1>Coboard</h1>
+      <h1>Komuboard</h1>
       <p class="hero-tag">A free-to-run, realtime, online collaborative whiteboard that works everywhere — desktop, mobile, and VR. Open a link, land in a room, draw together. No signup.</p>
       <ul class="hero-bullets">
         <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><strong>Infinite pan/zoom canvas</strong> — freehand pen, sticky notes, shapes, text, with live multiplayer sync.</span></li>
@@ -549,17 +549,17 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-vis
 
 <!-- ─────────────── EMBEDDED MARKDOWN (non-executing, inline — no fetch) ─────────────── -->
 <script type="text/markdown" data-doc-id="readme" data-title="README" data-num="—">
-# Coboard — README
+# Komuboard — README
 
 > _One whiteboard. Every screen — desktop, mobile, and VR._
 
-**Coboard** is a free-to-run, realtime, online collaborative whiteboard that works everywhere: desktop (mouse), mobile/tablet (touch), and VR headsets (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence — no signup. The same board document is the single source of truth shared by both the 2D web renderer and the immersive 3D VR renderer, so what you sketch on a phone shows up on a headset and vice versa, in real time.
+**Komuboard** is a free-to-run, realtime, online collaborative whiteboard that works everywhere: desktop (mouse), mobile/tablet (touch), and VR headsets (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence — no signup. The same board document is the single source of truth shared by both the 2D web renderer and the immersive 3D VR renderer, so what you sketch on a phone shows up on a headset and vice versa, in real time.
 
-> Note: "Coboard" is a working/placeholder name — feel free to rename it before launch.
+> Note: "Komuboard" is a working/placeholder name — feel free to rename it before launch.
 
 ## What is this?
 
-This repository is currently a **planning package**, not yet code. It holds the canonical design and architecture documents that define what Coboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. `docs/index.html` is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
+This repository is currently a **planning package**, not yet code. It holds the canonical design and architecture documents that define what Komuboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. `docs/index.html` is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
 
 ## Documents
 
@@ -605,23 +605,23 @@ The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockup
 
 ## Reference products
 
-Coboard learns from four products — see [docs/01](./docs/01-product-vision-and-references.md) for what we borrow from each.
+Komuboard learns from four products — see [docs/01](./docs/01-product-vision-and-references.md) for what we borrow from each.
 
 1. [Whiteboard VR — Online Collaboration](https://devpost.com/software/whiteboard-vr-online-collaboration) ([source](https://github.com/marlon360/whiteboard-vr)) — our closest spiritual predecessor: cross-reality + room-code, no signup.
 2. [Figma FigJam](https://www.figma.com/figjam/) — cursor chat, stamps, spotlight, clean infinite canvas.
 3. [Miro](https://miro.com/online-whiteboard/) — shape/connector/template breadth, voting, timer, presentation mode.
 4. [Canva Whiteboards](https://www.canva.com/online-whiteboard/) — sticky-note Sort, colorful labeled cursors, AI summarize.
 
-**Coboard's differentiator:** truly free-to-self-host on edge infra, and a single shared document across 2D and immersive VR.
+**Komuboard's differentiator:** truly free-to-self-host on edge infra, and a single shared document across 2D and immersive VR.
 
 ## Run it for $0
 
-Coboard is designed to host **and** run for $0 on a single Cloudflare account at meaningful concurrency. Static assets (the SPA + A-Frame/VR bundles) serve from Cloudflare Pages' global CDN, which does not consume Worker requests. Realtime collaboration runs on Workers + Durable Objects: one Durable Object per room (PartyServer + Y-PartyServer), using the WebSocket Hibernation API so idle rooms stop accruing duration charges while clients stay connected. Cursor/presence traffic is ephemeral awareness, throttled and binary-encoded to respect the 20:1 inbound-WebSocket billing ratio and the free request budget; content edits persist as compact Yjs updates in the DO's SQLite storage, and uploaded images live in R2 (zero egress). See [docs/05-scaling-and-cost.md](./docs/05-scaling-and-cost.md) for the full math, capacity tables, and the upgrade path. _Exact free-tier figures change — verify against current Cloudflare docs._
+Komuboard is designed to host **and** run for $0 on a single Cloudflare account at meaningful concurrency. Static assets (the SPA + A-Frame/VR bundles) serve from Cloudflare Pages' global CDN, which does not consume Worker requests. Realtime collaboration runs on Workers + Durable Objects: one Durable Object per room (PartyServer + Y-PartyServer), using the WebSocket Hibernation API so idle rooms stop accruing duration charges while clients stay connected. Cursor/presence traffic is ephemeral awareness, throttled and binary-encoded to respect the 20:1 inbound-WebSocket billing ratio and the free request budget; content edits persist as compact Yjs updates in the DO's SQLite storage, and uploaded images live in R2 (zero egress). See [docs/05-scaling-and-cost.md](./docs/05-scaling-and-cost.md) for the full math, capacity tables, and the upgrade path. _Exact free-tier figures change — verify against current Cloudflare docs._
 
 ## Planned repo structure
 
 ```text
-coboard/
+komuboard/
 ├── README.md                 # this index
 ├── docs/                     # the planning package (01–08)
 │   ├── index.html            # interactive combined view of all docs
@@ -673,13 +673,13 @@ pnpm pages deploy
 Welcome aboard. Start with [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md), or open `docs/index.html` for the full interactive read.
 </script>
 <script type="text/markdown" data-doc-id="doc-01" data-title="Product Vision &amp; References" data-num="01">
-# Coboard — Product Vision & References
+# Komuboard — Product Vision & References
 
-> _Why Coboard exists, who it serves, and the products that inspired it: a free-to-run, realtime, cross-reality collaborative whiteboard._
+> _Why Komuboard exists, who it serves, and the products that inspired it: a free-to-run, realtime, cross-reality collaborative whiteboard._
 
 **Related documents:** [README](../README.md) · [02 — Features & Scope](./02-features-and-scope.md) · [03 — Visual Design / UI-UX](./03-visual-design-ui-ux.md) · [04 — Technical Architecture](./04-technical-architecture.md) · [05 — Scaling & Cost](./05-scaling-and-cost.md) · [06 — Implementation Roadmap](./06-implementation-roadmap.md) · [07 — Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md)
 
-> **Naming note:** "Coboard" is a working placeholder. The user may rename the product; treat every occurrence as a stand-in for the final name.
+> **Naming note:** "Komuboard" is a working placeholder. The user may rename the product; treat every occurrence as a stand-in for the final name.
 
 ---
 
@@ -687,7 +687,7 @@ Welcome aboard. Start with [docs/01-product-vision-and-references.md](./docs/01-
 
 **One whiteboard. Every screen — desktop, mobile, and VR.**
 
-Coboard is a free-to-run, realtime, online collaborative whiteboard. Anyone opens a link, instantly lands in a room, and draws together with no signup. The exact same board document is rendered by a 2D web canvas (mouse + touch) and an immersive 3D WebXR scene — a single source of truth shared across realities. Live labeled cursors, presence, and avatar poses are first-class, so a room always feels inhabited. The entire system is designed to be **hosted and operated for $0** on free edge tiers, at meaningful concurrency.
+Komuboard is a free-to-run, realtime, online collaborative whiteboard. Anyone opens a link, instantly lands in a room, and draws together with no signup. The exact same board document is rendered by a 2D web canvas (mouse + touch) and an immersive 3D WebXR scene — a single source of truth shared across realities. Live labeled cursors, presence, and avatar poses are first-class, so a room always feels inhabited. The entire system is designed to be **hosted and operated for $0** on free edge tiers, at meaningful concurrency.
 
 ---
 
@@ -701,7 +701,7 @@ Collaborative whiteboards are everywhere, yet every mainstream option fails at l
 | **Not cross-reality** | 2D-only canvas; VR is a separate product (or absent). VR tools rarely share one document with the 2D web. | A VR participant and a laptop participant cannot truly be on the _same_ board. |
 | **Gated behind accounts** | Signup/login walls, seat limits, time-boxed guest access. | Friction kills spontaneous "open a link and draw" collaboration. |
 
-The open-source predecessor closest to our spirit (Whiteboard VR) nailed _no-signup + cross-reality_ but is a smaller-scale prototype on an older realtime stack. Coboard's wedge is to combine **all three** missing properties — **free-to-self-host, cross-reality with a single shared document, and anonymous no-signup rooms** — on modern edge infrastructure that stays inside free tiers at real concurrency.
+The open-source predecessor closest to our spirit (Whiteboard VR) nailed _no-signup + cross-reality_ but is a smaller-scale prototype on an older realtime stack. Komuboard's wedge is to combine **all three** missing properties — **free-to-self-host, cross-reality with a single shared document, and anonymous no-signup rooms** — on modern edge infrastructure that stays inside free tiers at real concurrency.
 
 ---
 
@@ -716,7 +716,7 @@ The open-source predecessor closest to our spirit (Whiteboard VR) nailed _no-sig
 | **VR meetups / spatial collab** | When we gather in headsets, I want to draw on a shared 3D board with embodied avatars and laser pointers, so remote people feel co-present, not just on a call. |
 | **Casual sketching / "napkin" ideas** | When inspiration hits, I want to open a board with zero setup and maybe share it with a friend, so capturing an idea costs nothing and no login. |
 
-**Common thread:** every segment benefits from _zero-friction entry_, _realtime presence_, and _device freedom_ — the three things Coboard optimizes for.
+**Common thread:** every segment benefits from _zero-friction entry_, _realtime presence_, and _device freedom_ — the three things Komuboard optimizes for.
 
 ---
 
@@ -733,7 +733,7 @@ The open-source predecessor closest to our spirit (Whiteboard VR) nailed _no-sig
 
 ## 5. References & inspiration
 
-Four reference products and one open-source repository shape Coboard. For each we list the link, a short description, and **exactly which ideas Coboard adopts**. (Feature claims below are kept consistent with the project research; exact figures for any product can change and should be re-verified against current sources.)
+Four reference products and one open-source repository shape Komuboard. For each we list the link, a short description, and **exactly which ideas Komuboard adopts**. (Feature claims below are kept consistent with the project research; exact figures for any product can change and should be re-verified against current sources.)
 
 ### 5.1 Whiteboard VR — Online Collaboration _(closest spiritual predecessor)_
 
@@ -742,12 +742,12 @@ Four reference products and one open-source repository shape Coboard. For each w
 
 A web-based collaborative whiteboard that is platform independent — touch on phones/tablets, mouse on desktop, and VR headsets in the browser. Opening the site auto-places you in a room with a room code; share the code and others draw on the same board, with no signup. It is built on A-Frame + Three.js with realtime via Socket.io, and it is open source.
 
-**Coboard adopts:**
+**Komuboard adopts:**
 - The **room-code / no-signup** model — land in a room instantly, share a code/URL.
 - **Cross-reality from one site** — the same board reachable on touch, mouse, and VR.
 - **A-Frame + Three.js (WebXR)** as the VR rendering foundation.
 - The ethos of being **open source** and small enough to self-host.
-- _Coboard's evolution beyond it:_ swap Socket.io for a **Yjs CRDT + Cloudflare Durable Objects** backbone so 2D and VR share one persistent document at edge scale, instead of a single-server broadcast prototype.
+- _Komuboard's evolution beyond it:_ swap Socket.io for a **Yjs CRDT + Cloudflare Durable Objects** backbone so 2D and VR share one persistent document at edge scale, instead of a single-server broadcast prototype.
 
 ### 5.2 Figma FigJam
 
@@ -755,7 +755,7 @@ A web-based collaborative whiteboard that is platform independent — touch on p
 
 FigJam is Figma's collaborative whiteboard for ideation: sticky notes, shapes and connectors with snapping, sections, and freehand drawing on a clean infinite canvas. It is known for delightful social presence — live multi-user cursors, **cursor chat**, stamps/emotes and high-fives, audio + live chat, comments, spotlight mode, and a large template library, plus AI helpers.
 
-**Coboard adopts:**
+**Komuboard adopts:**
 - **Cursor chat** (type right at your cursor) and **stamps / reactions / high-five** as lightweight social presence.
 - **Spotlight / follow mode** for guiding a room's attention.
 - A **clean, uncluttered infinite canvas** aesthetic.
@@ -767,7 +767,7 @@ FigJam is Figma's collaborative whiteboard for ideation: sticky notes, shapes an
 
 Miro is a broad infinite-canvas collaboration platform: a pen tool with color/thickness and stylus support, selection, undo/redo, copy/paste, text, file upload (images/PDF/Office), sticky notes, a rich shape set, connection lines, and an extensive template catalog (flowchart, retro, roadmap, business model canvas, user-story map, and more). It also offers voting, timers, reactions, and presentation mode.
 
-**Coboard adopts:**
+**Komuboard adopts:**
 - **Shape + connector breadth** (rectangles, ellipses, lines, arrows, brackets, quote bubbles) and connection lines.
 - A **template catalog** (kanban, retro, mindmap, flowchart) to make rooms instantly useful.
 - **Voting (dot voting), timer, reactions, and presentation mode** as workshop tooling.
@@ -779,15 +779,15 @@ Miro is a broad infinite-canvas collaboration platform: a pen tool with color/th
 
 Canva's whiteboard offers an infinite/expanding canvas with real-time collaboration shown through **colorful, labeled cursors**, comments, a large template gallery (Kanban, roadmaps, diagrams), a rich media/graphics library, and AI helpers. A standout is **sticky-note Sort** — reorganize stickies by color, author, reactions, or AI-detected themes — plus real-time reactions on stickies.
 
-**Coboard adopts:**
+**Komuboard adopts:**
 - **Colorful, labeled cursors** as the default presence treatment.
 - **Sticky-note Sort** (by color / author / reactions / theme) for fast clustering.
 - **AI "summarize the board"** and auto-cluster stickies as a cross-cutting stretch goal.
 - Real-time **reactions on objects**.
 
-### 5.5 Synthesis — what makes Coboard distinct
+### 5.5 Synthesis — what makes Komuboard distinct
 
-Coboard borrows the **room-code / no-signup + cross-reality** model from Whiteboard VR; **cursor chat, stamps, spotlight, and a clean infinite canvas** from FigJam; **shape/connector/template breadth plus voting/timer/presentation** from Miro; and **sticky Sort, colorful labeled cursors, and AI summarize** from Canva. Its **differentiator** is being **truly free to self-host on edge infrastructure** while serving a **single shared document across both 2D and immersive VR**. Feature-to-reference traceability is detailed in [02 — Features & Scope](./02-features-and-scope.md).
+Komuboard borrows the **room-code / no-signup + cross-reality** model from Whiteboard VR; **cursor chat, stamps, spotlight, and a clean infinite canvas** from FigJam; **shape/connector/template breadth plus voting/timer/presentation** from Miro; and **sticky Sort, colorful labeled cursors, and AI summarize** from Canva. Its **differentiator** is being **truly free to self-host on edge infrastructure** while serving a **single shared document across both 2D and immersive VR**. Feature-to-reference traceability is detailed in [02 — Features & Scope](./02-features-and-scope.md).
 
 ---
 
@@ -797,13 +797,13 @@ Legend: ✅ yes · ⚠️ partial / limited · ❌ no. Cells reflect the project
 
 | Product | Realtime cursors | VR / WebXR | Free self-host | No-signup rooms | Open source | Templates | Voice |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Coboard** | ✅ | ✅ (immersive, shared doc) | ✅ ($0 edge tiers) | ✅ (room code/URL) | ✅ | ✅ | ⚠️ (WebRTC, optional P2/P3) |
+| **Komuboard** | ✅ | ✅ (immersive, shared doc) | ✅ ($0 edge tiers) | ✅ (room code/URL) | ✅ | ✅ | ⚠️ (WebRTC, optional P2/P3) |
 | **FigJam** | ✅ | ❌ | ❌ | ⚠️ (24h guest access) | ❌ | ✅ | ✅ (audio + chat) |
 | **Miro** | ✅ | ❌ | ❌ | ⚠️ (guest links) | ❌ | ✅ | ⚠️ (via integrations) |
 | **Canva Whiteboards** | ✅ (labeled) | ❌ | ❌ | ⚠️ (share links) | ❌ | ✅ | ❌ |
 | **Whiteboard VR** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
 
-**Reading the table:** the mainstream SaaS products win on polish and breadth but lose on _self-host_, _open source_, and _true VR_. Whiteboard VR matches Coboard on the hard constraints (VR, free self-host, no-signup, open) but lacks templates, voice, and modern scale. Coboard aims to keep the full hard-constraint column **and** close the feature-breadth gap.
+**Reading the table:** the mainstream SaaS products win on polish and breadth but lose on _self-host_, _open source_, and _true VR_. Whiteboard VR matches Komuboard on the hard constraints (VR, free self-host, no-signup, open) but lacks templates, voice, and modern scale. Komuboard aims to keep the full hard-constraint column **and** close the feature-breadth gap.
 
 ---
 
@@ -821,7 +821,7 @@ Legend: ✅ yes · ⚠️ partial / limited · ❌ no. Cells reflect the project
 
 **Adoption success**
 - The repo is **forkable and self-hostable** by a solo developer in an afternoon.
-- Coboard is a credible, modern successor to Whiteboard VR — cited by it, improving on it.
+- Komuboard is a credible, modern successor to Whiteboard VR — cited by it, improving on it.
 
 ---
 
@@ -831,12 +831,12 @@ Legend: ✅ yes · ⚠️ partial / limited · ❌ no. Cells reflect the project
 | --- | --- |
 | **Room** | A shareable, anonymous collaboration space addressed by a string id in the URL (the "room code"). One room maps to one backend Durable Object and one board document. |
 | **Board** | The visual document of a room — strokes, sticky notes, shapes, text, connectors, frames. Rendered identically by the 2D web and 3D VR renderers because both read the same Yjs doc. |
-| **CRDT** (Conflict-free Replicated Data Type) | A data structure that lets many clients edit concurrently and converge to the same state without a central lock. Coboard uses **Yjs**, which ships tiny binary updates. |
+| **CRDT** (Conflict-free Replicated Data Type) | A data structure that lets many clients edit concurrently and converge to the same state without a central lock. Komuboard uses **Yjs**, which ships tiny binary updates. |
 | **Awareness** | Yjs's `y-protocols/awareness` channel for **ephemeral** presence — cursors, selections, user color/name, cursor-chat text, and VR avatar head+hands poses. Broadcast to peers but **never persisted**. |
 | **Awareness vs. document** | The **document** is durable, persisted board _content_ (Yjs updates saved to DO storage). **Awareness** is throwaway _presence_ that vanishes when a user leaves. Keeping them separate is what lets cursors update at high frequency without bloating saved history. |
-| **Durable Object (DO)** | A Cloudflare primitive: a single-threaded, globally-addressable, stateful instance with co-located storage. Coboard runs **one DO per room**, holding the room's WebSocket connections and persisting its Yjs doc. |
+| **Durable Object (DO)** | A Cloudflare primitive: a single-threaded, globally-addressable, stateful instance with co-located storage. Komuboard runs **one DO per room**, holding the room's WebSocket connections and persisting its Yjs doc. |
 | **Party** | A PartyServer concept that wraps a Durable Object as an easy realtime "room" (connection lifecycle + broadcasting), routed by an arbitrary room-id string. **One Party === one Durable Object.** |
-| **WebXR** | The browser API for VR/AR experiences. Coboard's VR mode uses **A-Frame + Three.js** over WebXR so it runs on Quest/Vive and other headsets, with desktop/mobile fallback. |
+| **WebXR** | The browser API for VR/AR experiences. Komuboard's VR mode uses **A-Frame + Three.js** over WebXR so it runs on Quest/Vive and other headsets, with desktop/mobile fallback. |
 | **Hibernation** | Cloudflare's WebSocket Hibernation API: clients stay connected while the Durable Object is evicted from memory, so duration (GB-s) charges stop accruing during idle periods — essential for $0 operation. |
 
 ---
@@ -844,7 +844,7 @@ Legend: ✅ yes · ⚠️ partial / limited · ❌ no. Cells reflect the project
 _Next: see [02 — Features & Scope](./02-features-and-scope.md) for the full feature catalog, MoSCoW prioritization, phased acceptance criteria, and feature-to-reference traceability._
 </script>
 <script type="text/markdown" data-doc-id="doc-02" data-title="Features &amp; Scope" data-num="02">
-# Coboard — Features and Scope
+# Komuboard — Features and Scope
 
 > _Purpose: the canonical feature catalog — MoSCoW prioritization, the three phased releases with per-feature user stories and testable acceptance criteria, the first-class realtime cursors & presence requirement, feature-to-reference traceability, and explicit v1 non-goals._
 
@@ -863,7 +863,7 @@ Related documents: [README](../README.md) · [01 — Product Vision & References
 
 ## MoSCoW summary
 
-Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is not Coboard without it; "Should" = high value, shippable slightly later within its phase; "Could" = nice-to-have / stretch within its phase; "Won't (v1)" = explicit non-goal (see [Non-goals](#non-goals-v1)).
+Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is not Komuboard without it; "Should" = high value, shippable slightly later within its phase; "Could" = nice-to-have / stretch within its phase; "Won't (v1)" = explicit non-goal (see [Non-goals](#non-goals-v1)).
 
 | Priority | Feature | Phase |
 |---|---|---|
@@ -1078,7 +1078,7 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 
 ### 2.10 Export PNG / SVG / PDF
 
-- **Story:** As a participant I want to export the board so that I can share or archive results outside Coboard.
+- **Story:** As a participant I want to export the board so that I can share or archive results outside Komuboard.
 - Export produces a PNG, an SVG, and a PDF of the current board (or a selected frame/region).
 - Export runs client-side from the rendered scene; output visually matches the canvas within tolerance.
 - Export of an empty board produces a valid (blank) file without error.
@@ -1197,7 +1197,7 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 
 ### 3.9 VR comfort options *(Should)*
 
-- **Story:** As a headset user I want comfort controls so that I can use Coboard in VR without discomfort.
+- **Story:** As a headset user I want comfort controls so that I can use Komuboard in VR without discomfort.
 - Comfort options include vignette during movement, teleport locomotion, and board reachability/scaling (bring the board closer / resize it).
 - Settings persist for the session and are local (not shared, not persisted to the board doc).
 - Teleport and scaling do not alter the shared board content (only the local view/rig).
@@ -1227,7 +1227,7 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 
 ## Realtime cursors & presence (first-class)
 
-> **This is a must-have, not a nice-to-have.** Cursors and presence are what make Coboard feel alive across desktop, touch, and VR. They appear in Phase 1 (§1.9), gain cursor chat in Phase 2 (§2.1), and extend to VR avatars + laser pointers in Phase 3 (§3.3).
+> **This is a must-have, not a nice-to-have.** Cursors and presence are what make Komuboard feel alive across desktop, touch, and VR. They appear in Phase 1 (§1.9), gain cursor chat in Phase 2 (§2.1), and extend to VR avatars + laser pointers in Phase 3 (§3.3).
 
 **Cross-cutting contract (applies in all three phases):**
 
@@ -1272,11 +1272,11 @@ Maps notable features to the reference product(s) that inspired them. See [01 �
 
 ## Non-goals (v1)
 
-Explicitly **out of scope** for v1. These are deliberate decisions, not omissions — they keep Coboard shippable on a $0 free-tier footprint and focused on the cross-reality realtime canvas.
+Explicitly **out of scope** for v1. These are deliberate decisions, not omissions — they keep Komuboard shippable on a $0 free-tier footprint and focused on the cross-reality realtime canvas.
 
 | Non-goal | Why it's out of v1 |
 |---|---|
-| **Native app-store apps** | Coboard ships as a **PWA only**; no iOS/Android/Quest store builds. The web + WebXR path covers all target devices. |
+| **Native app-store apps** | Komuboard ships as a **PWA only**; no iOS/Android/Quest store builds. The web + WebXR path covers all target devices. |
 | **Enterprise SSO / admin console** | No SAML/SSO, org management, or admin governance. Anonymous-first rooms are the model; named accounts are an optional *later* add (GitHub OAuth / Clerk free tier), not v1. |
 | **Real-time video tiles** | No webcam video grid. Optional **audio-only** WebRTC voice is the ceiling (Phase 2/3, *Could*); video does not fit the free-tier bandwidth/compute budget. |
 | **Offline-first sync beyond reconnect buffering** | We guarantee reconnect/resync (§1.11) and short buffering, **not** full offline editing with long-horizon merge. Yjs makes this *possible later*, but it's not a v1 promise. |
@@ -1285,9 +1285,9 @@ Explicitly **out of scope** for v1. These are deliberate decisions, not omission
 > These align with the canonical non-goals in the project brief and must not be re-scoped into v1 without updating this document and [06 — Roadmap](./06-implementation-roadmap.md).
 </script>
 <script type="text/markdown" data-doc-id="doc-03" data-title="Visual Design, UI &amp; UX" data-num="03">
-# Coboard — Visual Design, UI & UX
+# Komuboard — Visual Design, UI & UX
 
-> _The look, feel, and interaction model for Coboard across desktop, mobile/tablet, and VR — design language, tokens, wireframes, shortcuts, presence, comfort, and accessibility._
+> _The look, feel, and interaction model for Komuboard across desktop, mobile/tablet, and VR — design language, tokens, wireframes, shortcuts, presence, comfort, and accessibility._
 
 **Related documents:** [README](../README.md) · [01 Product Vision & References](./01-product-vision-and-references.md) · [02 Features & Scope](./02-features-and-scope.md) · [04 Technical Architecture](./04-technical-architecture.md) · [05 Scaling & Cost](./05-scaling-and-cost.md) · [06 Implementation Roadmap](./06-implementation-roadmap.md) · [07 Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md)
 
@@ -1295,7 +1295,7 @@ Explicitly **out of scope** for v1. These are deliberate decisions, not omission
 
 ## 1. Design language & mood
 
-Coboard's aesthetic is **calm infinite paper**: a quiet, near-neutral canvas that recedes so the user's content is the only thing that draws attention. Chrome is light, floating, and self-effacing; ink and stickies are vivid. The same visual identity holds whether the surface is a browser canvas, a phone, or a 3D plane floating in a VR room.
+Komuboard's aesthetic is **calm infinite paper**: a quiet, near-neutral canvas that recedes so the user's content is the only thing that draws attention. Chrome is light, floating, and self-effacing; ink and stickies are vivid. The same visual identity holds whether the surface is a browser canvas, a phone, or a 3D plane floating in a VR room.
 
 | Principle | What it means concretely |
 | --- | --- |
@@ -1511,7 +1511,7 @@ Floating chrome over a full-bleed canvas. Top bar pinned top; tool dock floats b
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│ ◧ Coboard  ROOM-K3F9-Q2 [⧉]  ┆ (◐Bea)(◑Ola)(◒+3)  [▷Present][◩ Enter VR][🔗Share] │  ← Top bar (--surface, --elev-1); top-right cluster: Present · Enter VR · Share
+│ ◧ Komuboard  ROOM-K3F9-Q2 [⧉]  ┆ (◐Bea)(◑Ola)(◒+3)  [▷Present][◩ Enter VR][🔗Share] │  ← Top bar (--surface, --elev-1); top-right cluster: Present · Enter VR · Share
 ├───────────────────────────────────────────────────────────────────────────────┤
 │                                                                     ┌─────────┐ │
 │                                                                     │Properties│ │  ← contextual,
@@ -1615,7 +1615,7 @@ The board is a textured 3D plane at the canonical default **~2.0 m wide × ~1.2 
 
 ### 4.4 Web ↔ WebVR transition
 
-> **One URL, two renderers.** A Coboard room is **always a web page first**: opening the board URL in *any* browser — desktop, phone, or the headset's own browser — lands every user in the **2D canvas core view**. VR is not a separate app or a separate load; it is a **renderer swap** entered through a single toolbar button, and it preserves the one-document single-source-of-truth invariant (§8.4). The WebXR session mechanics (feature detection, `requestSession`, reference spaces, render-loop hand-off) live in [04 Technical Architecture](./04-technical-architecture.md); this section is the **UX/visual** contract for the toggle and the transition.
+> **One URL, two renderers.** A Komuboard room is **always a web page first**: opening the board URL in *any* browser — desktop, phone, or the headset's own browser — lands every user in the **2D canvas core view**. VR is not a separate app or a separate load; it is a **renderer swap** entered through a single toolbar button, and it preserves the one-document single-source-of-truth invariant (§8.4). The WebXR session mechanics (feature detection, `requestSession`, reference spaces, render-loop hand-off) live in [04 Technical Architecture](./04-technical-architecture.md); this section is the **UX/visual** contract for the toggle and the transition.
 
 **The VR toggle (top-bar button).** A **headset-icon button** sits in the **top bar, top-right cluster** (next to Present/Share — see §4.1), labelled **"Enter VR"**. It is **always visible** and reflects state — **"Enter VR" ↔ in-VR / "Exit VR"** — and its enabled-state is driven by capability detection:
 
@@ -1783,17 +1783,17 @@ All presence is **ephemeral awareness** (never persisted — see [04](./04-techn
 
 ### 7.5 Reactions
 - **Stamps / emotes** (`Shift+E`): pick an emoji that floats up from your cursor and animates briefly for all (ephemeral **reaction burst**). **High-five** (`Shift+H`) sends a quick celebratory burst toward a target cursor. Both respect reduced-motion (show statically, no float).
-- Reaction bursts are pure **ephemeral event signals** over awareness (not document state) — alongside cursors, selections, and presence they complete Coboard's presence model: *online users + cursors + selections + ephemeral signals*.
+- Reaction bursts are pure **ephemeral event signals** over awareness (not document state) — alongside cursors, selections, and presence they complete Komuboard's presence model: *online users + cursors + selections + ephemeral signals*.
 
 ### 7.6 "Collaborative concurrency" — the named pattern
-Coboard's realtime interaction model is named **collaborative concurrency**: many people acting on one shared surface at once, each seeing the others' intent live, with **no locking and no turn-taking**. It is the sum of the patterns above, and it is the product's signature feel:
+Komuboard's realtime interaction model is named **collaborative concurrency**: many people acting on one shared surface at once, each seeing the others' intent live, with **no locking and no turn-taking**. It is the sum of the patterns above, and it is the product's signature feel:
 
 - **Optimistic local + CRDT reconcile** — your edits apply instantly and Yjs merges concurrent changes deterministically (see [04](./04-technical-architecture.md)); the doc is the single source of truth across 2D and VR.
 - **Send/render decoupling** — ~20 Hz broadcast, 60 fps interpolated render (§7.1).
 - **Presence on content** — identity-colored selection outlines show who is touching what (§7.3), preventing collisions socially rather than with locks.
 - **Facepile · follow · spotlight · reaction bursts** — the social affordances that make a shared canvas feel inhabited (§7.2, §7.5, §6.4).
 
-These are the baseline expectations established by [Liveblocks](https://liveblocks.io/multiplayer), [tldraw's sync engine](https://tldraw.dev), Figma/FigJam, and Miro; Coboard treats them as table stakes, not extras.
+These are the baseline expectations established by [Liveblocks](https://liveblocks.io/multiplayer), [tldraw's sync engine](https://tldraw.dev), Figma/FigJam, and Miro; Komuboard treats them as table stakes, not extras.
 
 ---
 
@@ -1883,7 +1883,7 @@ VR is an **immersive** mode (not a viewer). Default theme is dark for headset co
 
 ## 9. Accessibility (WCAG 2.2 AA)
 
-Coboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaningful canvas accessibility within the limits of a freeform drawing surface. This section is the UX-level commitment; the **deep accessibility treatment** — test matrix, the offscreen semantic-mirror architecture, ARIA live-region strategy, and emerging XR a11y norms ([XAUR](https://www.w3.org/TR/xaur/)) — lives in [07 Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md).
+Komuboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaningful canvas accessibility within the limits of a freeform drawing surface. This section is the UX-level commitment; the **deep accessibility treatment** — test matrix, the offscreen semantic-mirror architecture, ARIA live-region strategy, and emerging XR a11y norms ([XAUR](https://www.w3.org/TR/xaur/)) — lives in [07 Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md).
 
 | Area | Commitment |
 | --- | --- |
@@ -1904,10 +1904,10 @@ Coboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaning
 
 ## 10. Onboarding, empty state & share flow
 
-> **Why this matters (evidence).** A blank canvas triggers genuine "what do I do now?" anxiety; the cure is **starter content + lightweight first-action prompts**, not an empty void ([LogRocket — empty-states UX](https://blog.logrocket.com/ux-design/empty-states-ux-examples/)). Coboard applies this with a template gallery, a ghost prompt, first-run coachmarks, an optional demo room, and a `?` shortcuts overlay (detailed below and in §11).
+> **Why this matters (evidence).** A blank canvas triggers genuine "what do I do now?" anxiety; the cure is **starter content + lightweight first-action prompts**, not an empty void ([LogRocket — empty-states UX](https://blog.logrocket.com/ux-design/empty-states-ux-examples/)). Komuboard applies this with a template gallery, a ghost prompt, first-run coachmarks, an optional demo room, and a `?` shortcuts overlay (detailed below and in §11).
 
 ### 10.1 First-open onboarding (anonymous, zero-signup)
-- Opening `coboard.app` (or any room URL) **lands you in a room immediately** with a generated, human-readable room code (`ROOM-K3F9-Q2`), an assigned identity color, and a friendly default name (`"Guest Otter"`, editable inline). No modal blocks the canvas.
+- Opening `komuboard.app` (or any room URL) **lands you in a room immediately** with a generated, human-readable room code (`ROOM-K3F9-Q2`), an assigned identity color, and a friendly default name (`"Guest Otter"`, editable inline). No modal blocks the canvas.
 - A dismissible set of **first-run coachmarks** points to: the Pen tool ("Press P and draw"), the Share button ("Invite anyone — they just open the link"), the presence cluster ("See who's here"), and **pan/zoom + invite** basics. Dismiss with `Esc` or "Got it"; never shown again (localStorage flag).
 - A **template gallery** is offered on a *new, empty* room (kanban, retro, mindmap, flowchart — Phase 2), so the first action can be "drop a template" instead of facing a blank page.
 - An optional **demo / sample room** ("Take a tour") lets a first-time user poke at real content with zero stakes before creating their own board.
@@ -1940,7 +1940,7 @@ Coboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaning
 │                                      │
 │  Anyone with the link can edit       │  ← default access (anonymous, no signup)
 │  ┌────────────────────────────────┐  │
-│  │ https://coboard.app/r/K3F9-Q2  │ ⧉│  ← copy button, "Copied!" toast
+│  │ https://komuboard.app/r/K3F9-Q2  │ ⧉│  ← copy button, "Copied!" toast
 │  └────────────────────────────────┘  │
 │                                      │
 │  Room code:  K 3 F 9 - Q 2   ⧉       │  ← mono, disambiguated glyphs
@@ -1960,7 +1960,7 @@ Coboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaning
 
 ## 11. Evidence-based UX principles (research-backed)
 
-Every decision below is grounded in published UX research and industry practice, restated as a **concrete Coboard design decision** with its source. These principles also govern the choices throughout §2, §3, §7, §8, and §10; deep accessibility rationale lives in [07](./07-engineering-quality-security-accessibility.md).
+Every decision below is grounded in published UX research and industry practice, restated as a **concrete Komuboard design decision** with its source. These principles also govern the choices throughout §2, §3, §7, §8, and §10; deep accessibility rationale lives in [07](./07-engineering-quality-security-accessibility.md).
 
 ### 11.1 Infinite-canvas wayfinding
 **Decision:** ship live cursors + viewport-following + cursor chat as *baseline*, plus a **minimap showing every user's viewport rect**, **zoom-to-fit / reset-view**, **find-everyone / jump-to-user**, **semantic / LOD zoom**, and **snapping + alignment guides**; treat **frames as wayfinding landmarks** with a frame breadcrumb / outline.
@@ -1988,7 +1988,7 @@ Every decision below is grounded in published UX research and industry practice,
 **Source:** [LogRocket — empty-states UX](https://blog.logrocket.com/ux-design/empty-states-ux-examples/), UXPin, Eleken.
 
 ### 11.6 Visual design & motion (2026 direction)
-**Decision:** use **DTCG-standard design tokens** (color / type / spacing / elevation / **motion**) through a **Style-Dictionary-style pipeline** (§2 intro); make **motion 200–300 ms** the micro-interaction sweet spot and **structural** (it communicates what happened / is happening / will happen next), always gated by `prefers-reduced-motion` (§2.7); treat **dark mode** as first-class (**near-black surfaces, not pure `#000`** — see `--paper` `#15161A` in §2.1; slightly desaturated accents; OLED energy win); follow the **2026 calm / quiet-UI** direction (less visual theatrics, transparent AI), which matches Coboard's "infinite paper" language.
+**Decision:** use **DTCG-standard design tokens** (color / type / spacing / elevation / **motion**) through a **Style-Dictionary-style pipeline** (§2 intro); make **motion 200–300 ms** the micro-interaction sweet spot and **structural** (it communicates what happened / is happening / will happen next), always gated by `prefers-reduced-motion` (§2.7); treat **dark mode** as first-class (**near-black surfaces, not pure `#000`** — see `--paper` `#15161A` in §2.1; slightly desaturated accents; OLED energy win); follow the **2026 calm / quiet-UI** direction (less visual theatrics, transparent AI), which matches Komuboard's "infinite paper" language.
 **Where:** §1 (calm by default), §2 intro (DTCG pipeline), §2.1 (near-black dark surfaces), §2.7 (200–300 ms structural motion + reduced-motion rule).
 **Source:** [UXPin — design tokens](https://www.uxpin.com/studio/blog/what-are-design-tokens/), [Figma — web design trends](https://www.figma.com/resource-library/web-design-trends/), Supernova, "calm interfaces" (envato).
 
@@ -1997,7 +1997,7 @@ Every decision below is grounded in published UX research and industry practice,
 _Design tokens in this document are the canonical source for `packages/shared/tokens.ts` and the CSS custom-property sheet consumed by `client-web` and `vr`. Any visual change starts here, then propagates to both renderers so 2D and VR stay identical. See [04 Technical Architecture](./04-technical-architecture.md) for how the shared document drives both, and [07 Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md) for the deep accessibility, performance, and security treatment that these UX decisions feed into._
 </script>
 <script type="text/markdown" data-doc-id="doc-04" data-title="Technical Architecture" data-num="04">
-# Coboard — Technical Architecture
+# Komuboard — Technical Architecture
 
 > _The authoritative engineering blueprint: how one Yjs document per room flows from Cloudflare's edge into a 2D canvas and an immersive VR scene, at $0 baseline cost._
 
@@ -2007,7 +2007,7 @@ _Design tokens in this document are the canonical source for `packages/shared/to
 
 ## 1. System Context & Component Diagram
 
-Coboard is a single-page application served as static assets from **Cloudflare Pages** (free global CDN), talking to a realtime backend of **Cloudflare Workers + Durable Objects**. Every room is exactly one Durable Object (DO), hosted via **PartyServer**, holding one **Yjs** document bound through **Y-PartyServer**. The same Yjs document is consumed by both the **2D web renderer** (Konva.js) and the **VR renderer** (A-Frame + Three.js). Assets (images/PDF) live in **R2**; an optional **D1** table indexes rooms.
+Komuboard is a single-page application served as static assets from **Cloudflare Pages** (free global CDN), talking to a realtime backend of **Cloudflare Workers + Durable Objects**. Every room is exactly one Durable Object (DO), hosted via **PartyServer**, holding one **Yjs** document bound through **Y-PartyServer**. The same Yjs document is consumed by both the **2D web renderer** (Konva.js) and the **VR renderer** (A-Frame + Three.js). Assets (images/PDF) live in **R2**; an optional **D1** table indexes rooms.
 
 ```mermaid
 flowchart TB
@@ -2291,7 +2291,7 @@ The per-upload size cap is **configurable; 30 MB by default** — a **product ch
 
 ### 5.3 Optional D1 room index
 
-A single D1 table `rooms(id PK, createdAt, lastSeenAt, objectCount, passcodeHash NULL)` supports a "your recent rooms" list, abuse throttling, and TTL cleanup of dead rooms. It is **optional** — Coboard functions with rooms addressed purely by URL; D1 is a convenience/index, never the source of truth.
+A single D1 table `rooms(id PK, createdAt, lastSeenAt, objectCount, passcodeHash NULL)` supports a "your recent rooms" list, abuse throttling, and TTL cleanup of dead rooms. It is **optional** — Komuboard functions with rooms addressed purely by URL; D1 is a convenience/index, never the source of truth.
 
 ### 5.4 partysub escape hatch
 
@@ -2580,7 +2580,7 @@ sequenceDiagram
 ## 11. Planned Repo Structure (pnpm monorepo)
 
 ```text
-coboard/
+komuboard/
 ├─ pnpm-workspace.yaml
 ├─ package.json                  # root scripts (dev, build, test, deploy)
 ├─ tsconfig.base.json
@@ -2627,9 +2627,9 @@ coboard/
 `shared` is the seam that guarantees the architecture invariant: the **exact same** `schema.ts` and `awareness.ts` are imported by `client-web`, `vr`, and `worker`, so all three agree on the one Yjs document.
 </script>
 <script type="text/markdown" data-doc-id="doc-05" data-title="Scaling &amp; Cost" data-num="05">
-# Coboard — Scaling & Cost
+# Komuboard — Scaling & Cost
 
-> _How Coboard maximizes concurrent users while running at $0: the free-tier limit math, a capacity model with explicit arithmetic, per-room sharding, cost-control techniques, the first paid upgrade, and provider comparison._
+> _How Komuboard maximizes concurrent users while running at $0: the free-tier limit math, a capacity model with explicit arithmetic, per-room sharding, cost-control techniques, the first paid upgrade, and provider comparison._
 
 **Related documents:** [README](../README.md) · [01 — Product Vision & References](./01-product-vision-and-references.md) · [02 — Features & Scope](./02-features-and-scope.md) · [03 — Visual Design / UI / UX](./03-visual-design-ui-ux.md) · [04 — Technical Architecture](./04-technical-architecture.md) · [06 — Implementation Roadmap](./06-implementation-roadmap.md) · [07 — Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md)
 
@@ -2637,7 +2637,7 @@ coboard/
 
 ## 0. North star for this document
 
-Coboard's hard constraint (see [Foundation Brief](./01-product-vision-and-references.md)): **hostable AND runnable for $0 on free tiers, at meaningful concurrency.** This document derives a defensible headline number — **roughly 1,000–2,000 sustained concurrent collaborators across many rooms per Cloudflare account per day for $0** — and shows the arithmetic, the assumptions, and the levers that move it.
+Komuboard's hard constraint (see [Foundation Brief](./01-product-vision-and-references.md)): **hostable AND runnable for $0 on free tiers, at meaningful concurrency.** This document derives a defensible headline number — **roughly 1,000–2,000 sustained concurrent collaborators across many rooms per Cloudflare account per day for $0** — and shows the arithmetic, the assumptions, and the levers that move it.
 
 > ⚠️ **All figures change.** Every number below is a snapshot for design purposes and **must be re-verified against current Cloudflare documentation before launch.** Cloudflare adjusts free allotments, billing ratios, and limits regularly (the WS size limit and SQLite-DO storage billing both changed in late 2025 / Jan 2026). Treat this doc as a model, not a contract. Primary sources to check:
 > - Workers limits & pricing: <https://developers.cloudflare.com/workers/platform/limits/> · <https://developers.cloudflare.com/workers/platform/pricing/>
@@ -2651,9 +2651,9 @@ Coboard's hard constraint (see [Foundation Brief](./01-product-vision-and-refere
 
 ## 1. Free-tier limits (per Cloudflare service)
 
-Coboard uses only Cloudflare services so the whole system bills against **one free account**. Static assets are served from Pages (a separate, effectively-uncapped meter), so only realtime WS + uploads + API hit the billed Workers/DO meters.
+Komuboard uses only Cloudflare services so the whole system bills against **one free account**. Static assets are served from Pages (a separate, effectively-uncapped meter), so only realtime WS + uploads + API hit the billed Workers/DO meters.
 
-| Service | Free-tier allotment (verify!) | What consumes it in Coboard | Notes / billing quirks |
+| Service | Free-tier allotment (verify!) | What consumes it in Komuboard | Notes / billing quirks |
 |---|---|---|---|
 | **Workers (requests)** | ~100,000 requests/day (resets daily, UTC); ~10 ms CPU/request typical guidance | Initial WS upgrade (`fetch`), HTTP API calls (create room, asset presign), each **inbound** WS message routed to a DO | A WS **upgrade** = 1 request. Inbound WS **messages** bill on the DO meter (below), not here. Static assets do **not** count (served by Pages). |
 | **Durable Objects (requests)** | ~100,000 requests/day (shared concept with Workers free; DO now free-tier eligible when **SQLite-backed**) | One DO per room; each inbound WS message + each alarm/storage op = DO requests (with the WS ratio) | **20:1 inbound-WS ratio:** 1M inbound WS messages bill as 50k DO requests. ⇒ **100k DO requests/day ≈ 2,000,000 inbound WS messages/day.** **Outbound** WS messages are **free**. Protocol **pings** are **free**. |
@@ -2690,7 +2690,7 @@ Free inbound WS message ceiling     = 100,000 × 20
 | WS **upgrade** (connection open) | Yes (1 Worker request) | One-time per connection; negligible vs message volume. |
 | DO **duration** (GB-s while resident) | Yes — **but** | **Hibernation** drops resident time to ~0 while idle, so a room with no active drawers costs ~nothing even with people connected. |
 
-> **Design corollary — "cost follows the pen, not the eyeballs."** Because outbound is free and inbound is throttled, **idle viewers are nearly free** and **active drawers are the only meaningful cost.** Coboard's pricing math is therefore dominated by *simultaneously-active-drawers*, not raw room population.
+> **Design corollary — "cost follows the pen, not the eyeballs."** Because outbound is free and inbound is throttled, **idle viewers are nearly free** and **active drawers are the only meaningful cost.** Komuboard's pricing math is therefore dominated by *simultaneously-active-drawers*, not raw room population.
 
 ### 2.3 Per-user message budget
 
@@ -2805,7 +2805,7 @@ flowchart TB
 
 ### 4.3 Horizontal scale via many independent rooms (the natural sharding)
 
-Coboard's normal scaling is **embarrassingly parallel**: every room is its own DO with its own memory, CPU, and isolation. 1,000 rooms = 1,000 DOs, each tiny, each hibernating when idle. There is **no shared hot path** between rooms — the platform shards by room id for free. This is why the realistic concurrency ceiling (§3.2) is dominated by the **account-wide message budget**, not by any single instance's limits.
+Komuboard's normal scaling is **embarrassingly parallel**: every room is its own DO with its own memory, CPU, and isolation. 1,000 rooms = 1,000 DOs, each tiny, each hibernating when idle. There is **no shared hot path** between rooms — the platform shards by room id for free. This is why the realistic concurrency ceiling (§3.2) is dominated by the **account-wide message budget**, not by any single instance's limits.
 
 ---
 
@@ -2848,7 +2848,7 @@ Flip to **Workers Paid (~$5/month base)** when the **account-wide daily message 
 
 ## 7. Alternative free realtime stacks — comparison & verdict
 
-| Stack | Free realtime model | Idle cost | Per-room isolation | Edge/global | CRDT/Yjs fit | Verdict for Coboard |
+| Stack | Free realtime model | Idle cost | Per-room isolation | Edge/global | CRDT/Yjs fit | Verdict for Komuboard |
 |---|---|---|---|---|---|---|
 | **Cloudflare DO + PartyServer** *(chosen)* | WS in a stateful DO per room; **outbound free**, 20:1 inbound, hibernation | **~0 when idle** (hibernation) | **Native — 1 DO/room** | **Yes, global edge** | **First-class** (Y-PartyServer) | ✅ **Wins:** per-room isolation, free outbound fan-out, zero idle cost, co-located SQLite persistence, $0 baseline. |
 | **Supabase Realtime (free)** | Postgres-backed channels/broadcast; concurrent-connection + message caps | Low but connection-capped | Channel-based, shared infra | Regional (single region on free) | Yjs only via custom broadcast | ❌ Connection caps + single region hurt cross-reality presence; no per-room compute isolation. |
@@ -2856,7 +2856,7 @@ Flip to **Workers Paid (~$5/month base)** when the **account-wide daily message 
 | **Ably / Pusher (free)** | Managed pub/sub; **message + peak-connection caps** (e.g. ~100–200 peak conns, ~ low-millions msgs/mo) | Low | Channels, shared | Global | Transport only (Yjs over messages) | ❌ Tight peak-connection caps throttle presence-heavy rooms; no compute/persistence layer (still need a backend). |
 | **Self-hosted y-websocket on free VM (Fly/Render)** | Run the canonical Yjs WS server on a free-tier VM | **Pays for idle** (VM runs 24/7 or cold-starts) | Process-level, manual | Single region | **Perfect** (native Yjs) | ❌ Free VMs sleep/cold-start, single region, you operate it; **idle cost + ops burden** break the "$0, no-ops, global" goal. |
 
-**Verdict:** Cloudflare Durable Objects + PartyServer is the only option that simultaneously gives **(a)** native per-room compute isolation, **(b)** free outbound broadcast (cost scales with senders, not receivers), **(c)** **zero idle cost via hibernation**, **(d)** co-located free SQLite persistence, and **(e)** global edge placement — exactly the four properties Coboard's economics depend on. The alternatives each break at least one (idle cost, per-receiver billing, connection caps, or single-region).
+**Verdict:** Cloudflare Durable Objects + PartyServer is the only option that simultaneously gives **(a)** native per-room compute isolation, **(b)** free outbound broadcast (cost scales with senders, not receivers), **(c)** **zero idle cost via hibernation**, **(d)** co-located free SQLite persistence, and **(e)** global edge placement — exactly the four properties Komuboard's economics depend on. The alternatives each break at least one (idle cost, per-receiver billing, connection caps, or single-region).
 
 ---
 
@@ -2880,7 +2880,7 @@ Flip to **Workers Paid (~$5/month base)** when the **account-wide daily message 
 _All numbers in this document are design-time estimates and **must be re-verified against current Cloudflare documentation** (links in §0) before any capacity commitment. See [04 — Technical Architecture](./04-technical-architecture.md) for the sync/awareness protocol these costs are derived from, and [06 — Implementation Roadmap](./06-implementation-roadmap.md) for the load-test milestones that validate them._
 </script>
 <script type="text/markdown" data-doc-id="doc-06" data-title="Implementation Roadmap" data-num="06">
-# Coboard — Implementation Roadmap
+# Komuboard — Implementation Roadmap
 
 > _Purpose: the build plan — milestones M0–M5 mapped to the three canonical phases, granular GitHub-style task checklists, repo layout, CI/CD, testing strategy, a risk register, and the KPIs that define success._
 
@@ -2903,7 +2903,7 @@ Six milestones map onto the three canonical phases. Each milestone is shippable 
 
 ```mermaid
 gantt
-    title Coboard milestone sequence
+    title Komuboard milestone sequence
     dateFormat  X
     axisFormat %s
     section Phase 1 (MVP)
@@ -2929,7 +2929,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ### M0 — Foundations
 
 **Setup**
-- [ ] Create the GitHub repo `coboard` and protect `main` (require PR + green CI).
+- [ ] Create the GitHub repo `komuboard` and protect `main` (require PR + green CI).
 - [x] Initialize a **pnpm workspaces** monorepo with `pnpm-workspace.yaml` referencing `packages/*`.
 - [x] Scaffold packages: `packages/client-web`, `packages/vr`, `packages/shared`, `packages/worker`.
 - [x] Add root **TypeScript** project references + a shared `tsconfig.base.json` (strict mode on).
@@ -3002,7 +3002,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 
 **Client (chrome: top bar, dock, panels, zoom, minimap)**
 - [ ] Render the floating **top bar** (blur backdrop) with logo/home, room pill, presence facepile, Help, and Share — _done when:_ the bar pins to the top using surface/elevation tokens and holds all five clusters without overflow at 390px.
-- [ ] Render the **Coboard brand mark + wordmark** — _done when:_ a gradient logo glyph plus the "Coboard" wordmark sit top-left and clicking routes to home/dashboard.
+- [ ] Render the **Komuboard brand mark + wordmark** — _done when:_ a gradient logo glyph plus the "Komuboard" wordmark sit top-left and clicking routes to home/dashboard.
 - [ ] Render the floating **tool dock** with `role=toolbar` and idle auto-dim — _done when:_ the dock floats (left or bottom-center per design), dims to ~70% after 3s idle, and returns to full on hover/focus.
 - [ ] Show **single-active-tool** highlighting with `aria-pressed` — _done when:_ exactly one tool shows the accent active style with `aria-pressed=true` and switching moves the highlight.
 - [ ] Add **tool dock separators / grouping** — _done when:_ hairline separators group nav, draw, shape, and media tools per the mockup.
@@ -3080,7 +3080,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] Render the **room pill** with room name/slug and a live connection dot — _done when:_ the pill shows the current room slug (mono, disambiguated glyphs) with a green pulsing dot when the socket is connected and an amber/red state on disconnect; tapping reveals room details/rename/copy.
 - [ ] Render the **room-code copy control** — _done when:_ clicking the copy icon writes the room code/URL to the clipboard and politely announces "Copied!".
 - [ ] Render the primary **Share button** and open the **Share dialog** — _done when:_ clicking Share opens a labeled, focus-trapped, elevated card ("Share this board"), and Esc/backdrop/X closes it and returns focus to the Share button.
-- [ ] Show the read-only **room URL field** with **Copy-link** + confirmation — _done when:_ the field shows `coboard.app/r/<room-slug>` (slug = current room, selectable) and Copy writes the full URL and shows a "Copied" state.
+- [ ] Show the read-only **room URL field** with **Copy-link** + confirmation — _done when:_ the field shows `komuboard.app/r/<room-slug>` (slug = current room, selectable) and Copy writes the full URL and shows a "Copied" state.
 - [ ] Render a scannable **QR code** for the room URL with caption — _done when:_ the QR encodes the exact room URL (decodes back to it) and shows "Scan to join on mobile or VR".
 - [ ] Add **Email/mailto share** and **native share-sheet** handoff — _done when:_ Email opens a prefilled mailto with the room link and, on supported devices, a Share action invokes the OS share sheet.
 - [ ] Add the **"anyone with the link can edit" permission toggle** with "No signup required" helper — _done when:_ toggling access changes link-joiner edit rights, the state persists on the room, and the helper text + shield/check icon render.
@@ -3309,7 +3309,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 ## 3. Planned repo layout
 
 ```text
-coboard/
+komuboard/
 ├─ pnpm-workspace.yaml
 ├─ package.json                # root scripts: dev, build, lint, typecheck, test, test:e2e, deploy
 ├─ tsconfig.base.json          # strict, shared compiler options
@@ -3414,7 +3414,7 @@ flowchart LR
 
 </script>
 <script type="text/markdown" data-doc-id="doc-07" data-title="Engineering, Quality, Security &amp; A11y" data-num="07">
-# Coboard — Engineering Quality, Performance, Security & Accessibility
+# Komuboard — Engineering Quality, Performance, Security & Accessibility
 
 > _Purpose: the cross-cutting engineering-quality contract — performance budgets and optimization tactics, code-maintainability rules, the security & privacy threat model for anonymous public rooms, the consolidated accessibility plan, and a risk register with open questions. This doc goes deeper than the surface that 03/04/05/06 establish and cross-references them rather than repeating them._
 
@@ -3424,7 +3424,7 @@ flowchart LR
 
 ## 1. Purpose & scope
 
-This is the **quality spine** of the Coboard planning package. Where:
+This is the **quality spine** of the Komuboard planning package. Where:
 
 - [04 — Technical Architecture](./04-technical-architecture.md) defines _what the system is_ (Yjs single source of truth, the Renderer abstraction, the Durable Object room model, the viewport/canvas-space model),
 - [05 — Scaling & Cost](./05-scaling-and-cost.md) defines _how many users fit for $0_ (free-tier math, sharding, broadcast fanout),
@@ -3440,7 +3440,7 @@ A single guiding principle ties the four pillars together:
 
 ## 2. Performance & optimization
 
-Performance is a **product feature** for Coboard: a whiteboard that stutters at 30 fps or shows a 600 ms cursor lag feels broken regardless of correctness. We optimize across four axes — **client rendering, network, load/startup, memory** — and hold them to the [budget table](#27-performance-budget) at the end of this section.
+Performance is a **product feature** for Komuboard: a whiteboard that stutters at 30 fps or shows a 600 ms cursor lag feels broken regardless of correctness. We optimize across four axes — **client rendering, network, load/startup, memory** — and hold them to the [budget table](#27-performance-budget) at the end of this section.
 
 ### 2.1 Client rendering — 2D (Konva / Canvas 2D)
 
@@ -3559,7 +3559,7 @@ The **test pyramid, CI matrix, and coverage targets live in [06 — Implementati
 
 ## 4. Security & privacy
 
-Coboard is **anonymous-first and public-by-link** ([01](./01-product-vision-and-references.md)/[02](./02-features-and-scope.md)): anyone with a room URL can join, draw, and (later) upload. That openness is the product _and_ the threat surface. The model below assumes an attacker who has, or can guess, a room link.
+Komuboard is **anonymous-first and public-by-link** ([01](./01-product-vision-and-references.md)/[02](./02-features-and-scope.md)): anyone with a room URL can join, draw, and (later) upload. That openness is the product _and_ the threat surface. The model below assumes an attacker who has, or can guess, a room link.
 
 ### 4.1 Threat model (anonymous public rooms)
 
@@ -3654,7 +3654,7 @@ This is the **consolidated, deeper** accessibility plan; [03 — Visual Design /
 
 ### 5.1 The canvas-a11y problem — and the solution
 
-A `<canvas>` is an opaque pixel buffer: screen readers see nothing, keyboards can't reach shapes. Coboard solves this with an **offscreen DOM semantic mirror**:
+A `<canvas>` is an opaque pixel buffer: screen readers see nothing, keyboards can't reach shapes. Komuboard solves this with an **offscreen DOM semantic mirror**:
 
 - **Object list mirror.** A visually-hidden, focusable DOM list mirrors the document — every canvas object becomes a labeled list item ("Sticky: 'Q3 goals', top-left", "Arrow connecting A to B"), generated from the same typed Yjs accessors (§3.2). Screen readers navigate _this_, not the pixels.
 - **ARIA live region for presence + remote changes.** A polite `aria-live` region announces presence ("Maya joined", "2 people editing") and salient remote changes ("Sam added a sticky"), so a non-visual user perceives the _multiplayer_ dimension that finding 2 (presence UX) makes central.
@@ -3681,7 +3681,7 @@ VR accessibility follows spatial-UX + XAUR guidance (finding 3 + 4):
 - **Snap-turn + locomotion comfort** options to reduce vection/nausea; vignette/comfort settings.
 - **Subtitles** for any in-VR audio.
 
-**The load-bearing principle:** WebXR is **not yet a fully accessible platform** (XAUR is an emerging standard). Therefore **the 2D experience must be a _complete_ equivalent — there are NO VR-only features.** Anything you can do in VR (draw, move, connect, present, follow, see presence) you can do fully in 2D with keyboard + screen-reader support. VR is an _enhanced_ way to use Coboard, never the _only_ way to use any capability. This is both an accessibility guarantee and an architectural one (the Renderer abstraction, §3.3, makes it true by construction since both renderers bind the same document + commands).
+**The load-bearing principle:** WebXR is **not yet a fully accessible platform** (XAUR is an emerging standard). Therefore **the 2D experience must be a _complete_ equivalent — there are NO VR-only features.** Anything you can do in VR (draw, move, connect, present, follow, see presence) you can do fully in 2D with keyboard + screen-reader support. VR is an _enhanced_ way to use Komuboard, never the _only_ way to use any capability. This is both an accessibility guarantee and an architectural one (the Renderer abstraction, §3.3, makes it true by construction since both renderers bind the same document + commands).
 
 ### 5.5 Tooling & process
 
@@ -3750,9 +3750,9 @@ VR accessibility follows spatial-UX + XAUR guidance (finding 3 + 4):
 > _Quality is not a milestone — it's the budget table, the contract package, the security checklist, and the a11y checklist enforced on **every** PR. One document, two realities, zero divergence._
 </script>
 <script type="text/markdown" data-doc-id="doc-08" data-title="Localization &amp; i18n" data-num="08">
-# Coboard — Localization & Internationalization (i18n)
+# Komuboard — Localization & Internationalization (i18n)
 
-> _How Coboard ships translatable, runtime-switchable UI strings across the 2D chrome, the Konva canvas, and the VR scene — without adopting a UI framework. React is **not** required._
+> _How Komuboard ships translatable, runtime-switchable UI strings across the 2D chrome, the Konva canvas, and the VR scene — without adopting a UI framework. React is **not** required._
 
 **Related documents:** [README](../README.md) · [01 — Product Vision & References](./01-product-vision-and-references.md) · [02 — Features & Scope](./02-features-and-scope.md) · [03 — Visual Design / UI-UX](./03-visual-design-ui-ux.md) · [04 — Technical Architecture](./04-technical-architecture.md) · [05 — Scaling & Cost](./05-scaling-and-cost.md) · [06 — Implementation Roadmap](./06-implementation-roadmap.md) · [07 — Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md) · [ADR-0005 — UI chrome is Web Components](./adr/0005-ui-chrome-web-components.md)
 
@@ -4005,7 +4005,7 @@ Either replaces §4.1 only; §4.2–4.4 (the sweep + dynamic re-apply + canvas/V
 </script>
 
 <script type="text/markdown" data-doc-id="doc-09" data-title="Tech Debt &amp; Audit Backlog" data-num="09">
-# Coboard — Technical Debt & Audit Backlog
+# Komuboard — Technical Debt & Audit Backlog
 
 > _A living tracker of concrete code-level findings from the M1 audits (performance, optimization, code quality, organization) — what's been addressed and what remains, with locations and recommended timing. This is the actionable, file-level companion to the planning-level "potential issues" register in [docs/07](./07-engineering-quality-security-accessibility.md)._
 
@@ -4076,7 +4076,7 @@ These shipped across the M1 hardening + refactor pass and are verified (typechec
 | --- | --- | --- | --- | --- |
 | T1 | **Worker DO/eviction integration test.** The persistence _core_ is now unit-tested (`persistence.test.ts`), but the SQL execution + real Durable Object lifecycle (`CREATE TABLE`, the `doc_corrupt` stash, actual eviction→reload) need `@cloudflare/vitest-pool-workers`. Deferred from the unit pass to avoid fragile infra; land before the persistence milestone gate. | **High** | `worker/` | ⏭ |
 | T2 | Draw-bar interpolation/ownership edge cases untested: live-preview→commit **style/opacity preservation** (esp. the 4th `highlight-dashed` style), peer **cancel mid-gesture** (snap-back, no doc mutation), **multi-node resize**. Schedule before the VR renderer reuses these fields. | Med | `e2e/` | ⏭ |
-| T3 | The `BoardWindow` test-hook type in `e2e/helpers.ts` is a hand-maintained mirror of the real `__coboard` shape and can silently drift; eventually assert/derive it against the real types. | Low | `e2e/helpers.ts` | 🅿️ |
+| T3 | The `BoardWindow` test-hook type in `e2e/helpers.ts` is a hand-maintained mirror of the real `__komuboard` shape and can silently drift; eventually assert/derive it against the real types. | Low | `e2e/helpers.ts` | 🅿️ |
 
 ## Hygiene & docs
 
@@ -4121,7 +4121,7 @@ if (typeof window.marked === "undefined") {
   "use strict";
 
   /* ───────────── Theme ───────────── */
-  var THEME_KEY = "coboard-theme";
+  var THEME_KEY = "komuboard-theme";
   var root = document.documentElement;
   function applyTheme(t) {
     root.setAttribute("data-theme", t);
@@ -4367,7 +4367,7 @@ if (typeof window.marked === "undefined") {
   // Footer note
   var foot = document.createElement("div");
   foot.className = "sidebar-foot";
-  foot.innerHTML = 'Coboard is a working placeholder name. Self-contained interactive read of the full planning package.';
+  foot.innerHTML = 'Komuboard is a working placeholder name. Self-contained interactive read of the full planning package.';
   sidebarEl.appendChild(foot);
 
   /* ───────────── Doc footer prev/next ───────────── */
@@ -4386,7 +4386,7 @@ if (typeof window.marked === "undefined") {
   });
 
   /* ───────────── Build Checklist view ───────────── */
-  var CL_KEY = "coboard-checklist";
+  var CL_KEY = "komuboard-checklist";
   var clState = {};
   try { clState = JSON.parse(localStorage.getItem(CL_KEY) || "{}"); } catch (e) { clState = {}; }
   // A task is done if the reader toggled it (localStorage wins); otherwise it

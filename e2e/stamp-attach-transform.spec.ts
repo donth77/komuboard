@@ -16,14 +16,14 @@ import {
  */
 
 const orderIds = (page: Page): Promise<string[]> =>
-  page.evaluate(() => (window as unknown as BoardWindow).__coboard.doc.getArray("order").toArray());
+  page.evaluate(() => (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray());
 
 async function shapeWithStamp(page: Page, stampWorld: { x: number; y: number }): Promise<string> {
   await injectShape(page, { id: "sh", x: 0, y: 0, width: 200, height: 160, bg: "#a5d8ff" });
   await expect.poll(() => page.locator('[data-id="sh"]').count()).toBe(1);
   const cal = await calibrate(page);
   await page.evaluate(() => {
-    const c = (window as unknown as BoardWindow).__coboard.canvas!;
+    const c = (window as unknown as BoardWindow).__komuboard.canvas!;
     c.setStamp("emoji:2705");
     c.setTool("stamp");
   });
@@ -99,7 +99,7 @@ test("rotating a host shape orbits + spins its attached stamp", async ({ browser
 const selectionSize = (page: Page): Promise<number> =>
   page.evaluate(
     () =>
-      (window as unknown as BoardWindow).__coboard.awareness.getLocalState()?.selection?.length ??
+      (window as unknown as BoardWindow).__komuboard.awareness.getLocalState()?.selection?.length ??
       0,
   );
 
@@ -122,7 +122,7 @@ test("group-resizing a selection that includes a host scales its (unselected) at
 
   // Drag the group's bottom-right handle outward → both shapes + the attached stamp scale up.
   const u = (await a.page.evaluate(() =>
-    (window as unknown as BoardWindow).__coboard.canvas!.selectionUnionRect(),
+    (window as unknown as BoardWindow).__komuboard.canvas!.selectionUnionRect(),
   ))!;
   const h = worldToScreen(cal, u.x + u.width, u.y + u.height);
   await a.page.mouse.move(h.x, h.y);

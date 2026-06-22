@@ -11,7 +11,7 @@ import type { CoColorPicker } from "./color-picker";
 import { lineWeightIcon } from "./icons";
 import { SWATCHES } from "./palette";
 import { COLOR_NAMES } from "./draw-bar";
-import type { ConnectorCap, ConnectorStyle } from "@coboard/shared";
+import type { ConnectorCap, ConnectorStyle } from "@komuboard/shared";
 
 export interface ConnectorBarHost {
   setColor(hex: string): void;

@@ -19,7 +19,7 @@ test("a peer's selection is broadcast and rendered on the other client", async (
     .poll(
       () =>
         b.page.evaluate(
-          () => (window as unknown as BoardWindow).__coboard.doc.getMap("objects").size,
+          () => (window as unknown as BoardWindow).__komuboard.doc.getMap("objects").size,
         ),
       { timeout: 10_000 },
     )
@@ -36,7 +36,7 @@ test("a peer's selection is broadcast and rendered on the other client", async (
       () =>
         a.page.evaluate(
           () =>
-            (window as unknown as BoardWindow).__coboard.awareness.getLocalState()?.selection ??
+            (window as unknown as BoardWindow).__komuboard.awareness.getLocalState()?.selection ??
             null,
         ),
       { timeout: 5_000 },
@@ -48,7 +48,7 @@ test("a peer's selection is broadcast and rendered on the other client", async (
     .poll(
       () =>
         b.page.evaluate(() => {
-          const aw = (window as unknown as BoardWindow).__coboard.awareness;
+          const aw = (window as unknown as BoardWindow).__komuboard.awareness;
           for (const [id, st] of aw.getStates()) {
             if (id !== aw.clientID && st.selection?.length) return st.selection;
           }

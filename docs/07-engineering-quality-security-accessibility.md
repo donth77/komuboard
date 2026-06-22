@@ -1,4 +1,4 @@
-# Coboard — Engineering Quality, Performance, Security & Accessibility
+# Komuboard — Engineering Quality, Performance, Security & Accessibility
 
 > _Purpose: the cross-cutting engineering-quality contract — performance budgets and optimization tactics, code-maintainability rules, the security & privacy threat model for anonymous public rooms, the consolidated accessibility plan, and a risk register with open questions. This doc goes deeper than the surface that 03/04/05/06 establish and cross-references them rather than repeating them._
 
@@ -8,7 +8,7 @@
 
 ## 1. Purpose & scope
 
-This is the **quality spine** of the Coboard planning package. Where:
+This is the **quality spine** of the Komuboard planning package. Where:
 
 - [04 — Technical Architecture](./04-technical-architecture.md) defines _what the system is_ (Yjs single source of truth, the Renderer abstraction, the Durable Object room model, the viewport/canvas-space model),
 - [05 — Scaling & Cost](./05-scaling-and-cost.md) defines _how many users fit for $0_ (free-tier math, sharding, broadcast fanout),
@@ -24,7 +24,7 @@ A single guiding principle ties the four pillars together:
 
 ## 2. Performance & optimization
 
-Performance is a **product feature** for Coboard: a whiteboard that stutters at 30 fps or shows a 600 ms cursor lag feels broken regardless of correctness. We optimize across four axes — **client rendering, network, load/startup, memory** — and hold them to the [budget table](#27-performance-budget) at the end of this section.
+Performance is a **product feature** for Komuboard: a whiteboard that stutters at 30 fps or shows a 600 ms cursor lag feels broken regardless of correctness. We optimize across four axes — **client rendering, network, load/startup, memory** — and hold them to the [budget table](#27-performance-budget) at the end of this section.
 
 ### 2.1 Client rendering — 2D (Konva / Canvas 2D)
 
@@ -129,7 +129,7 @@ Zustand holds **only ephemeral/local UI state** — current tool, selected ids, 
 
 The DOM **chrome** — top bar, tool dock, properties panels, dialogs, share/onboarding sheets, minimap, presence facepile — is built from **native Web Components (custom elements)**, no UI framework required (the board itself is Konva canvas; VR is A-Frame). This is the framework-agnostic counterpart to §3.4: document state lives in Yjs, UI state in Zustand, and **chrome lives in `<co-*>` custom elements** with property-in / `CustomEvent`-out interfaces — app glue does the Yjs/awareness wiring, elements are presentation + local interaction. Rationale and trade-offs: **[ADR-0005](./adr/0005-ui-chrome-web-components.md)**.
 
-- **Light DOM, not Shadow DOM.** Elements share Coboard's global design system — CSS tokens **and** utility classes (`.btn-primary`, `.swatches`, `.kbd`, `.avatar`, …). Shadow DOM was rejected: custom properties pierce a shadow boundary but **class selectors do not**, so it would force per-component style duplication (and the global `prefers-reduced-motion` reset would stop applying).
+- **Light DOM, not Shadow DOM.** Elements share Komuboard's global design system — CSS tokens **and** utility classes (`.btn-primary`, `.swatches`, `.kbd`, `.avatar`, …). Shadow DOM was rejected: custom properties pierce a shadow boundary but **class selectors do not**, so it would force per-component style duplication (and the global `prefers-reduced-motion` reset would stop applying).
 - **A11y bonus of light DOM:** one DOM tree means no cross-root ARIA fragmentation — important for the §5.1 semantic mirror and the live-region announcer — and keeps `axe-core` / Playwright selectors simple. Trade-off: no style encapsulation, so rely on disciplined prefixed class names + the single shared stylesheet.
 - **Vanilla now, [Lit](https://lit.dev) (~6 KB, MIT) optional** if boilerplate grows — within the §2.7 bundle budget, not a "heavy framework"; interops with React 19 if the React-optional path ([04 §9](./04-technical-architecture.md)) is taken. Shipped: `<co-topbar>`, `<co-drawer>`, `<co-dialog>`, `<co-avatar-presence-row>`, `<co-tool-dock>`, `<co-draw-bar>`, `<co-color-picker>`, `<co-zoombar>` (in `packages/client-web/src/`), over a shared `icons.ts`.
 
@@ -151,7 +151,7 @@ The **test pyramid, CI matrix, and coverage targets live in [06 — Implementati
 
 ## 4. Security & privacy
 
-Coboard is **anonymous-first and public-by-link** ([01](./01-product-vision-and-references.md)/[02](./02-features-and-scope.md)): anyone with a room URL can join, draw, and (later) upload. That openness is the product _and_ the threat surface. The model below assumes an attacker who has, or can guess, a room link.
+Komuboard is **anonymous-first and public-by-link** ([01](./01-product-vision-and-references.md)/[02](./02-features-and-scope.md)): anyone with a room URL can join, draw, and (later) upload. That openness is the product _and_ the threat surface. The model below assumes an attacker who has, or can guess, a room link.
 
 ### 4.1 Threat model (anonymous public rooms)
 
@@ -246,7 +246,7 @@ This is the **consolidated, deeper** accessibility plan; [03 — Visual Design /
 
 ### 5.1 The canvas-a11y problem — and the solution
 
-A `<canvas>` is an opaque pixel buffer: screen readers see nothing, keyboards can't reach shapes. Coboard solves this with an **offscreen DOM semantic mirror**:
+A `<canvas>` is an opaque pixel buffer: screen readers see nothing, keyboards can't reach shapes. Komuboard solves this with an **offscreen DOM semantic mirror**:
 
 - **Object list mirror.** A visually-hidden, focusable DOM list mirrors the document — every canvas object becomes a labeled list item ("Sticky: 'Q3 goals', top-left", "Arrow connecting A to B"), generated from the same typed Yjs accessors (§3.2). Screen readers navigate _this_, not the pixels.
 - **ARIA live region for presence + remote changes.** A polite `aria-live` region announces presence ("Maya joined", "2 people editing") and salient remote changes ("Sam added a sticky"), so a non-visual user perceives the _multiplayer_ dimension that finding 2 (presence UX) makes central.
@@ -273,7 +273,7 @@ VR accessibility follows spatial-UX + XAUR guidance (finding 3 + 4):
 - **Snap-turn + locomotion comfort** options to reduce vection/nausea; vignette/comfort settings.
 - **Subtitles** for any in-VR audio.
 
-**The load-bearing principle:** WebXR is **not yet a fully accessible platform** (XAUR is an emerging standard). Therefore **the 2D experience must be a _complete_ equivalent — there are NO VR-only features.** Anything you can do in VR (draw, move, connect, present, follow, see presence) you can do fully in 2D with keyboard + screen-reader support. VR is an _enhanced_ way to use Coboard, never the _only_ way to use any capability. This is both an accessibility guarantee and an architectural one (the Renderer abstraction, §3.3, makes it true by construction since both renderers bind the same document + commands).
+**The load-bearing principle:** WebXR is **not yet a fully accessible platform** (XAUR is an emerging standard). Therefore **the 2D experience must be a _complete_ equivalent — there are NO VR-only features.** Anything you can do in VR (draw, move, connect, present, follow, see presence) you can do fully in 2D with keyboard + screen-reader support. VR is an _enhanced_ way to use Komuboard, never the _only_ way to use any capability. This is both an accessibility guarantee and an architectural one (the Renderer abstraction, §3.3, makes it true by construction since both renderers bind the same document + commands).
 
 ### 5.5 Tooling & process
 

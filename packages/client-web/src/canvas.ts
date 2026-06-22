@@ -32,7 +32,7 @@ import {
   type ShapeKind,
   type StrokeObject,
   type StrokeStyle,
-} from "@coboard/shared";
+} from "@komuboard/shared";
 import { ViewportController } from "./viewport";
 import { TextLayer } from "./text-layer";
 import { ConnectorBar } from "./connector-bar";

@@ -1,6 +1,6 @@
-# Coboard — Localization & Internationalization (i18n)
+# Komuboard — Localization & Internationalization (i18n)
 
-> _How Coboard ships translatable, runtime-switchable UI strings across the 2D chrome, the Konva canvas, and the VR scene — without adopting a UI framework. React is **not** required._
+> _How Komuboard ships translatable, runtime-switchable UI strings across the 2D chrome, the Konva canvas, and the VR scene — without adopting a UI framework. React is **not** required._
 
 **Related documents:** [README](../README.md) · [01 — Product Vision & References](./01-product-vision-and-references.md) · [02 — Features & Scope](./02-features-and-scope.md) · [03 — Visual Design / UI-UX](./03-visual-design-ui-ux.md) · [04 — Technical Architecture](./04-technical-architecture.md) · [05 — Scaling & Cost](./05-scaling-and-cost.md) · [06 — Implementation Roadmap](./06-implementation-roadmap.md) · [07 — Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md) · [ADR-0005 — UI chrome is Web Components](./adr/0005-ui-chrome-web-components.md)
 

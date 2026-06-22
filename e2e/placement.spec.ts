@@ -19,7 +19,7 @@ import {
  */
 
 const orderIds = (page: Page): Promise<string[]> =>
-  page.evaluate(() => (window as unknown as BoardWindow).__coboard.doc.getArray("order").toArray());
+  page.evaluate(() => (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray());
 
 const runsText = (o: { runs?: unknown } | null): string =>
   Array.isArray(o?.runs) ? (o!.runs as { text?: string }[]).map((r) => r.text ?? "").join("") : "";
@@ -33,7 +33,7 @@ test("shapes tool: tapping on a sticky places a NEW shape on top (does not edit 
 
   const cal = await calibrate(a.page);
   await a.page.evaluate(() => {
-    const c = (window as unknown as BoardWindow).__coboard.canvas!;
+    const c = (window as unknown as BoardWindow).__komuboard.canvas!;
     c.setShape("rectangle");
     c.setTool("shapes");
   });
@@ -45,7 +45,7 @@ test("shapes tool: tapping on a sticky places a NEW shape on top (does not edit 
   await a.page.mouse.up();
   await a.page.keyboard.type("SHAPE");
   await a.page.evaluate(() =>
-    (window as unknown as BoardWindow).__coboard.canvas!.setTool("select"),
+    (window as unknown as BoardWindow).__komuboard.canvas!.setTool("select"),
   );
 
   // Two objects now: the sticky (still empty) + a NEW rectangle on top carrying the typed label.
@@ -75,7 +75,7 @@ test("shapes tool: tapping on a stamp still places a shape (no silent no-op)", a
 
   const cal = await calibrate(a.page);
   await a.page.evaluate(() => {
-    const c = (window as unknown as BoardWindow).__coboard.canvas!;
+    const c = (window as unknown as BoardWindow).__komuboard.canvas!;
     c.setShape("ellipse");
     c.setTool("shapes");
   });
@@ -85,7 +85,7 @@ test("shapes tool: tapping on a stamp still places a shape (no silent no-op)", a
   await a.page.mouse.up();
   await a.page.keyboard.type("OVER");
   await a.page.evaluate(() =>
-    (window as unknown as BoardWindow).__coboard.canvas!.setTool("select"),
+    (window as unknown as BoardWindow).__komuboard.canvas!.setTool("select"),
   );
 
   await expect.poll(async () => (await orderIds(a.page)).length).toBe(2);
@@ -108,7 +108,7 @@ test("sticky tool: tapping on a shape places a NEW sticky on top (does not edit 
 
   const cal = await calibrate(a.page);
   await a.page.evaluate(() => {
-    const c = (window as unknown as BoardWindow).__coboard.canvas!;
+    const c = (window as unknown as BoardWindow).__komuboard.canvas!;
     c.setTool("sticky");
   });
   const at = worldToScreen(cal, 100, 80);
@@ -117,7 +117,7 @@ test("sticky tool: tapping on a shape places a NEW sticky on top (does not edit 
   await a.page.mouse.up();
   await a.page.keyboard.type("NOTE");
   await a.page.evaluate(() =>
-    (window as unknown as BoardWindow).__coboard.canvas!.setTool("select"),
+    (window as unknown as BoardWindow).__komuboard.canvas!.setTool("select"),
   );
 
   await expect.poll(async () => (await orderIds(a.page)).length).toBe(2);

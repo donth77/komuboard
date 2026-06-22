@@ -30,7 +30,7 @@ test("a peer's resize is visible live, before release, and lands consistently", 
 
   const rectB = (): Promise<{ width: number; height: number } | null> =>
     b.page.evaluate(
-      (i) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(i),
+      (i) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(i),
       id,
     );
   await expect.poll(async () => (await rectB()) !== null).toBe(true);
@@ -43,7 +43,7 @@ test("a peer's resize is visible live, before release, and lands consistently", 
   await expect.poll(() => hasSelection(a.page)).toBe(true);
 
   const anchor = await a.page.evaluate(() =>
-    (window as unknown as BoardWindow).__coboard.canvas!.transformerAnchorPos("bottom-right"),
+    (window as unknown as BoardWindow).__komuboard.canvas!.transformerAnchorPos("bottom-right"),
   );
   expect(anchor).not.toBeNull();
   const ax = box.x + anchor!.x;

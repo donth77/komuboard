@@ -29,18 +29,18 @@ test("the resizer's cursor keeps tracking the handle during a resize", async ({ 
   await expect.poll(() => hasSelection(a.page)).toBe(true);
 
   const anchor = await a.page.evaluate(() =>
-    (window as unknown as BoardWindow).__coboard.canvas!.transformerAnchorPos("bottom-right"),
+    (window as unknown as BoardWindow).__komuboard.canvas!.transformerAnchorPos("bottom-right"),
   );
   expect(anchor).not.toBeNull();
   const ax = box.x + anchor!.x;
   const ay = box.y + anchor!.y;
   const scaleA = await a.page.evaluate(
-    () => (window as unknown as BoardWindow).__coboard.canvas!.getZoomPercent() / 100,
+    () => (window as unknown as BoardWindow).__komuboard.canvas!.getZoomPercent() / 100,
   );
 
   const cursor = (): Promise<{ x: number; y: number } | undefined> =>
     a.page.evaluate(
-      () => (window as unknown as BoardWindow).__coboard.awareness.getLocalState()?.cursor,
+      () => (window as unknown as BoardWindow).__komuboard.awareness.getLocalState()?.cursor,
     );
 
   // Begin the resize, then sample the cursor at two points BOTH during the drag — so the

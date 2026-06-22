@@ -4,7 +4,7 @@
  * (focus-trap, Esc, inert background) and fully custom styling/animation
  * (see the `.dialog` rules in styles.css).
  *
- * Deliberately LIGHT DOM (no Shadow DOM): components share Coboard's global
+ * Deliberately LIGHT DOM (no Shadow DOM): components share Komuboard's global
  * design system — the CSS tokens (--accent, --surface, …) AND utility classes
  * (.btn-primary, .swatches, .kbd, …). Shadow DOM would wall those class
  * selectors off and force per-component style duplication (CSS custom

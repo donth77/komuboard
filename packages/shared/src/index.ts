@@ -1,5 +1,5 @@
 /**
- * Coboard shared contracts.
+ * Komuboard shared contracts.
  *
  * The `shared` package is the single contract layer consumed by `client-web`,
  * `vr`, and `worker` so the three can never diverge: the PartyServer party name,

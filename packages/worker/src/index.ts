@@ -18,7 +18,7 @@ export default {
 
     const url = new URL(request.url);
     if (url.pathname === "/" || url.pathname === "/health") {
-      return Response.json({ ok: true, service: "coboard-worker", party: "main" });
+      return Response.json({ ok: true, service: "komuboard-worker", party: "main" });
     }
 
     return new Response("Not found — connect a WebSocket to /parties/main/:roomId", {

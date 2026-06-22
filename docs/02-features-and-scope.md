@@ -1,4 +1,4 @@
-# Coboard — Features and Scope
+# Komuboard — Features and Scope
 
 > _Purpose: the canonical feature catalog — MoSCoW prioritization, the three phased releases with per-feature user stories and testable acceptance criteria, the first-class realtime cursors & presence requirement, feature-to-reference traceability, and explicit v1 non-goals._
 
@@ -17,7 +17,7 @@ Related documents: [README](../README.md) · [01 — Product Vision & References
 
 ## MoSCoW summary
 
-Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is not Coboard without it; "Should" = high value, shippable slightly later within its phase; "Could" = nice-to-have / stretch within its phase; "Won't (v1)" = explicit non-goal (see [Non-goals](#non-goals-v1)).
+Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is not Komuboard without it; "Should" = high value, shippable slightly later within its phase; "Could" = nice-to-have / stretch within its phase; "Won't (v1)" = explicit non-goal (see [Non-goals](#non-goals-v1)).
 
 | Priority       | Feature                                                             | Phase             |
 | -------------- | ------------------------------------------------------------------- | ----------------- |
@@ -232,7 +232,7 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 
 ### 2.10 Export PNG / SVG / PDF
 
-- **Story:** As a participant I want to export the board so that I can share or archive results outside Coboard.
+- **Story:** As a participant I want to export the board so that I can share or archive results outside Komuboard.
 - Export produces a PNG, an SVG, and a PDF of the current board (or a selected frame/region).
 - Export runs client-side from the rendered scene; output visually matches the canvas within tolerance.
 - Export of an empty board produces a valid (blank) file without error.
@@ -351,7 +351,7 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 
 ### 3.9 VR comfort options _(Should)_
 
-- **Story:** As a headset user I want comfort controls so that I can use Coboard in VR without discomfort.
+- **Story:** As a headset user I want comfort controls so that I can use Komuboard in VR without discomfort.
 - Comfort options include vignette during movement, teleport locomotion, and board reachability/scaling (bring the board closer / resize it).
 - Settings persist for the session and are local (not shared, not persisted to the board doc).
 - Teleport and scaling do not alter the shared board content (only the local view/rig).
@@ -381,7 +381,7 @@ Priorities are scoped to **v1 (Phases 1–3 combined)**. "Must" = the product is
 
 ## Realtime cursors & presence (first-class)
 
-> **This is a must-have, not a nice-to-have.** Cursors and presence are what make Coboard feel alive across desktop, touch, and VR. They appear in Phase 1 (§1.9), gain cursor chat in Phase 2 (§2.1), and extend to VR avatars + laser pointers in Phase 3 (§3.3).
+> **This is a must-have, not a nice-to-have.** Cursors and presence are what make Komuboard feel alive across desktop, touch, and VR. They appear in Phase 1 (§1.9), gain cursor chat in Phase 2 (§2.1), and extend to VR avatars + laser pointers in Phase 3 (§3.3).
 
 **Cross-cutting contract (applies in all three phases):**
 
@@ -426,11 +426,11 @@ Maps notable features to the reference product(s) that inspired them. See [01 �
 
 ## Non-goals (v1)
 
-Explicitly **out of scope** for v1. These are deliberate decisions, not omissions — they keep Coboard shippable on a $0 free-tier footprint and focused on the cross-reality realtime canvas.
+Explicitly **out of scope** for v1. These are deliberate decisions, not omissions — they keep Komuboard shippable on a $0 free-tier footprint and focused on the cross-reality realtime canvas.
 
 | Non-goal                                          | Why it's out of v1                                                                                                                                                           |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Native app-store apps**                         | Coboard ships as a **PWA only**; no iOS/Android/Quest store builds. The web + WebXR path covers all target devices.                                                          |
+| **Native app-store apps**                         | Komuboard ships as a **PWA only**; no iOS/Android/Quest store builds. The web + WebXR path covers all target devices.                                                          |
 | **Enterprise SSO / admin console**                | No SAML/SSO, org management, or admin governance. Anonymous-first rooms are the model; named accounts are an optional _later_ add (GitHub OAuth / Clerk free tier), not v1.  |
 | **Real-time video tiles**                         | No webcam video grid. Optional **audio-only** WebRTC voice is the ceiling (Phase 2/3, _Could_); video does not fit the free-tier bandwidth/compute budget.                   |
 | **Offline-first sync beyond reconnect buffering** | We guarantee reconnect/resync (§1.11) and short buffering, **not** full offline editing with long-horizon merge. Yjs makes this _possible later_, but it's not a v1 promise. |

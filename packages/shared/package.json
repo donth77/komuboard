@@ -1,5 +1,5 @@
 {
-  "name": "@coboard/shared",
+  "name": "@komuboard/shared",
   "version": "0.0.0",
   "private": true,
   "type": "module",

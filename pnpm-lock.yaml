@@ -38,7 +38,7 @@ importers:
 
   packages/client-web:
     dependencies:
-      '@coboard/shared':
+      '@komuboard/shared':
         specifier: workspace:*
         version: link:../shared
       konva:
@@ -88,7 +88,7 @@ importers:
 
   packages/vr:
     dependencies:
-      '@coboard/shared':
+      '@komuboard/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
@@ -101,7 +101,7 @@ importers:
 
   packages/worker:
     dependencies:
-      '@coboard/shared':
+      '@komuboard/shared':
         specifier: workspace:*
         version: link:../shared
       partyserver:

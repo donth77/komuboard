@@ -18,16 +18,16 @@ describe("sanitizeRoomId", () => {
 
 describe("roomIdFromUrl", () => {
   it("prefers the ?room= query", () => {
-    expect(roomIdFromUrl(new URL("https://coboard.app/anything?room=Lunar-Otter"))).toBe(
+    expect(roomIdFromUrl(new URL("https://komuboard.app/anything?room=Lunar-Otter"))).toBe(
       "lunar-otter",
     );
   });
 
   it("uses the first path segment otherwise", () => {
-    expect(roomIdFromUrl(new URL("https://coboard.app/Sprint-24/extra"))).toBe("sprint-24");
+    expect(roomIdFromUrl(new URL("https://komuboard.app/Sprint-24/extra"))).toBe("sprint-24");
   });
 
   it("falls back for the bare root", () => {
-    expect(roomIdFromUrl(new URL("https://coboard.app/"))).toBe("lobby");
+    expect(roomIdFromUrl(new URL("https://komuboard.app/"))).toBe("lobby");
   });
 });

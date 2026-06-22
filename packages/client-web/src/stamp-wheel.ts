@@ -27,7 +27,7 @@ const SLOTS: ReadonlyArray<{ key: string; file?: string; avatar?: boolean }> = [
 
 // Popular starter set (no heart — the wheel already has a heart mark): 😂 🔥 🎉 🙏 😎
 const DEFAULT_RECENTS = ["1f602", "1f525", "1f389", "1f64f", "1f60e"];
-const RECENTS_KEY = "coboard-stamp-recents-v2"; // bumped → resets stale recents to the new defaults
+const RECENTS_KEY = "komuboard-stamp-recents-v2"; // bumped → resets stale recents to the new defaults
 const MAX_RECENTS = 5;
 
 // Wheel geometry (px, in the 280-unit SVG viewBox / the host's own 280×280 box).

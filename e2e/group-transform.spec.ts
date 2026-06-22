@@ -20,14 +20,14 @@ import {
 
 const rectW = (page: Page, id: string): Promise<number | null> =>
   page.evaluate((i) => {
-    const r = (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(i);
+    const r = (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(i);
     return r ? r.width : null;
   }, id);
 
 const selectionSize = (page: Page): Promise<number> =>
   page.evaluate(
     () =>
-      (window as unknown as BoardWindow).__coboard.awareness.getLocalState()?.selection?.length ??
+      (window as unknown as BoardWindow).__komuboard.awareness.getLocalState()?.selection?.length ??
       0,
   );
 
@@ -41,7 +41,7 @@ test("group transform: marquee a stroke + a shape, then group-resize scales both
   await drawStroke(a.page);
   const strokeId = (await objectIds(a.page))[0];
   const sBox = await a.page.evaluate(
-    (id) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(id),
+    (id) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(id),
     strokeId,
   );
   expect(sBox).not.toBeNull();
@@ -80,7 +80,7 @@ test("group transform: marquee a stroke + a shape, then group-resize scales both
   // Grab the group's bottom-right corner via the union rect (chrome-agnostic: works for the Konva
   // proxy today and a DOM group chrome after the teardown), where the resize handle sits.
   const u = await a.page.evaluate(() =>
-    (window as unknown as BoardWindow).__coboard.canvas!.selectionUnionRect(),
+    (window as unknown as BoardWindow).__komuboard.canvas!.selectionUnionRect(),
   );
   expect(u).not.toBeNull();
   const handle = worldToScreen(cal, u!.x + u!.width, u!.y + u!.height);
@@ -114,7 +114,7 @@ test("group transform: group-rotate spins both objects", async ({ browser }) => 
   await drawStroke(a.page);
   const strokeId = (await objectIds(a.page))[0];
   const sBox = await a.page.evaluate(
-    (id) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(id),
+    (id) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(id),
     strokeId,
   );
   expect(sBox).not.toBeNull();
@@ -140,7 +140,7 @@ test("group transform: group-rotate spins both objects", async ({ browser }) => 
   await expect.poll(() => selectionSize(a.page)).toBe(2);
 
   const u = await a.page.evaluate(() =>
-    (window as unknown as BoardWindow).__coboard.canvas!.selectionUnionRect(),
+    (window as unknown as BoardWindow).__komuboard.canvas!.selectionUnionRect(),
   );
   expect(u).not.toBeNull();
 
@@ -152,7 +152,7 @@ test("group transform: group-rotate spins both objects", async ({ browser }) => 
     const cand = { x: corner.x + off, y: corner.y + off };
     await a.page.mouse.move(cand.x, cand.y);
     const hit = await a.page.evaluate(() => {
-      const c = (window as unknown as BoardWindow).__coboard.canvas!;
+      const c = (window as unknown as BoardWindow).__komuboard.canvas!;
       return c.rotationCornerOf(c.point());
     });
     if (hit) grab = cand;

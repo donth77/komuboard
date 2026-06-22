@@ -25,7 +25,7 @@ export class CoTopbar extends HTMLElement {
     this.innerHTML =
       '<div class="brand">' +
       `<button class="iconbtn nav-btn" id="nav-toggle" data-act="nav" type="button" aria-label="Menu">${icon("menu")}</button>` +
-      '<span class="logo">◳</span> <span class="brand-name">Coboard</span>' +
+      '<span class="logo">◳</span> <span class="brand-name">Komuboard</span>' +
       "</div>" +
       `<div class="room-pill" data-testid="room"><span class="dot" data-testid="dot"></span> <strong>${room}</strong></div>` +
       '<div class="spacer"></div>' +

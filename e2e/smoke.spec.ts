@@ -15,14 +15,14 @@ test("two clients converge: A draws a stroke, B receives it; presence is shared"
     .poll(
       () =>
         b.page.evaluate(
-          () => (window as unknown as BoardWindow).__coboard.doc.getMap("objects").size,
+          () => (window as unknown as BoardWindow).__komuboard.doc.getMap("objects").size,
         ),
       { timeout: 10_000 },
     )
     .toBeGreaterThan(0);
 
   const type = await b.page.evaluate(() => {
-    const objs = (window as unknown as BoardWindow).__coboard.doc.getMap("objects");
+    const objs = (window as unknown as BoardWindow).__komuboard.doc.getMap("objects");
     const first = [...objs.values()][0];
     return first ? first.get("type") : null;
   });
@@ -33,7 +33,7 @@ test("two clients converge: A draws a stroke, B receives it; presence is shared"
     .poll(
       () =>
         b.page.evaluate(
-          () => (window as unknown as BoardWindow).__coboard.awareness.getStates().size,
+          () => (window as unknown as BoardWindow).__komuboard.awareness.getStates().size,
         ),
       { timeout: 10_000 },
     )

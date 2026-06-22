@@ -1,6 +1,6 @@
-# Coboard — Visual Design, UI & UX
+# Komuboard — Visual Design, UI & UX
 
-> _The look, feel, and interaction model for Coboard across desktop, mobile/tablet, and VR — design language, tokens, wireframes, shortcuts, presence, comfort, and accessibility._
+> _The look, feel, and interaction model for Komuboard across desktop, mobile/tablet, and VR — design language, tokens, wireframes, shortcuts, presence, comfort, and accessibility._
 
 **Related documents:** [README](../README.md) · [01 Product Vision & References](./01-product-vision-and-references.md) · [02 Features & Scope](./02-features-and-scope.md) · [04 Technical Architecture](./04-technical-architecture.md) · [05 Scaling & Cost](./05-scaling-and-cost.md) · [06 Implementation Roadmap](./06-implementation-roadmap.md) · [07 Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md)
 
@@ -8,7 +8,7 @@
 
 ## 1. Design language & mood
 
-Coboard's aesthetic is **calm infinite paper**: a quiet, near-neutral canvas that recedes so the user's content is the only thing that draws attention. Chrome is light, floating, and self-effacing; ink and stickies are vivid. The same visual identity holds whether the surface is a browser canvas, a phone, or a 3D plane floating in a VR room.
+Komuboard's aesthetic is **calm infinite paper**: a quiet, near-neutral canvas that recedes so the user's content is the only thing that draws attention. Chrome is light, floating, and self-effacing; ink and stickies are vivid. The same visual identity holds whether the surface is a browser canvas, a phone, or a 3D plane floating in a VR room.
 
 | Principle                         | What it means concretely                                                                                                                                  |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -224,7 +224,7 @@ Floating chrome over a full-bleed canvas. Top bar pinned top; tool dock floats b
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│ ◧ Coboard  ROOM-K3F9-Q2 [⧉]  ┆ (◐Bea)(◑Ola)(◒+3)  [▷Present][◩ Enter VR][🔗Share] │  ← Top bar (--surface, --elev-1); top-right cluster: Present · Enter VR · Share
+│ ◧ Komuboard  ROOM-K3F9-Q2 [⧉]  ┆ (◐Bea)(◑Ola)(◒+3)  [▷Present][◩ Enter VR][🔗Share] │  ← Top bar (--surface, --elev-1); top-right cluster: Present · Enter VR · Share
 ├───────────────────────────────────────────────────────────────────────────────┤
 │                                                                     ┌─────────┐ │
 │                                                                     │Properties│ │  ← contextual,
@@ -328,7 +328,7 @@ The board is a textured 3D plane at the canonical default **~2.0 m wide × ~1.2 
 
 ### 4.4 Web ↔ WebVR transition
 
-> **One URL, two renderers.** A Coboard room is **always a web page first**: opening the board URL in _any_ browser — desktop, phone, or the headset's own browser — lands every user in the **2D canvas core view**. VR is not a separate app or a separate load; it is a **renderer swap** entered through a single toolbar button, and it preserves the one-document single-source-of-truth invariant (§8.4). The WebXR session mechanics (feature detection, `requestSession`, reference spaces, render-loop hand-off) live in [04 Technical Architecture](./04-technical-architecture.md); this section is the **UX/visual** contract for the toggle and the transition.
+> **One URL, two renderers.** A Komuboard room is **always a web page first**: opening the board URL in _any_ browser — desktop, phone, or the headset's own browser — lands every user in the **2D canvas core view**. VR is not a separate app or a separate load; it is a **renderer swap** entered through a single toolbar button, and it preserves the one-document single-source-of-truth invariant (§8.4). The WebXR session mechanics (feature detection, `requestSession`, reference spaces, render-loop hand-off) live in [04 Technical Architecture](./04-technical-architecture.md); this section is the **UX/visual** contract for the toggle and the transition.
 
 **The VR toggle (top-bar button).** A **headset-icon button** sits in the **top bar, top-right cluster** (next to Present/Share — see §4.1), labelled **"Enter VR"**. It is **always visible** and reflects state — **"Enter VR" ↔ in-VR / "Exit VR"** — and its enabled-state is driven by capability detection:
 
@@ -508,18 +508,18 @@ All presence is **ephemeral awareness** (never persisted — see [04](./04-techn
 ### 7.5 Reactions
 
 - **Stamps / emotes** (`Shift+E`): pick an emoji that floats up from your cursor and animates briefly for all (ephemeral **reaction burst**). **High-five** (`Shift+H`) sends a quick celebratory burst toward a target cursor. Both respect reduced-motion (show statically, no float).
-- Reaction bursts are pure **ephemeral event signals** over awareness (not document state) — alongside cursors, selections, and presence they complete Coboard's presence model: _online users + cursors + selections + ephemeral signals_.
+- Reaction bursts are pure **ephemeral event signals** over awareness (not document state) — alongside cursors, selections, and presence they complete Komuboard's presence model: _online users + cursors + selections + ephemeral signals_.
 
 ### 7.6 "Collaborative concurrency" — the named pattern
 
-Coboard's realtime interaction model is named **collaborative concurrency**: many people acting on one shared surface at once, each seeing the others' intent live, with **no locking and no turn-taking**. It is the sum of the patterns above, and it is the product's signature feel:
+Komuboard's realtime interaction model is named **collaborative concurrency**: many people acting on one shared surface at once, each seeing the others' intent live, with **no locking and no turn-taking**. It is the sum of the patterns above, and it is the product's signature feel:
 
 - **Optimistic local + CRDT reconcile** — your edits apply instantly and Yjs merges concurrent changes deterministically (see [04](./04-technical-architecture.md)); the doc is the single source of truth across 2D and VR.
 - **Send/render decoupling** — ~20 Hz broadcast, 60 fps interpolated render (§7.1).
 - **Presence on content** — identity-colored selection outlines show who is touching what (§7.3), preventing collisions socially rather than with locks.
 - **Facepile · follow · spotlight · reaction bursts** — the social affordances that make a shared canvas feel inhabited (§7.2, §7.5, §6.4).
 
-These are the baseline expectations established by [Liveblocks](https://liveblocks.io/multiplayer), [tldraw's sync engine](https://tldraw.dev), Figma/FigJam, and Miro; Coboard treats them as table stakes, not extras.
+These are the baseline expectations established by [Liveblocks](https://liveblocks.io/multiplayer), [tldraw's sync engine](https://tldraw.dev), Figma/FigJam, and Miro; Komuboard treats them as table stakes, not extras.
 
 ---
 
@@ -615,7 +615,7 @@ VR is an **immersive** mode (not a viewer). Default theme is dark for headset co
 
 ## 9. Accessibility (WCAG 2.2 AA)
 
-Coboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaningful canvas accessibility within the limits of a freeform drawing surface. This section is the UX-level commitment; the **deep accessibility treatment** — test matrix, the offscreen semantic-mirror architecture, ARIA live-region strategy, and emerging XR a11y norms ([XAUR](https://www.w3.org/TR/xaur/)) — lives in [07 Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md).
+Komuboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaningful canvas accessibility within the limits of a freeform drawing surface. This section is the UX-level commitment; the **deep accessibility treatment** — test matrix, the offscreen semantic-mirror architecture, ARIA live-region strategy, and emerging XR a11y norms ([XAUR](https://www.w3.org/TR/xaur/)) — lives in [07 Engineering Quality, Performance, Security & Accessibility](./07-engineering-quality-security-accessibility.md).
 
 | Area                             | Commitment                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -636,11 +636,11 @@ Coboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaning
 
 ## 10. Onboarding, empty state & share flow
 
-> **Why this matters (evidence).** A blank canvas triggers genuine "what do I do now?" anxiety; the cure is **starter content + lightweight first-action prompts**, not an empty void ([LogRocket — empty-states UX](https://blog.logrocket.com/ux-design/empty-states-ux-examples/)). Coboard applies this with a template gallery, a ghost prompt, first-run coachmarks, an optional demo room, and a `?` shortcuts overlay (detailed below and in §11).
+> **Why this matters (evidence).** A blank canvas triggers genuine "what do I do now?" anxiety; the cure is **starter content + lightweight first-action prompts**, not an empty void ([LogRocket — empty-states UX](https://blog.logrocket.com/ux-design/empty-states-ux-examples/)). Komuboard applies this with a template gallery, a ghost prompt, first-run coachmarks, an optional demo room, and a `?` shortcuts overlay (detailed below and in §11).
 
 ### 10.1 First-open onboarding (anonymous, zero-signup)
 
-- Opening `coboard.app` (or any room URL) **lands you in a room immediately** with a generated, human-readable room code (`ROOM-K3F9-Q2`), an assigned identity color, and a friendly default name (`"Guest Otter"`, editable inline). No modal blocks the canvas.
+- Opening `komuboard.app` (or any room URL) **lands you in a room immediately** with a generated, human-readable room code (`ROOM-K3F9-Q2`), an assigned identity color, and a friendly default name (`"Guest Otter"`, editable inline). No modal blocks the canvas.
 - A dismissible set of **first-run coachmarks** points to: the Pen tool ("Press P and draw"), the Share button ("Invite anyone — they just open the link"), the presence cluster ("See who's here"), and **pan/zoom + invite** basics. Dismiss with `Esc` or "Got it"; never shown again (localStorage flag).
 - A **template gallery** is offered on a _new, empty_ room (kanban, retro, mindmap, flowchart — Phase 2), so the first action can be "drop a template" instead of facing a blank page.
 - An optional **demo / sample room** ("Take a tour") lets a first-time user poke at real content with zero stakes before creating their own board.
@@ -675,7 +675,7 @@ Coboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaning
 │                                      │
 │  Anyone with the link can edit       │  ← default access (anonymous, no signup)
 │  ┌────────────────────────────────┐  │
-│  │ https://coboard.app/r/K3F9-Q2  │ ⧉│  ← copy button, "Copied!" toast
+│  │ https://komuboard.app/r/K3F9-Q2  │ ⧉│  ← copy button, "Copied!" toast
 │  └────────────────────────────────┘  │
 │                                      │
 │  Room code:  K 3 F 9 - Q 2   ⧉       │  ← mono, disambiguated glyphs
@@ -696,7 +696,7 @@ Coboard targets **WCAG 2.2 Level AA** for all non-canvas UI and provides meaning
 
 ## 11. Evidence-based UX principles (research-backed)
 
-Every decision below is grounded in published UX research and industry practice, restated as a **concrete Coboard design decision** with its source. These principles also govern the choices throughout §2, §3, §7, §8, and §10; deep accessibility rationale lives in [07](./07-engineering-quality-security-accessibility.md).
+Every decision below is grounded in published UX research and industry practice, restated as a **concrete Komuboard design decision** with its source. These principles also govern the choices throughout §2, §3, §7, §8, and §10; deep accessibility rationale lives in [07](./07-engineering-quality-security-accessibility.md).
 
 ### 11.1 Infinite-canvas wayfinding
 
@@ -730,7 +730,7 @@ Every decision below is grounded in published UX research and industry practice,
 
 ### 11.6 Visual design & motion (2026 direction)
 
-**Decision:** use **DTCG-standard design tokens** (color / type / spacing / elevation / **motion**) through a **Style-Dictionary-style pipeline** (§2 intro); make **motion 200–300 ms** the micro-interaction sweet spot and **structural** (it communicates what happened / is happening / will happen next), always gated by `prefers-reduced-motion` (§2.7); treat **dark mode** as first-class (**near-black surfaces, not pure `#000`** — see `--paper` `#15161A` in §2.1; slightly desaturated accents; OLED energy win); follow the **2026 calm / quiet-UI** direction (less visual theatrics, transparent AI), which matches Coboard's "infinite paper" language.
+**Decision:** use **DTCG-standard design tokens** (color / type / spacing / elevation / **motion**) through a **Style-Dictionary-style pipeline** (§2 intro); make **motion 200–300 ms** the micro-interaction sweet spot and **structural** (it communicates what happened / is happening / will happen next), always gated by `prefers-reduced-motion` (§2.7); treat **dark mode** as first-class (**near-black surfaces, not pure `#000`** — see `--paper` `#15161A` in §2.1; slightly desaturated accents; OLED energy win); follow the **2026 calm / quiet-UI** direction (less visual theatrics, transparent AI), which matches Komuboard's "infinite paper" language.
 **Where:** §1 (calm by default), §2 intro (DTCG pipeline), §2.1 (near-black dark surfaces), §2.7 (200–300 ms structural motion + reduced-motion rule).
 **Source:** [UXPin — design tokens](https://www.uxpin.com/studio/blog/what-are-design-tokens/), [Figma — web design trends](https://www.figma.com/resource-library/web-design-trends/), Supernova, "calm interfaces" (envato).
 

@@ -1,4 +1,4 @@
-# Coboard — Technical Debt & Audit Backlog
+# Komuboard — Technical Debt & Audit Backlog
 
 > _A living tracker of concrete code-level findings from the M1 audits (performance, optimization, code quality, organization) — what's been addressed and what remains, with locations and recommended timing. This is the actionable, file-level companion to the planning-level "potential issues" register in [docs/07](./07-engineering-quality-security-accessibility.md)._
 
@@ -69,7 +69,7 @@ These shipped across the M1 hardening + refactor pass and are verified (typechec
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- | ------ |
 | T1  | **Worker DO/eviction integration test.** The persistence _core_ is now unit-tested (`persistence.test.ts`), but the SQL execution + real Durable Object lifecycle (`CREATE TABLE`, the `doc_corrupt` stash, actual eviction→reload) need `@cloudflare/vitest-pool-workers`. Deferred from the unit pass to avoid fragile infra; land before the persistence milestone gate. | **High** | `worker/`        | ⏭     |
 | T2  | Draw-bar interpolation/ownership edge cases untested: live-preview→commit **style/opacity preservation** (esp. the 4th `highlight-dashed` style), peer **cancel mid-gesture** (snap-back, no doc mutation), **multi-node resize**. Schedule before the VR renderer reuses these fields.                                                                                     | Med      | `e2e/`           | ⏭     |
-| T3  | The `BoardWindow` test-hook type in `e2e/helpers.ts` is a hand-maintained mirror of the real `__coboard` shape and can silently drift; eventually assert/derive it against the real types.                                                                                                                                                                                  | Low      | `e2e/helpers.ts` | 🅿️     |
+| T3  | The `BoardWindow` test-hook type in `e2e/helpers.ts` is a hand-maintained mirror of the real `__komuboard` shape and can silently drift; eventually assert/derive it against the real types.                                                                                                                                                                                  | Low      | `e2e/helpers.ts` | 🅿️     |
 
 ## Hygiene & docs
 

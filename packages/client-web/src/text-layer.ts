@@ -46,7 +46,7 @@ import {
   type TextAlign,
   type TextObject,
   type TextRun,
-} from "@coboard/shared";
+} from "@komuboard/shared";
 import {
   allRunsHaveMark,
   type BoolMark,

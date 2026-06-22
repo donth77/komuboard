@@ -3,7 +3,7 @@
 // recolours the one being edited). Emits `sticky-color` (bubbling → handled on #app in main.ts →
 // canvas). Light DOM; reuses the global `.sw` swatch styling. Sibling pattern to <co-draw-bar>.
 
-import { STICKY_COLORS, STICKY_COLOR_NAMES } from "@coboard/shared";
+import { STICKY_COLORS, STICKY_COLOR_NAMES } from "@komuboard/shared";
 import { ensureSheetHandle, wireSheetHandle } from "./mobile-sheet";
 
 export class CoStickyBar extends HTMLElement {

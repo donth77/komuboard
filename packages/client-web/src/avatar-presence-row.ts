@@ -1,7 +1,7 @@
 /**
  * <co-avatar-presence-row> — presence avatar stack as a standards-based Web Component.
  *
- * Like <co-dialog>, this is deliberately LIGHT DOM: it reuses Coboard's global
+ * Like <co-dialog>, this is deliberately LIGHT DOM: it reuses Komuboard's global
  * design system (the `.avatar-presence-row` / `.avatar` rules in styles.css, the
  * CSS tokens, and the global prefers-reduced-motion reset) instead of duplicating
  * styles behind a shadow boundary — class selectors don't pierce Shadow DOM.

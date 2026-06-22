@@ -1,8 +1,8 @@
 import { type Browser, type Page } from "@playwright/test";
 
-/** Canonical shape of the `window.__coboard` test hook exposed by the client (see main.ts). */
+/** Canonical shape of the `window.__komuboard` test hook exposed by the client (see main.ts). */
 export type BoardWindow = {
-  __coboard: {
+  __komuboard: {
     doc: {
       getMap(name: string): {
         size: number;
@@ -50,7 +50,7 @@ export async function connectPeer(browser: Browser, room: string): Promise<Peer>
   const page = await ctx.newPage();
   await page.goto(`/?room=${room}`);
   await page.waitForFunction(
-    () => (window as unknown as BoardWindow).__coboard?.provider?.wsconnected,
+    () => (window as unknown as BoardWindow).__komuboard?.provider?.wsconnected,
   );
   return { page, close: () => ctx.close() };
 }
@@ -74,21 +74,21 @@ export async function drawStroke(page: Page): Promise<{ cx: number; cy: number }
 /** Object ids in a page's Yjs doc, in z-order. */
 export function objectIds(page: Page): Promise<string[]> {
   return page.evaluate(() => [
-    ...(window as unknown as BoardWindow).__coboard.doc.getMap("objects").keys(),
+    ...(window as unknown as BoardWindow).__komuboard.doc.getMap("objects").keys(),
   ]);
 }
 
 /** Number of remote-peer selection outlines currently rendered on a page (-1 if canvas not ready). */
 export function remoteSelectionCount(page: Page): Promise<number> {
   return page.evaluate(
-    () => (window as unknown as BoardWindow).__coboard.canvas?.remoteSelectionCount() ?? -1,
+    () => (window as unknown as BoardWindow).__komuboard.canvas?.remoteSelectionCount() ?? -1,
   );
 }
 
 /** Whether a page currently holds its own (local) selection — i.e. shows the transform box. */
 export function hasSelection(page: Page): Promise<boolean> {
   return page.evaluate(
-    () => (window as unknown as BoardWindow).__coboard.canvas?.hasSelection() ?? false,
+    () => (window as unknown as BoardWindow).__komuboard.canvas?.hasSelection() ?? false,
   );
 }
 
@@ -106,7 +106,7 @@ export async function calibrate(page: Page): Promise<Cal> {
   const sy = Math.round(box.y + box.height / 2);
   await page.mouse.move(sx, sy);
   const r = await page.evaluate(() => {
-    const c = (window as unknown as BoardWindow).__coboard.canvas!;
+    const c = (window as unknown as BoardWindow).__komuboard.canvas!;
     const p = c.point();
     return { wx: p.x, wy: p.y, scale: c.getZoomPercent() / 100 };
   });
@@ -120,7 +120,7 @@ export function worldToScreen(cal: Cal, wx: number, wy: number): { x: number; y:
 /** An object's plain JSON from a page's doc (or null if absent). */
 export function objJSON(page: Page, id: string): Promise<Record<string, unknown> | null> {
   return page.evaluate((i) => {
-    const v = (window as unknown as BoardWindow).__coboard.doc.getMap("objects").get(i);
+    const v = (window as unknown as BoardWindow).__komuboard.doc.getMap("objects").get(i);
     return v ? v.toJSON() : null;
   }, id);
 }
@@ -141,7 +141,7 @@ export async function injectShape(
   o: { id: string; x: number; y: number; width?: number; height?: number; bg?: string },
 ): Promise<void> {
   await page.evaluate((opts) => {
-    const doc = (window as unknown as { __coboard: { doc: InjectDoc } }).__coboard.doc;
+    const doc = (window as unknown as { __komuboard: { doc: InjectDoc } }).__komuboard.doc;
     const objects = doc.getMap("objects");
     const order = doc.getArray("order");
     const YMap = objects.constructor;
@@ -172,7 +172,7 @@ export async function injectSticky(
   o: { id: string; x: number; y: number; size?: number; bg?: string },
 ): Promise<void> {
   await page.evaluate((opts) => {
-    const doc = (window as unknown as { __coboard: { doc: InjectDoc } }).__coboard.doc;
+    const doc = (window as unknown as { __komuboard: { doc: InjectDoc } }).__komuboard.doc;
     const objects = doc.getMap("objects");
     const order = doc.getArray("order");
     const YMap = objects.constructor;
@@ -202,7 +202,7 @@ export async function injectStamp(
   o: { id: string; x: number; y: number; size?: number; src?: string; rotation?: number },
 ): Promise<void> {
   await page.evaluate((opts) => {
-    const doc = (window as unknown as { __coboard: { doc: InjectDoc } }).__coboard.doc;
+    const doc = (window as unknown as { __komuboard: { doc: InjectDoc } }).__komuboard.doc;
     const objects = doc.getMap("objects");
     const order = doc.getArray("order");
     const YMap = objects.constructor;
@@ -228,7 +228,7 @@ export async function injectConnector(
   o: { id: string; from: ConnectorEnd; to: ConnectorEnd },
 ): Promise<void> {
   await page.evaluate((opts) => {
-    const doc = (window as unknown as { __coboard: { doc: InjectDoc } }).__coboard.doc;
+    const doc = (window as unknown as { __komuboard: { doc: InjectDoc } }).__komuboard.doc;
     const objects = doc.getMap("objects");
     const order = doc.getArray("order");
     const YMap = objects.constructor;

@@ -1,5 +1,5 @@
 {
-  "name": "coboard",
+  "name": "komuboard",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,9 +7,9 @@
   "engines": {
     "node": ">=22"
   },
-  "description": "Coboard — free-to-run realtime collaborative whiteboard (web + mobile + VR). M0 foundations.",
+  "description": "Komuboard — free-to-run realtime collaborative whiteboard (web + mobile + VR). M0 foundations.",
   "scripts": {
-    "dev": "concurrently -n worker,web -c blue,green \"pnpm --filter @coboard/worker dev\" \"pnpm --filter @coboard/client-web dev\"",
+    "dev": "concurrently -n worker,web -c blue,green \"pnpm --filter @komuboard/worker dev\" \"pnpm --filter @komuboard/client-web dev\"",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
@@ -17,7 +17,7 @@
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present test",
     "test:e2e": "playwright test",
-    "deploy": "pnpm --filter @coboard/worker deploy"
+    "deploy": "pnpm --filter @komuboard/worker deploy"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

@@ -1,4 +1,4 @@
-# Coboard — Technical Architecture
+# Komuboard — Technical Architecture
 
 > _The authoritative engineering blueprint: how one Yjs document per room flows from Cloudflare's edge into a 2D canvas and an immersive VR scene, at $0 baseline cost._
 
@@ -8,7 +8,7 @@
 
 ## 1. System Context & Component Diagram
 
-Coboard is a single-page application served as static assets from **Cloudflare Pages** (free global CDN), talking to a realtime backend of **Cloudflare Workers + Durable Objects**. Every room is exactly one Durable Object (DO), hosted via **PartyServer**, holding one **Yjs** document bound through **Y-PartyServer**. The same Yjs document is consumed by both the **2D web renderer** (Konva.js) and the **VR renderer** (A-Frame + Three.js). Assets (images/PDF) live in **R2**; an optional **D1** table indexes rooms.
+Komuboard is a single-page application served as static assets from **Cloudflare Pages** (free global CDN), talking to a realtime backend of **Cloudflare Workers + Durable Objects**. Every room is exactly one Durable Object (DO), hosted via **PartyServer**, holding one **Yjs** document bound through **Y-PartyServer**. The same Yjs document is consumed by both the **2D web renderer** (Konva.js) and the **VR renderer** (A-Frame + Three.js). Assets (images/PDF) live in **R2**; an optional **D1** table indexes rooms.
 
 ```mermaid
 flowchart TB
@@ -306,7 +306,7 @@ The per-upload size cap is **configurable; 30 MB by default** — a **product ch
 
 ### 5.3 Optional D1 room index
 
-A single D1 table `rooms(id PK, code UNIQUE NULL, createdAt, lastSeenAt, objectCount, passcodeHash NULL)` supports a "your recent rooms" list, **short join-code → room-id alias resolution (§8)**, abuse throttling, and TTL cleanup of dead rooms. It is **optional** — Coboard functions with rooms addressed purely by URL; D1 is a convenience/index, never the source of truth.
+A single D1 table `rooms(id PK, code UNIQUE NULL, createdAt, lastSeenAt, objectCount, passcodeHash NULL)` supports a "your recent rooms" list, **short join-code → room-id alias resolution (§8)**, abuse throttling, and TTL cleanup of dead rooms. It is **optional** — Komuboard functions with rooms addressed purely by URL; D1 is a convenience/index, never the source of truth.
 
 ### 5.4 partysub escape hatch
 
@@ -596,7 +596,7 @@ sequenceDiagram
 ## 11. Planned Repo Structure (pnpm monorepo)
 
 ```text
-coboard/
+komuboard/
 ├─ pnpm-workspace.yaml
 ├─ package.json                  # root scripts (dev, build, test, deploy)
 ├─ tsconfig.base.json

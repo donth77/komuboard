@@ -1,9 +1,9 @@
 {
-  "name": "@coboard/client-web",
+  "name": "@komuboard/client-web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Coboard 2D web client (Vite SPA). M0 shell: PartySocket round-trip + Zustand store + placeholder toolbar.",
+  "description": "Komuboard 2D web client (Vite SPA). M0 shell: PartySocket round-trip + Zustand store + placeholder toolbar.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@coboard/shared": "workspace:*",
+    "@komuboard/shared": "workspace:*",
     "konva": "^10.3.0",
     "motion": "^12.40.0",
     "partysocket": "^1.1.4",

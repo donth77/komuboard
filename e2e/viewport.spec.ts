@@ -9,11 +9,11 @@ import { type BoardWindow, connectPeer, drawStroke, objectIds, uniqueRoom } from
 
 const rectOf = (page: import("@playwright/test").Page, id: string) =>
   page.evaluate(
-    (id) => (window as unknown as BoardWindow).__coboard.canvas!.nodeContentRect(id),
+    (id) => (window as unknown as BoardWindow).__komuboard.canvas!.nodeContentRect(id),
     id,
   );
 const zoomOf = (page: import("@playwright/test").Page) =>
-  page.evaluate(() => (window as unknown as BoardWindow).__coboard.canvas!.getZoomPercent());
+  page.evaluate(() => (window as unknown as BoardWindow).__komuboard.canvas!.getZoomPercent());
 
 test("viewport: wheel-zoom and pan keep world geometry fixed", async ({ browser }) => {
   const { page, close } = await connectPeer(browser, uniqueRoom("vp"));

@@ -28,7 +28,7 @@ async function stickyAndShape(page: Page): Promise<void> {
 const stampTypeCount = (page: Page): Promise<number> =>
   page.evaluate(
     () =>
-      [...(window as unknown as BoardWindow).__coboard.doc.getMap("objects").values()].filter(
+      [...(window as unknown as BoardWindow).__komuboard.doc.getMap("objects").values()].filter(
         (m) => m.get("type") === "stamp",
       ).length,
   );
@@ -67,7 +67,7 @@ test("REAL stamp tool: tap on an overlapping sticky+shape places the stamp on to
   const cal = await calibrate(a.page);
   // Arm + activate the REAL stamp tool exactly as the app does, then tap over the overlap (~world 90,90).
   await a.page.evaluate(() => {
-    const c = (window as unknown as BoardWindow).__coboard.canvas!;
+    const c = (window as unknown as BoardWindow).__komuboard.canvas!;
     c.setStamp("emoji:2705"); // ✅
     c.setTool("stamp");
   });
@@ -80,7 +80,7 @@ test("REAL stamp tool: tap on an overlapping sticky+shape places the stamp on to
   // data-id) — the armed tool also keeps a `.co-stamp.co-text-ghost` preview onscreen.
   await expect.poll(() => a.page.locator(".co-stamp[data-id]").count()).toBe(1);
   const order = await a.page.evaluate(() =>
-    (window as unknown as BoardWindow).__coboard.doc.getArray("order").toArray(),
+    (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray(),
   );
   const stampId = order[order.length - 1]!;
   expect((await objJSON(a.page, stampId))!.type).toBe("stamp");
@@ -106,7 +106,7 @@ test("REAL stamp tool: the PREVIEW ghost renders above the sticky + shape (not j
 
   const cal = await calibrate(a.page);
   await a.page.evaluate(() => {
-    const c = (window as unknown as BoardWindow).__coboard.canvas!;
+    const c = (window as unknown as BoardWindow).__komuboard.canvas!;
     c.setStamp("emoji:2705"); // ✅
     c.setTool("stamp");
   });
