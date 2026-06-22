@@ -27,6 +27,9 @@ function pill(): HTMLDivElement {
   tip = document.createElement("div");
   tip.className = "komu-tip";
   tip.setAttribute("role", "tooltip");
+  // A manual popover renders in the browser TOP LAYER — above a modal <dialog> (showModal), which a
+  // huge z-index can't beat. So tooltips inside the profile dialog (etc.) are actually visible.
+  tip.setAttribute("popover", "manual");
   document.body.appendChild(tip);
   return tip;
 }
@@ -102,13 +105,30 @@ function show(el: HTMLElement): void {
       p.append(" ", kbd);
     }
   }
-  p.classList.add("show"); // display it first so place() can measure it
-  place();
+  p.classList.add("show"); // display it (also the fallback path on browsers without the Popover API)
+  // …then promote to the top layer so it paints above a modal <dialog> (showModal), which no
+  // z-index can beat. Done after display so it's rendered when it enters the top layer.
+  if (typeof p.showPopover === "function" && !p.matches(":popover-open")) {
+    try {
+      p.showPopover();
+    } catch {
+      /* already open / unsupported → the z-index path above still covers non-dialog tooltips */
+    }
+  }
+  place(); // measure + position last (the pill is displayed + in the top layer by now)
 }
 
 function hide(): void {
   anchor = null;
-  tip?.classList.remove("show");
+  if (!tip) return;
+  tip.classList.remove("show");
+  if (typeof tip.hidePopover === "function" && tip.matches(":popover-open")) {
+    try {
+      tip.hidePopover();
+    } catch {
+      /* not open → ignore */
+    }
+  }
 }
 
 function tipTarget(e: Event): HTMLElement | null {

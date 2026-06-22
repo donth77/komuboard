@@ -1071,6 +1071,12 @@ input[type="range"] {
 .komu-tip {
   position: fixed;
   z-index: 2147483000; /* above every chrome layer, incl. body-level popovers like the colour picker (z 80) */
+  /* It's a [popover] (top layer, above modal dialogs) — reset the UA popover box so our own
+     fixed top/left positioning, borderless pill, and overflowing tail all survive. */
+  inset: auto;
+  margin: 0;
+  border: 0;
+  overflow: visible;
   display: none;
   background: #1e1e1e;
   color: #fff;
