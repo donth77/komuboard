@@ -1,10 +1,10 @@
-// <co-stamp-wheel> — the FigJam-style radial stamp picker shown while the Stamp tool is active.
+// <komu-stamp-wheel> — the FigJam-style radial stamp picker shown while the Stamp tool is active.
 //
 // Outer ring: 8 gray pie-wedge slots (hover-highlighted) — 7 colour mark stickers + the user's own
 // avatar. thumbs-up sits at 12:00, star at 3:00, thumbs-down at 6:00, the avatar at 9:00. Inner
 // (light-blue) disc: the 5 most-recently-used emojis around a central "+". Picking a stamp emits
 // `stamp-pick` (detail.src = "mark:<name>" | "emoji:<cp>" | "img:<dataURL>" for the avatar); "+"
-// emits `stamp-picker-open`. Light DOM; styled by .co-stamp-wheel rules in styles.css.
+// emits `stamp-picker-open`. Light DOM; styled by .komu-stamp-wheel rules in styles.css.
 import { paintAvatar, initials, safePhotoUrl } from "./util";
 import { emojiStickerUrl, cachedEmojiSticker } from "./emoji-sticker";
 
@@ -69,7 +69,7 @@ export class CoStampWheel extends HTMLElement {
   private avatarImg: HTMLImageElement | null = null;
 
   connectedCallback(): void {
-    this.classList.add("co-stamp-wheel");
+    this.classList.add("komu-stamp-wheel");
     if (this.#wired) return;
     this.#wired = true;
     this.render();
@@ -243,10 +243,10 @@ export class CoStampWheel extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-stamp-wheel")) customElements.define("co-stamp-wheel", CoStampWheel);
+if (!customElements.get("komu-stamp-wheel")) customElements.define("komu-stamp-wheel", CoStampWheel);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-stamp-wheel": CoStampWheel;
+    "komu-stamp-wheel": CoStampWheel;
   }
 }

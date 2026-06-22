@@ -36,7 +36,7 @@ test("connector: shaft-click selects; body-move detaches a bound end", async ({ 
     from: { x: 160, y: 60, shapeId: "rc1", side: "right" },
     to: { x: 360, y: 60 },
   });
-  await expect.poll(() => a.page.locator("svg.co-connector").count()).toBe(1);
+  await expect.poll(() => a.page.locator("svg.komu-connector").count()).toBe(1);
   expect((await objJSON(a.page, "cn1"))!.from).toMatchObject({ shapeId: "rc1" });
 
   const cal = await calibrate(a.page);
@@ -76,7 +76,7 @@ test("connector: a bound end follows its shape (reroute)", async ({ browser }) =
     from: { x: 160, y: 60, shapeId: "rc1", side: "right" },
     to: { x: 360, y: 60 },
   });
-  await expect.poll(() => a.page.locator("svg.co-connector").count()).toBe(1);
+  await expect.poll(() => a.page.locator("svg.komu-connector").count()).toBe(1);
   await expect.poll(() => a.page.locator('[data-id="rc1"]').count()).toBe(1);
 
   const y0 = await connRectY(a.page);
@@ -149,7 +149,7 @@ test("connector: a peer's drawn connector arrives (remote handoff)", async ({ br
   const b = await connectPeer(browser, room);
   await drawConnector(a.page);
   await expect.poll(() => connectorCount(b.page), { timeout: 10_000 }).toBe(1);
-  await expect.poll(() => b.page.locator("svg.co-connector").count()).toBe(1);
+  await expect.poll(() => b.page.locator("svg.komu-connector").count()).toBe(1);
   await a.close();
   await b.close();
 });
@@ -157,7 +157,7 @@ test("connector: a peer's drawn connector arrives (remote handoff)", async ({ br
 test("connector: dragging an endpoint moves that end", async ({ browser }) => {
   const a = await connectPeer(browser, uniqueRoom("connendpoint"));
   await injectConnector(a.page, { id: "cn1", from: { x: 0, y: 0 }, to: { x: 200, y: 0 } });
-  await expect.poll(() => a.page.locator("svg.co-connector").count()).toBe(1);
+  await expect.poll(() => a.page.locator("svg.komu-connector").count()).toBe(1);
   const cal = await calibrate(a.page);
   await a.page.keyboard.press("v");
   // select via the shaft midpoint (100,0)
@@ -182,7 +182,7 @@ test("connector: dragging an endpoint moves that end", async ({ browser }) => {
 const visibleConnectors = (page: import("@playwright/test").Page): Promise<number> =>
   page.evaluate(
     () =>
-      [...document.querySelectorAll("svg.co-connector")].filter((e) => {
+      [...document.querySelectorAll("svg.komu-connector")].filter((e) => {
         const s = getComputedStyle(e);
         return (
           s.display !== "none" &&
@@ -200,7 +200,7 @@ test("connector: a peer's body-move shows exactly one connector (no double-draw)
   const a = await connectPeer(browser, room);
   const b = await connectPeer(browser, room);
   await injectConnector(a.page, { id: "cn1", from: { x: 0, y: 0 }, to: { x: 200, y: 0 } });
-  await expect.poll(() => b.page.locator("svg.co-connector").count(), { timeout: 10_000 }).toBe(1);
+  await expect.poll(() => b.page.locator("svg.komu-connector").count(), { timeout: 10_000 }).toBe(1);
 
   const cal = await calibrate(a.page);
   await a.page.keyboard.press("v");

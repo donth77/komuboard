@@ -1,4 +1,4 @@
-// <co-tool-dock> — the floating tool dock (light-DOM Web Component).
+// <komu-tool-dock> — the floating tool dock (light-DOM Web Component).
 //
 // Owns its button list + active-state rendering; selection goes out via a
 // `tool-change` event, and the host can drive the active tool back in via the
@@ -63,10 +63,10 @@ export class CoToolDock extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-tool-dock")) customElements.define("co-tool-dock", CoToolDock);
+if (!customElements.get("komu-tool-dock")) customElements.define("komu-tool-dock", CoToolDock);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-tool-dock": CoToolDock;
+    "komu-tool-dock": CoToolDock;
   }
 }

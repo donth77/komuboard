@@ -3792,7 +3792,7 @@ This is consistent with the project's stated stack posture — **"React optional
 
 A survey of the client confirms the architecture that shapes the recommendation:
 
-- **Vanilla Web Components (custom elements), light DOM, no framework.** `<co-tool-dock>`, `<co-draw-bar>`, `<co-zoombar>`, `<co-avatar-presence-row>`, `<co-color-picker>`, `<co-dialog>`. The 2D board is **Konva.js**; VR is **A-Frame**. Light DOM (no Shadow DOM) per [ADR-0005](./adr/0005-ui-chrome-web-components.md) — components share the global stylesheet and a single ARIA tree.
+- **Vanilla Web Components (custom elements), light DOM, no framework.** `<komu-tool-dock>`, `<komu-draw-bar>`, `<komu-zoombar>`, `<komu-avatar-presence-row>`, `<komu-color-picker>`, `<komu-dialog>`. The 2D board is **Konva.js**; VR is **A-Frame**. Light DOM (no Shadow DOM) per [ADR-0005](./adr/0005-ui-chrome-web-components.md) — components share the global stylesheet and a single ARIA tree.
 - **Text reaches the screen three ways:**
   1. **Template literals + `innerHTML`** built once in `connectedCallback` (e.g. `tool-dock.ts` `TOOLS.map(...).join("")`; `draw-bar.ts` brush bar + popovers; `main.ts` shell).
   2. **`textContent`** for dynamic values (`main.ts` status / sync / zoom `${pct}%`; `draw-bar.ts` stroke width; `avatar-presence-row.ts` initials).
@@ -4068,7 +4068,7 @@ These shipped across the M1 hardening + refactor pass and are verified (typechec
 | O1 | **`main.ts` is a 677-line god-module** wiring ~13 concerns; `src/ui/` exists but is empty. Extract (highest ROI first): `profile-dialog` → `prefs` (theme/grid) → `app-menu` → `realtime`/`identity`. Leave canvas/tool/keyboard glue as the composition root. | Med | `main.ts` | ⏭ (collision-gated) |
 | O2 | **`canvas.ts` is a ~1350-line god-class.** Cleanest seam first: **`PresenceLayer`** (cursors + remote selections + remote draws, ~350 lines, lowest coupling) → then untangle `ensureAnim` to enable a `RemoteGestureController` (interpolation/ownership) → `SelectionController` last (most entangled). | Med | `canvas.ts` | ⏭ (collision-gated) |
 | O3 | Duplicated UI patterns: swatch-render + color-picker attach (×2), floating-popover + outside-click (×4: draw-bar / color-picker / avatar overflow / app-menu). Extract `ui/swatches.ts` + `openPopover()`. (Removing `pen-panel` already dropped the duplicated sheet-handle + a swatch/popover copy.) | Med | `draw-bar.ts`, `main.ts`, `color-picker.ts`, `avatar-presence-row.ts` | ⏭ |
-| O4 | ~~Two pen UIs with different style vocabularies.~~ **Resolved:** `<co-pen-panel>` removed — `<co-draw-bar>` (brush × dash = 4, incl. `highlight-dashed`) is the single canonical surface. | Low | `draw-bar.ts` | ✅ |
+| O4 | ~~Two pen UIs with different style vocabularies.~~ **Resolved:** `<komu-pen-panel>` removed — `<komu-draw-bar>` (brush × dash = 4, incl. `highlight-dashed`) is the single canonical surface. | Low | `draw-bar.ts` | ✅ |
 
 ## Testing
 

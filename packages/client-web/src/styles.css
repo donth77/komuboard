@@ -283,7 +283,7 @@ body {
   touch-action: none;
   /* Kill the mobile browser chrome that fights node selection: the long-press callout/context
      menu and accidental text selection of rendered nodes. The active editor re-enables text
-     selection for itself (.co-text-editor { user-select: text }). */
+     selection for itself (.komu-text-editor { user-select: text }). */
   -webkit-touch-callout: none;
   user-select: none;
   -webkit-user-select: none;
@@ -774,7 +774,7 @@ input[type="range"] {
   font-weight: 700;
 }
 
-/* avatar-presence-row join/leave motion is driven imperatively by <co-avatar-presence-row> via Motion
+/* avatar-presence-row join/leave motion is driven imperatively by <komu-avatar-presence-row> via Motion
    (spring enter-from-right + fade, fade/shrink exit, FLIP-reflow of neighbours).
    It honours prefers-reduced-motion in JS, so no CSS transition is needed here. */
 
@@ -1066,9 +1066,9 @@ input[type="range"] {
    it below at the top edge, and clamps it to the viewport so it never clips. Matches the dock's
    .tool-tip pill so every tooltip in the app reads the same. */
 [data-tip] {
-  position: relative; /* harmless containing block for any ::after rings (e.g. swatches); the pill itself is .co-tip */
+  position: relative; /* harmless containing block for any ::after rings (e.g. swatches); the pill itself is .komu-tip */
 }
-.co-tip {
+.komu-tip {
   position: fixed;
   z-index: 2147483000; /* above every chrome layer, incl. body-level popovers like the colour picker (z 80) */
   display: none;
@@ -1081,39 +1081,39 @@ input[type="range"] {
   white-space: nowrap;
   pointer-events: none;
 }
-.co-tip.show {
+.komu-tip.show {
   display: block;
 }
-.co-tip::after {
+.komu-tip::after {
   content: "";
   position: absolute;
   border: 5px solid transparent;
 }
-.co-tip:not(.below):not(.side)::after {
+.komu-tip:not(.below):not(.side)::after {
   /* pill above the element → tail at the bottom, pointing down */
   top: 100%;
   left: var(--tail-x, 50%);
   transform: translateX(-50%);
   border-top-color: #1e1e1e;
 }
-.co-tip.below::after {
+.komu-tip.below::after {
   /* pill below the element → tail at the top, pointing up */
   bottom: 100%;
   left: var(--tail-x, 50%);
   transform: translateX(-50%);
   border-bottom-color: #1e1e1e;
 }
-.co-tip.side::after {
+.komu-tip.side::after {
   /* pill beside the element (vertical toolbars) → tail centred vertically */
   top: var(--tail-y, 50%);
   transform: translateY(-50%);
 }
-.co-tip.side:not(.side-left)::after {
+.komu-tip.side:not(.side-left)::after {
   /* to the right of the element → tail on the pill's left, pointing left */
   right: 100%;
   border-right-color: #1e1e1e;
 }
-.co-tip.side.side-left::after {
+.komu-tip.side.side-left::after {
   /* flipped to the left of the element → tail on the pill's right, pointing right */
   left: 100%;
   border-left-color: #1e1e1e;
@@ -1203,7 +1203,7 @@ input[type="range"] {
 }
 
 /* Shortcut chip inside a hover tooltip pill (dock shortcuts, zoom in/out hints) — legible on the dark pill. */
-.co-tip .kbd {
+.komu-tip .kbd {
   background: rgba(255, 255, 255, 0.15);
   border-color: rgba(255, 255, 255, 0.28);
   color: #fff;
@@ -1388,7 +1388,7 @@ input[type="range"] {
   display: none;
 }
 
-/* ── Sticky-note colour palette (<co-sticky-bar>) — a vertical column (like the draw bar) on desktop,
+/* ── Sticky-note colour palette (<komu-sticky-bar>) — a vertical column (like the draw bar) on desktop,
    shown with the Sticky tool; becomes a horizontal bottom bar on mobile (see the media query). ── */
 .sticky-bar {
   position: absolute;
@@ -1425,7 +1425,7 @@ input[type="range"] {
     0 0 0 4px var(--accent);
 }
 
-/* ── Shapes-and-lines picker (<co-shape-menu>) — a vertical dropdown shown with the Shapes tool ── */
+/* ── Shapes-and-lines picker (<komu-shape-menu>) — a vertical dropdown shown with the Shapes tool ── */
 .shape-menu {
   position: absolute;
   left: 84px; /* mirrors the draw/sticky bars — just right of the dock */
@@ -1493,12 +1493,12 @@ input[type="range"] {
   background: var(--border, #e4e7ec);
 }
 
-/* ── Stamp wheel (<co-stamp-wheel>) — FigJam-style radial picker shown with the Stamp tool.
+/* ── Stamp wheel (<komu-stamp-wheel>) — FigJam-style radial picker shown with the Stamp tool.
    Outer ring = 8 gray pie-wedge slots (7 colour mark stickers + the user avatar), inner light-blue
    disc = recent emojis around a "+". The wedge <path>s are the click/hover targets; the mark icons
    + avatar ride on top (pointer-events:none) so the whole wedge is hot. Items are centred on their
    ring anchor with negative margins, leaving `transform` free for the entrance animation. */
-.co-stamp-wheel {
+.komu-stamp-wheel {
   position: absolute;
   left: 84px; /* mirrors the other sheets — just right of the dock */
   top: calc(56px + (100vh - 56px) / 2);
@@ -1508,7 +1508,7 @@ input[type="range"] {
   height: 280px;
   contain: layout paint; /* isolate the wheel's repaints from app-wide transitions (theme switch) */
 }
-.co-stamp-wheel.hidden {
+.komu-stamp-wheel.hidden {
   display: none;
 }
 .sw-disc {
@@ -1582,7 +1582,7 @@ input[type="range"] {
   border-radius: 50%;
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
-.co-stamp-wheel button {
+.komu-stamp-wheel button {
   position: absolute;
   display: grid;
   place-items: center;
@@ -1659,44 +1659,44 @@ input[type="range"] {
     transform: scale(1);
   }
 }
-.co-stamp-wheel.sw-intro .sw-disc,
-.co-stamp-wheel.sw-intro .sw-wedges,
-.co-stamp-wheel.sw-intro .sw-ico,
-.co-stamp-wheel.sw-intro .sw-avatar,
-.co-stamp-wheel.sw-intro .sw-inner,
-.co-stamp-wheel.sw-intro .sw-emoji,
-.co-stamp-wheel.sw-intro .sw-plus {
+.komu-stamp-wheel.sw-intro .sw-disc,
+.komu-stamp-wheel.sw-intro .sw-wedges,
+.komu-stamp-wheel.sw-intro .sw-ico,
+.komu-stamp-wheel.sw-intro .sw-avatar,
+.komu-stamp-wheel.sw-intro .sw-inner,
+.komu-stamp-wheel.sw-intro .sw-emoji,
+.komu-stamp-wheel.sw-intro .sw-plus {
   will-change: transform, opacity; /* promote to GPU layers for the duration of the entrance */
 }
-.co-stamp-wheel.sw-intro .sw-disc,
-.co-stamp-wheel.sw-intro .sw-wedges {
+.komu-stamp-wheel.sw-intro .sw-disc,
+.komu-stamp-wheel.sw-intro .sw-wedges {
   animation: sw-disc-in 280ms var(--ease, ease-out) both;
 }
-.co-stamp-wheel.sw-intro .sw-ico,
-.co-stamp-wheel.sw-intro .sw-avatar {
+.komu-stamp-wheel.sw-intro .sw-ico,
+.komu-stamp-wheel.sw-intro .sw-avatar {
   animation: sw-pop-in 320ms var(--ease, ease-out) both;
 }
-.co-stamp-wheel.sw-intro .sw-inner {
+.komu-stamp-wheel.sw-intro .sw-inner {
   animation: sw-disc-in 300ms var(--ease, ease-out) 160ms both;
 }
-.co-stamp-wheel.sw-intro .sw-emoji,
-.co-stamp-wheel.sw-intro .sw-plus {
+.komu-stamp-wheel.sw-intro .sw-emoji,
+.komu-stamp-wheel.sw-intro .sw-plus {
   animation: sw-pop-in 280ms var(--ease, ease-out) 200ms both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .co-stamp-wheel.sw-intro .sw-disc,
-  .co-stamp-wheel.sw-intro .sw-wedges,
-  .co-stamp-wheel.sw-intro .sw-ico,
-  .co-stamp-wheel.sw-intro .sw-avatar,
-  .co-stamp-wheel.sw-intro .sw-inner,
-  .co-stamp-wheel.sw-intro .sw-emoji,
-  .co-stamp-wheel.sw-intro .sw-plus {
+  .komu-stamp-wheel.sw-intro .sw-disc,
+  .komu-stamp-wheel.sw-intro .sw-wedges,
+  .komu-stamp-wheel.sw-intro .sw-ico,
+  .komu-stamp-wheel.sw-intro .sw-avatar,
+  .komu-stamp-wheel.sw-intro .sw-inner,
+  .komu-stamp-wheel.sw-intro .sw-emoji,
+  .komu-stamp-wheel.sw-intro .sw-plus {
     animation: none;
   }
 }
 
-/* ── Emoji picker (<co-emoji-picker>) — full Noto grid opened from the wheel's "+" ── */
-.co-emoji-picker {
+/* ── Emoji picker (<komu-emoji-picker>) — full Noto grid opened from the wheel's "+" ── */
+.komu-emoji-picker {
   position: absolute;
   left: 340px; /* clears the wheel (left 84 + width 244 = 328) */
   top: calc(56px + (100vh - 56px) / 2);
@@ -1712,7 +1712,7 @@ input[type="range"] {
   box-shadow: var(--shadow);
   overflow: hidden;
 }
-.co-emoji-picker.hidden {
+.komu-emoji-picker.hidden {
   display: none;
 }
 .ep-tabs {
@@ -2101,13 +2101,13 @@ input[type="range"] {
      radial wheel doesn't fit the slide-up clip). The picker overlays the wheel while open. */
   /* The wheel's containing block (#app) ends at the dock's top edge, so `bottom` is measured from
      there — a small value sits it right above the toolbar. */
-  .co-stamp-wheel {
+  .komu-stamp-wheel {
     left: 50%;
     top: auto;
     bottom: 8px;
     transform: translateX(-50%);
   }
-  .co-emoji-picker {
+  .komu-emoji-picker {
     left: 50%;
     top: auto;
     bottom: 8px;
@@ -2118,29 +2118,29 @@ input[type="range"] {
   /* On a phone, B/I/U/S collapse into ONE toggle (below) so the toolbar fits a single row with no
      overflow + no dead space. Clamp to the viewport; wrap is only a safety net for very long labels.
      Body-appended popovers (font/size/colour) aren't clipped — they live outside this box. */
-  .co-text-bar {
+  .komu-text-bar {
     max-width: calc(100vw - 12px);
     flex-wrap: wrap;
     justify-content: center;
     row-gap: 4px;
   }
-  .co-text-bar .ctb-btn,
-  .co-text-bar .ctb-text {
+  .komu-text-bar .ctb-btn,
+  .komu-text-bar .ctb-text {
     flex: 0 0 auto; /* keep full-size, tappable targets */
   }
-  .co-text-bar .ctb-sep {
+  .komu-text-bar .ctb-sep {
     display: none; /* drop the vertical dividers on the compact mobile bar */
   }
   /* the B/I/U/S group → one toggle that expands a vertical flyout below it. Selectors are scoped
      under .ctb-marks so they out-specify the desktop defaults (which sit *after* this @media in the
      file), letting these mobile rules win at ≤640px regardless of source order. */
-  .co-text-bar .ctb-marks {
+  .komu-text-bar .ctb-marks {
     position: relative;
   }
-  .co-text-bar .ctb-marks .ctb-marks-toggle {
+  .komu-text-bar .ctb-marks .ctb-marks-toggle {
     display: inline-flex;
   }
-  .co-text-bar .ctb-marks .ctb-marks-menu {
+  .komu-text-bar .ctb-marks .ctb-marks-menu {
     position: absolute;
     bottom: calc(100% + 8px); /* open UPWARD (above the bar) so it never covers the edited node */
     left: 50%;
@@ -2160,7 +2160,7 @@ input[type="range"] {
       opacity 150ms var(--ease, ease);
     z-index: 2;
   }
-  .co-text-bar .ctb-marks.open .ctb-marks-menu {
+  .komu-text-bar .ctb-marks.open .ctb-marks-menu {
     transform: translateX(-50%) scaleY(1);
     opacity: 1;
     pointer-events: auto;
@@ -2214,7 +2214,7 @@ input[type="range"] {
 .cursor-layer * {
   pointer-events: none;
 }
-.co-text {
+.komu-text {
   position: absolute;
   top: 0;
   left: 0;
@@ -2231,7 +2231,7 @@ input[type="range"] {
   user-select: none;
   -webkit-user-select: none;
 }
-.co-text-editor {
+.komu-text-editor {
   pointer-events: auto;
   cursor: text;
   outline: none;
@@ -2245,8 +2245,8 @@ input[type="range"] {
 /* Links render colour-only (no underline) so underline stays an independent, toggleable mark.
    The browser default a{text-decoration:underline} otherwise makes queryCommandState report
    underline-on for any link, which turns execCommand("underline") into a broken no-op. */
-.co-text a,
-.co-text-editor a {
+.komu-text a,
+.komu-text-editor a {
   color: #2563eb;
   text-decoration: none;
   /* No pointer-events: a click must pass through to the canvas so it selects/drags the text box
@@ -2254,19 +2254,19 @@ input[type="range"] {
      and the link itself is opened from the hover card's Open button. */
 }
 /* A peer's in-progress text (streamed live over awareness) — faint ring in their cursor colour. */
-.co-text-remote {
+.komu-text-remote {
   box-shadow: 0 0 0 1.5px var(--remote, #4a9eff);
   border-radius: 2px;
 }
 /* A text box selected with the select tool. */
-.co-text.selected {
+.komu-text.selected {
   box-shadow: 0 0 0 1.5px #4a9eff;
   border-radius: 2px;
 }
 /* ── Stamps — an emoji/mark sticker placed on the board. ADR-0009 Phase 1: stamps render here in the
    HTML overlay as a square <img> box, z-ordered with text/shapes/stickies by placement order. The
    white outline is baked into the image; the drop-shadow lifts it off the board like a sticker. ── */
-.co-stamp {
+.komu-stamp {
   position: absolute;
   top: 0;
   left: 0;
@@ -2276,7 +2276,7 @@ input[type="range"] {
   user-select: none;
   -webkit-user-select: none;
 }
-.co-stamp img {
+.komu-stamp img {
   display: block;
   width: 100%;
   height: 100%;
@@ -2286,15 +2286,15 @@ input[type="range"] {
   user-select: none;
   filter: drop-shadow(0 2px 3px rgba(16, 17, 22, 0.22));
 }
-/* Selected (local select tool) — a ring around the stamp box, matching .co-text.selected. */
-.co-stamp.selected {
+/* Selected (local select tool) — a ring around the stamp box, matching .komu-text.selected. */
+.komu-stamp.selected {
   box-shadow: 0 0 0 1.5px #4a9eff;
   border-radius: 2px;
 }
 /* ── Ink (strokes + connectors) rendered as SVG, ADR-0009 Phase 3 ─────────────────────────────── */
 /* Each stroke/connector is its own <svg>, positioned in screen space (left/top) + scale() for zoom;
    the path coords are in a local box. pointer-events:none → clicks pass to the canvas (hit-test). */
-.co-ink {
+.komu-ink {
   position: absolute;
   top: 0;
   left: 0;
@@ -2302,32 +2302,32 @@ input[type="range"] {
   transform-origin: 0 0;
   pointer-events: none;
 }
-.co-ink * {
+.komu-ink * {
   pointer-events: none;
 }
 /* ── Sticky notes — a text box with a `bg` renders as a coloured, padded, square card ─────────── */
-.co-text.sticky {
+.komu-text.sticky {
   padding: 1.2em;
   border-radius: 0; /* square corners (no rounding) */
   box-shadow: 0 3px 10px rgba(16, 17, 22, 0.16);
   /* text flows from the top-left (align stays text-align); the box is a min-square that grows down */
 }
-.co-text.sticky.selected {
+.komu-text.sticky.selected {
   box-shadow:
     0 3px 10px rgba(16, 17, 22, 0.16),
     0 0 0 1.5px #4a9eff;
 }
 /* The translucent placement preview that tracks the cursor while the Sticky tool is active. */
-.co-text-ghost {
+.komu-text-ghost {
   opacity: 0.5;
   pointer-events: none;
 }
 /* ── Shapes — a text box with a `shape` renders as an outlined card with a centred label ──────── */
-/* The box is a flex column that vertically centres an INNER `.co-text-body`. The body is the actual
+/* The box is a flex column that vertically centres an INNER `.komu-text-body`. The body is the actual
    text/contenteditable and is content-sized, so when it's empty it's just one line tall — centred by
    the flex, which puts its caret at the box's centre (an editable === box would be full-height and
    strand the empty caret at the top). Horizontal placement is left to `text-align`. */
-.co-text.shape {
+.komu-text.shape {
   padding: 0.7em;
   box-sizing: border-box;
   border: 1.5px solid #1f2933;
@@ -2337,16 +2337,16 @@ input[type="range"] {
   justify-content: center;
   word-break: break-word;
 }
-.co-text-body {
+.komu-text-body {
   width: 100%; /* stretch so text-align positions the text; height stays content-sized (centred) */
   outline: none;
 }
-.co-text.shape-ellipse {
+.komu-text.shape-ellipse {
   border-radius: 50%;
 }
 /* polygon shapes draw their outline as an SVG background → no CSS border; the SVG fills the box */
-.co-text.shape-triangle,
-.co-text.shape-rhombus {
+.komu-text.shape-triangle,
+.komu-text.shape-rhombus {
   border: none;
   border-radius: 0;
   background-repeat: no-repeat;
@@ -2354,18 +2354,18 @@ input[type="range"] {
   background-size: 100% 100%;
 }
 /* the triangle's label sits lower (its width is widest near the base) */
-.co-text.shape-triangle {
+.komu-text.shape-triangle {
   justify-content: flex-end;
   padding-bottom: 0.9em;
 }
 /* "Add text" placeholder while a shape's body is empty — but ONLY when the shape is selected
-   (.selected) or being edited (.co-text-editor). An idle, unselected empty shape shows nothing, so
+   (.selected) or being edited (.komu-text-editor). An idle, unselected empty shape shows nothing, so
    the canvas isn't littered with "Add text" prompts. An ABSOLUTE overlay on the box (not in the
    editable's line, which would shove the caret to its right). It uses the SAME flex centring +
    padding + text-align as the box, so it paints exactly over where the centred inner body's
    caret/text sits. Shown via :has when the body has no text. */
-.co-text.shape.selected:has(> .co-text-body:empty)::before,
-.co-text.co-text-editor.shape:has(> .co-text-body:empty)::before {
+.komu-text.shape.selected:has(> .komu-text-body:empty)::before,
+.komu-text.komu-text-editor.shape:has(> .komu-text-body:empty)::before {
   content: "Add text";
   position: absolute;
   inset: 0;
@@ -2378,29 +2378,29 @@ input[type="range"] {
   color: #98a2b3;
   pointer-events: none;
 }
-.co-text.shape-triangle.selected:has(> .co-text-body:empty)::before,
-.co-text.co-text-editor.shape-triangle:has(> .co-text-body:empty)::before {
+.komu-text.shape-triangle.selected:has(> .komu-text-body:empty)::before,
+.komu-text.komu-text-editor.shape-triangle:has(> .komu-text-body:empty)::before {
   justify-content: flex-end; /* match the triangle's lower-sitting label */
 }
-.co-text.shape.selected {
+.komu-text.shape.selected {
   box-shadow: 0 0 0 1.5px #4a9eff;
 }
 /* Resize handles for a single selected text box (the box itself only hosts the handles — the
-   selection ring is drawn on the .co-text). */
-.co-text-resize {
+   selection ring is drawn on the .komu-text). */
+.komu-text-resize {
   position: absolute;
   z-index: 2;
   pointer-events: none;
 }
 /* ADR-0009 Phase 3 Step 4: the multi-node group transform box (DOM — replaces the Konva proxy +
    Konva.Transformer). An outline + 8 resize handles over the union of every selected object. */
-.co-group-box {
+.komu-group-box {
   position: absolute;
   z-index: 2;
   pointer-events: none;
   box-shadow: 0 0 0 1px #4a9eff;
 }
-.co-group-handle {
+.komu-group-handle {
   position: absolute;
   width: 9px;
   height: 9px;
@@ -2410,55 +2410,55 @@ input[type="range"] {
   pointer-events: auto;
   transform: translate(-50%, -50%);
 }
-.co-group-handle.g-nw {
+.komu-group-handle.g-nw {
   left: 0;
   top: 0;
   cursor: nwse-resize;
 }
-.co-group-handle.g-ne {
+.komu-group-handle.g-ne {
   left: 100%;
   top: 0;
   cursor: nesw-resize;
 }
-.co-group-handle.g-sw {
+.komu-group-handle.g-sw {
   left: 0;
   top: 100%;
   cursor: nesw-resize;
 }
-.co-group-handle.g-se {
+.komu-group-handle.g-se {
   left: 100%;
   top: 100%;
   cursor: nwse-resize;
 }
-.co-group-handle.g-w {
+.komu-group-handle.g-w {
   left: 0;
   top: 50%;
   cursor: ew-resize;
 }
-.co-group-handle.g-e {
+.komu-group-handle.g-e {
   left: 100%;
   top: 50%;
   cursor: ew-resize;
 }
-.co-group-handle.g-n {
+.komu-group-handle.g-n {
   left: 50%;
   top: 0;
   cursor: ns-resize;
 }
-.co-group-handle.g-s {
+.komu-group-handle.g-s {
   left: 50%;
   top: 100%;
   cursor: ns-resize;
 }
 /* Connector attach points — the 4 round dots floating just outside a shape's sides (one per side).
    Positioned in screen space by the text layer; purely visual (snapping is computed from geometry). */
-.co-connector-dots {
+.komu-connector-dots {
   position: absolute;
   inset: 0;
   z-index: 1;
   pointer-events: none;
 }
-.co-connector-dot {
+.komu-connector-dot {
   position: absolute;
   width: 12px;
   height: 12px;
@@ -2469,7 +2469,7 @@ input[type="range"] {
   transform: translate(-50%, -50%);
 }
 /* The locked snap point while drawing a connector — larger + solid (the lock indicator). */
-.co-connector-dot.is-snapped {
+.komu-connector-dot.is-snapped {
   width: 16px;
   height: 16px;
   background: #3b6ff6;
@@ -2477,13 +2477,13 @@ input[type="range"] {
 }
 /* Endpoint handles for a selected connector — white circles with a blue ring, draggable to
    re-point / re-bind the end (screen-space, positioned by the canvas). */
-.co-connector-handles {
+.komu-connector-handles {
   position: absolute;
   inset: 0;
   z-index: 3;
   pointer-events: none;
 }
-.co-connector-handle {
+.komu-connector-handle {
   position: absolute;
   width: 15px;
   height: 15px;
@@ -2495,13 +2495,13 @@ input[type="range"] {
   pointer-events: auto;
   touch-action: none;
 }
-.co-connector-handle:active {
+.komu-connector-handle:active {
   cursor: grabbing;
 }
 
 /* ── Connector edit bar — a light floating toolbar above a selected connector (matches the text /
    draw bars; FigJam's dark pill is only a layout reference). ───────────────────────────────────── */
-.co-connector-bar {
+.komu-connector-bar {
   position: fixed;
   z-index: 50;
   display: inline-flex;
@@ -2515,7 +2515,7 @@ input[type="range"] {
   color: var(--ink, #0e1116);
   user-select: none;
 }
-.co-connector-bar .cb-btn {
+.komu-connector-bar .cb-btn {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -2527,30 +2527,30 @@ input[type="range"] {
   color: inherit;
   cursor: pointer;
 }
-.co-connector-bar .cb-btn:hover {
+.komu-connector-bar .cb-btn:hover {
   background: var(--surface-2, #f1f3f5);
 }
-.co-connector-bar .cb-ico {
+.komu-connector-bar .cb-ico {
   width: 22px;
   height: 22px;
   display: block;
 }
-.co-connector-bar .cb-weight .cb-ico {
+.komu-connector-bar .cb-weight .cb-ico {
   width: 18px;
   height: 18px;
 }
-.co-connector-bar .cb-caret {
+.komu-connector-bar .cb-caret {
   font-size: 9px;
   opacity: 0.55;
 }
-.co-connector-bar .cb-color-dot {
+.komu-connector-bar .cb-color-dot {
   width: 18px;
   height: 18px;
   border-radius: 50%;
   background: #1f2933;
   border: 1.5px solid rgba(0, 0, 0, 0.18);
 }
-.co-connector-bar .cb-sep {
+.komu-connector-bar .cb-sep {
   width: 1px;
   height: 22px;
   margin: 0 3px;
@@ -2637,7 +2637,7 @@ input[type="range"] {
     0 0 0 2px var(--surface, #ffffff),
     0 0 0 4px var(--accent, #3b6ff6);
 }
-.co-text-handle {
+.komu-text-handle {
   position: absolute;
   width: 9px;
   height: 9px;
@@ -2647,68 +2647,68 @@ input[type="range"] {
   pointer-events: auto;
   transform: translate(-50%, -50%);
 }
-.co-text-handle.h-nw {
+.komu-text-handle.h-nw {
   left: 0;
   top: 0;
   cursor: nwse-resize;
 }
-.co-text-handle.h-ne {
+.komu-text-handle.h-ne {
   left: 100%;
   top: 0;
   cursor: nesw-resize;
 }
-.co-text-handle.h-sw {
+.komu-text-handle.h-sw {
   left: 0;
   top: 100%;
   cursor: nesw-resize;
 }
-.co-text-handle.h-se {
+.komu-text-handle.h-se {
   left: 100%;
   top: 100%;
   cursor: nwse-resize;
 }
-.co-text-handle.h-w {
+.komu-text-handle.h-w {
   left: 0;
   top: 50%;
   cursor: ew-resize;
 }
-.co-text-handle.h-e {
+.komu-text-handle.h-e {
   left: 100%;
   top: 50%;
   cursor: ew-resize;
 }
 /* n/s handles — shown only for shapes (free height); hidden for text/sticky (auto-height). */
-.co-text-handle.h-n,
-.co-text-handle.h-s {
+.komu-text-handle.h-n,
+.komu-text-handle.h-s {
   display: none;
   left: 50%;
   cursor: ns-resize;
 }
-.co-text-handle.h-n {
+.komu-text-handle.h-n {
   top: 0;
 }
-.co-text-handle.h-s {
+.komu-text-handle.h-s {
   top: 100%;
 }
-.co-text-resize-shape .co-text-handle.h-n,
-.co-text-resize-shape .co-text-handle.h-s {
+.komu-text-resize-shape .komu-text-handle.h-n,
+.komu-text-resize-shape .komu-text-handle.h-s {
   display: block;
 }
 /* A stamp resizes uniformly (square) → corner handles only; hide the w/e side handles too. */
-.co-text-resize-stamp .co-text-handle.h-w,
-.co-text-resize-stamp .co-text-handle.h-e {
+.komu-text-resize-stamp .komu-text-handle.h-w,
+.komu-text-resize-stamp .komu-text-handle.h-e {
   display: none;
 }
 /* ADR-0009 P3 Step 2: a selected stroke shows only the outline box — resize/rotate handles arrive
    in Step 3 (gating them off here keeps a handle-drag from mis-committing through the text path). */
-.co-text-resize-stroke .co-text-handle,
-.co-text-resize-stroke .co-text-rotate {
+.komu-text-resize-stroke .komu-text-handle,
+.komu-text-resize-stroke .komu-text-rotate {
   display: none;
 }
 /* Rotation zones — invisible squares just OUTSIDE each corner. Hover shows a curved double-arrow
    rotate cursor ORIENTED to wrap that corner (the convex side faces outward); drag spins the box.
    They sit under the resize handles (DOM order) so the corner itself still resizes. */
-.co-text-rotate {
+.komu-text-rotate {
   position: absolute;
   width: 20px;
   height: 20px;
@@ -2716,29 +2716,29 @@ input[type="range"] {
 }
 /* Positioning only — the rotate cursor itself is set inline from the shared ROTATE_CURSORS (cursors.ts),
    the single source used by both these HTML boxes and the Konva strokes/stamps. */
-.co-text-rotate.r-nw {
+.komu-text-rotate.r-nw {
   left: 0;
   top: 0;
   transform: translate(-100%, -100%);
 }
-.co-text-rotate.r-ne {
+.komu-text-rotate.r-ne {
   left: 100%;
   top: 0;
   transform: translate(0, -100%);
 }
-.co-text-rotate.r-sw {
+.komu-text-rotate.r-sw {
   left: 0;
   top: 100%;
   transform: translate(-100%, 0);
 }
-.co-text-rotate.r-se {
+.komu-text-rotate.r-se {
   left: 100%;
   top: 100%;
   transform: translate(0, 0);
 }
 
 /* ── Floating rich-text toolbar (above the active text editor) ─────────────── */
-.co-text-bar {
+.komu-text-bar {
   position: fixed;
   z-index: 50;
   display: flex;
@@ -2756,14 +2756,14 @@ input[type="range"] {
   color: var(--ink, #0e1116);
   user-select: none;
 }
-.co-text-bar .ctb-sep {
+.komu-text-bar .ctb-sep {
   width: 1px;
   align-self: stretch;
   margin: 3px 3px;
   background: var(--border, #e3e6ea);
 }
-.co-text-bar .ctb-btn,
-.co-text-bar .ctb-text {
+.komu-text-bar .ctb-btn,
+.komu-text-bar .ctb-text {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2777,34 +2777,34 @@ input[type="range"] {
   font: inherit;
   cursor: pointer;
 }
-.co-text-bar .ctb-btn:hover,
-.co-text-bar .ctb-text:hover {
+.komu-text-bar .ctb-btn:hover,
+.komu-text-bar .ctb-text:hover {
   background: var(--surface-2, #f1f3f5);
 }
 /* B/I/U/S group. Desktop: the 4 marks are inline and the toggle is hidden. (Mobile collapses
    them behind the toggle into a vertical flyout — see the @media block.) */
-.co-text-bar .ctb-marks {
+.komu-text-bar .ctb-marks {
   display: inline-flex;
   align-items: center;
   gap: 2px;
 }
-.co-text-bar .ctb-marks-toggle {
+.komu-text-bar .ctb-marks-toggle {
   display: none;
 }
-.co-text-bar .ctb-marks-menu {
+.komu-text-bar .ctb-marks-menu {
   display: inline-flex;
   align-items: center;
   gap: 2px;
 }
 /* Shape mode (any viewport): the shape bar already carries shape-select / fill / align, so collapse
    B/I/U/S into the flyout toggle to keep it compact — the same flyout the mobile bar uses. */
-.co-text-bar.shape-mode .ctb-marks {
+.komu-text-bar.shape-mode .ctb-marks {
   position: relative;
 }
-.co-text-bar.shape-mode .ctb-marks-toggle {
+.komu-text-bar.shape-mode .ctb-marks-toggle {
   display: inline-flex;
 }
-.co-text-bar.shape-mode .ctb-marks-menu {
+.komu-text-bar.shape-mode .ctb-marks-menu {
   position: absolute;
   bottom: calc(100% + 8px); /* open UPWARD (above the bar) so it never covers the edited node */
   left: 50%;
@@ -2824,56 +2824,56 @@ input[type="range"] {
     opacity 150ms var(--ease, ease);
   z-index: 2;
 }
-.co-text-bar.shape-mode .ctb-marks.open .ctb-marks-menu {
+.komu-text-bar.shape-mode .ctb-marks.open .ctb-marks-menu {
   transform: translateX(-50%) scaleY(1);
   opacity: 1;
   pointer-events: auto;
 }
-.co-text-bar .ctb-btn.on {
+.komu-text-bar .ctb-btn.on {
   background: color-mix(in srgb, var(--accent, #3b6ff6) 16%, transparent);
   color: var(--accent, #3b6ff6);
 }
-.co-text-bar .ctb-btn svg {
+.komu-text-bar .ctb-btn svg {
   width: 20px;
   height: 20px;
 }
-.co-text-bar .ctb-text {
+.komu-text-bar .ctb-text {
   gap: 4px;
   padding: 0 8px;
   white-space: nowrap;
 }
-.co-text-bar .ctb-caret {
+.komu-text-bar .ctb-caret {
   font-size: 9px;
   opacity: 0.55;
 }
-.co-text-bar .ctb-b {
+.komu-text-bar .ctb-b {
   font-weight: 700;
 }
-.co-text-bar .ctb-i {
+.komu-text-bar .ctb-i {
   font-style: italic;
   font-family: Georgia, serif;
 }
-.co-text-bar .ctb-u {
+.komu-text-bar .ctb-u {
   text-decoration: underline;
 }
-.co-text-bar .ctb-strike {
+.komu-text-bar .ctb-strike {
   text-decoration: line-through;
 }
-.co-text-bar .ctb-color {
+.komu-text-bar .ctb-color {
   flex-direction: column;
   gap: 1px;
 }
-.co-text-bar .ctb-color .ctb-a {
+.komu-text-bar .ctb-color .ctb-a {
   font-weight: 600;
   line-height: 1;
 }
-.co-text-bar .ctb-underbar {
+.komu-text-bar .ctb-underbar {
   width: 18px;
   height: 3px;
   border-radius: 2px;
   background: #0e1116;
 }
-.co-text-bar .ctb-hl-box {
+.komu-text-bar .ctb-hl-box {
   width: 18px;
   height: 15px;
   border-radius: 3px;
@@ -2881,37 +2881,37 @@ input[type="range"] {
   border: 1px solid rgba(0, 0, 0, 0.12);
 }
 /* ── Shape-mode controls — only visible when the bar edits a shape (.shape-mode on the root) ──── */
-.co-text-bar .ctb-shape-only {
+.komu-text-bar .ctb-shape-only {
   display: none;
 }
-.co-text-bar.shape-mode .ctb-shape-only {
+.komu-text-bar.shape-mode .ctb-shape-only {
   display: inline-flex;
 }
-.co-text-bar .ctb-shape-kind,
-.co-text-bar .ctb-fill,
-.co-text-bar .ctb-border,
-.co-text-bar .ctb-align {
+.komu-text-bar .ctb-shape-kind,
+.komu-text-bar .ctb-fill,
+.komu-text-bar .ctb-border,
+.komu-text-bar .ctb-align {
   gap: 3px;
 }
-.co-text-bar .ctb-shape-ico,
-.co-text-bar .ctb-border-ico,
-.co-text-bar .ctb-align-ico {
+.komu-text-bar .ctb-shape-ico,
+.komu-text-bar .ctb-border-ico,
+.komu-text-bar .ctb-align-ico {
   display: inline-flex;
 }
-.co-text-bar .ctb-shape-ico svg,
-.co-text-bar .ctb-align-ico svg {
+.komu-text-bar .ctb-shape-ico svg,
+.komu-text-bar .ctb-align-ico svg {
   width: 20px;
   height: 20px;
 }
 /* the border icon (line-weight glyph) is filled, so it sizes a touch smaller for balance */
-.co-text-bar .ctb-border-ico svg {
+.komu-text-bar .ctb-border-ico svg {
   width: 17px;
   height: 17px;
 }
-.co-text-bar .ctb-border-ico.is-none {
+.komu-text-bar .ctb-border-ico.is-none {
   opacity: 0.4;
 }
-.co-text-bar .ctb-fill-dot {
+.komu-text-bar .ctb-fill-dot {
   width: 18px;
   height: 18px;
   border-radius: 50%;
@@ -2919,7 +2919,7 @@ input[type="range"] {
   border: 1.5px solid rgba(0, 0, 0, 0.22);
 }
 /* "no fill" indicator — a red crossout slash over a transparent dot */
-.co-text-bar .ctb-fill-dot.is-none {
+.komu-text-bar .ctb-fill-dot.is-none {
   background:
     linear-gradient(135deg, transparent 43%, #e03131 43%, #e03131 57%, transparent 57%), #ffffff;
 }
@@ -3093,7 +3093,7 @@ input[type="range"] {
 }
 /* The text being linked, painted while the URL input has focus (the native selection can't show —
    the document's only selection is in the input). Driven by the CSS Custom Highlight API. */
-::highlight(co-link-target) {
+::highlight(komu-link-target) {
   background: color-mix(in srgb, var(--accent, #3b6ff6) 30%, transparent);
 }
 .ctb-link-pop::after {

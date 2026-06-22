@@ -71,7 +71,7 @@ test("shapes tool: tapping on a stamp still places a shape (no silent no-op)", a
 }) => {
   const a = await connectPeer(browser, uniqueRoom("placeoverstamp"));
   await injectStamp(a.page, { id: "stamp1", x: 90, y: 90, size: 64 });
-  await expect.poll(() => a.page.locator(".co-stamp").count()).toBe(1);
+  await expect.poll(() => a.page.locator(".komu-stamp").count()).toBe(1);
 
   const cal = await calibrate(a.page);
   await a.page.evaluate(() => {

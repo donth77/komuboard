@@ -378,7 +378,7 @@ export class TextLayer {
   private cardHideTimer = 0;
   /** Translucent sticky-note placement preview that tracks the cursor while the sticky tool is on. */
   private stickyGhost: HTMLElement | null = null;
-  /** Translucent stamp placement preview — a DOM `.co-stamp` in the overlay so it stacks ABOVE
+  /** Translucent stamp placement preview — a DOM `.komu-stamp` in the overlay so it stacks ABOVE
    *  committed objects (the old Konva ghost sat under the DOM layer → previewed beneath stickies). */
   private stampGhost: HTMLElement | null = null;
 
@@ -424,14 +424,14 @@ export class TextLayer {
     for (const id of order) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      // Stamps render here too (ADR-0009): a `.co-stamp` <img> box, z-ordered with text/shapes by
+      // Stamps render here too (ADR-0009): a `.komu-stamp` <img> box, z-ordered with text/shapes by
       // `orderArray` index so any object stacks over any other by placement order (FigJam parity).
       if (obj?.type === "stamp") {
         seen.add(id);
         let el = this.els.get(id);
         if (!el) {
           el = document.createElement("div");
-          el.className = "co-stamp";
+          el.className = "komu-stamp";
           el.dataset.id = id;
           this.els.set(id, el);
         }
@@ -473,7 +473,7 @@ export class TextLayer {
       let el = this.els.get(id);
       if (!el) {
         el = document.createElement("div");
-        el.className = "co-text";
+        el.className = "komu-text";
         el.dataset.id = id;
         this.els.set(id, el);
       }
@@ -513,17 +513,17 @@ export class TextLayer {
 
   /** Render a text object's runs into its display element. */
   private paint(el: HTMLElement, obj: TextObject): void {
-    // A shape wraps its label in an inner `.co-text-body` (matching the editor) so the centred
+    // A shape wraps its label in an inner `.komu-text-body` (matching the editor) so the centred
     // empty-state placeholder lines up with where the caret/text sits when you edit it.
     el.innerHTML = obj.shape
-      ? `<div class="co-text-body">${runsToHtml(obj.runs)}</div>`
+      ? `<div class="komu-text-body">${runsToHtml(obj.runs)}</div>`
       : runsToHtml(obj.runs);
     el.style.color = INK; // default ink; per-run colours override via the rendered spans
     if (obj.shape) this.applyShape(el, obj.shape, obj.bg, obj.borderColor, obj.borderStyle);
     else this.applySticky(el, obj.bg);
   }
 
-  /** Paint a stamp's image into its `.co-stamp` box. Emoji srcs are white-outlined (shared sticker
+  /** Paint a stamp's image into its `.komu-stamp` box. Emoji srcs are white-outlined (shared sticker
    *  renderer, cached); marks carry a baked border; an `img:` avatar is its data URL. The outline +
    *  CSS drop-shadow give the placed sticker look. Cheap-guarded so a repaint reuses the same <img>. */
   private paintStamp(el: HTMLDivElement, src: string): void {
@@ -565,7 +565,7 @@ export class TextLayer {
 
   private makeInkSvg(id: string, kind: "stroke" | "connector"): SVGSVGElement {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", `co-ink co-${kind}`);
+    svg.setAttribute("class", `komu-ink komu-${kind}`);
     svg.dataset.id = id;
     svg.dataset.type = kind;
     return svg;
@@ -618,7 +618,7 @@ export class TextLayer {
     let el = this.draftEls.get(key);
     if (!el) {
       el = this.makeInkSvg(key, "stroke");
-      el.classList.add("co-draft");
+      el.classList.add("komu-draft");
       this.draftEls.set(key, el);
     }
     this.root.appendChild(el); // last child of root = above all committed boxes
@@ -639,7 +639,7 @@ export class TextLayer {
     let el = this.draftEls.get(key);
     if (!el) {
       el = this.makeInkSvg(key, "connector");
-      el.classList.add("co-draft");
+      el.classList.add("komu-draft");
       this.draftEls.set(key, el);
     }
     this.root.appendChild(el); // last child of root = above all committed boxes
@@ -1323,7 +1323,7 @@ export class TextLayer {
   showStickyGhost(world: { x: number; y: number }, color: string): void {
     if (this.edit) return this.hideStickyGhost(); // a note is open → no ghost
     const g = this.ensureGhost();
-    g.className = "co-text sticky co-text-ghost";
+    g.className = "komu-text sticky komu-text-ghost";
     g.style.background = color;
     g.style.backgroundImage = "";
     this.layout(
@@ -1340,7 +1340,7 @@ export class TextLayer {
   showShapeGhost(world: { x: number; y: number }, kind: ShapeKind, fill: string): void {
     if (this.edit) return this.hideStickyGhost();
     const g = this.ensureGhost();
-    g.className = "co-text co-text-ghost";
+    g.className = "komu-text komu-text-ghost";
     g.textContent = "";
     this.applyShape(g, kind, fill);
     const w = DEFAULT_SHAPE_W;
@@ -1360,7 +1360,7 @@ export class TextLayer {
     this.stickyGhost?.remove();
     this.stickyGhost = null;
   }
-  /** Show/move a translucent stamp preview centred on the world point. Renders as a `.co-stamp` in
+  /** Show/move a translucent stamp preview centred on the world point. Renders as a `.komu-stamp` in
    *  this.root (re-appended last by render() → above every committed object), painted + laid out
    *  with the SAME path the placed stamp uses, so the preview is pixel-identical to the result. */
   showStampGhost(
@@ -1372,7 +1372,7 @@ export class TextLayer {
     let g = this.stampGhost;
     if (!g) {
       g = document.createElement("div");
-      g.className = "co-stamp co-text-ghost";
+      g.className = "komu-stamp komu-text-ghost";
       this.root.appendChild(g);
       this.stampGhost = g;
     }
@@ -1452,7 +1452,7 @@ export class TextLayer {
     caretAt?: { x: number; y: number },
   ): void {
     const el = document.createElement("div");
-    el.className = "co-text co-text-editor";
+    el.className = "komu-text komu-text-editor";
     el.style.color = INK;
     // Shape (outline + fixed height) or sticky (coloured square) styling on the box itself.
     if (session.shape)
@@ -1465,7 +1465,7 @@ export class TextLayer {
     if (session.shape) {
       el.contentEditable = "false";
       editable = document.createElement("div");
-      editable.className = "co-text-body";
+      editable.className = "komu-text-body";
       editable.contentEditable = "true";
       editable.spellcheck = false;
       editable.innerHTML = seedHtml;
@@ -1511,12 +1511,12 @@ export class TextLayer {
     editable.addEventListener("blur", (e) => {
       // Focus moving into the toolbar / a popover (e.g. the size input) must not commit the box.
       const next = (e as FocusEvent).relatedTarget as HTMLElement | null;
-      if (next?.closest(".co-text-bar, .ctb-pop, co-color-picker")) return;
+      if (next?.closest(".komu-text-bar, .ctb-pop, komu-color-picker")) return;
       // Focus moving into a tool picker (shape menu / place bars) DOES commit the box, but must not
       // also revert the tool to select: the revert would synchronously hide the menu before the
       // picked item's click registers, so e.g. picking the arrow after placing a shape silently
       // dropped you on the select tool. Commit with keepTool so the menu stays and the pick lands.
-      const keepTool = !!next?.closest("co-shape-menu, co-sticky-bar, co-draw-bar");
+      const keepTool = !!next?.closest("komu-shape-menu, komu-sticky-bar, komu-draw-bar");
       this.commit(keepTool);
     });
 
@@ -1586,7 +1586,7 @@ export class TextLayer {
   };
   /** The rendered link under a screen point (per-line rects), or null. */
   private linkAtPoint(x: number, y: number): HTMLAnchorElement | null {
-    const links = this.root.querySelectorAll<HTMLAnchorElement>(".co-text a");
+    const links = this.root.querySelectorAll<HTMLAnchorElement>(".komu-text a");
     for (let i = 0; i < links.length; i++) {
       const a = links[i]!;
       const rects = a.getClientRects();
@@ -1661,7 +1661,7 @@ export class TextLayer {
       this.bar.editLink(link);
       return;
     }
-    const host = link.closest(".co-text") as HTMLElement | null;
+    const host = link.closest(".komu-text") as HTMLElement | null;
     const id = host?.dataset.id;
     if (!id) return;
     const href = link.getAttribute("href") ?? "";
@@ -1671,7 +1671,7 @@ export class TextLayer {
     if (match) this.bar.editLink(match);
   }
 
-  // ---- toolbar (the floating <co-text-bar> above the active editor) ----
+  // ---- toolbar (the floating <komu-text-bar> above the active editor) ----
 
   /** Apply a block-level change (font / size / alignment), re-lay-out + reposition + broadcast. */
   private setEditBlock(p: { fontFamily?: string; fontSize?: number; align?: TextAlign }): void {
@@ -1980,7 +1980,7 @@ export class TextLayer {
   private refreshSelectionChrome(): void {
     for (const [id, el] of this.els) {
       const local = this.selected.has(id);
-      el.classList.toggle("selected", local); // local ring via the .co-text.selected CSS rule
+      el.classList.toggle("selected", local); // local ring via the .komu-text.selected CSS rule
       if (local) {
         el.style.boxShadow = "";
         el.style.borderRadius = "";
@@ -2576,10 +2576,10 @@ export class TextLayer {
   private ensureGroupEl(): HTMLDivElement {
     if (this.groupEl) return this.groupEl;
     const box = document.createElement("div");
-    box.className = "co-group-box";
+    box.className = "komu-group-box";
     for (const h of ["nw", "ne", "sw", "se", "w", "e", "n", "s"]) {
       const hd = document.createElement("div");
-      hd.className = `co-group-handle g-${h}`;
+      hd.className = `komu-group-handle g-${h}`;
       hd.addEventListener("pointerdown", (e) => this.beginGroupResize(e, h));
       box.appendChild(hd);
     }
@@ -2786,12 +2786,12 @@ export class TextLayer {
   private ensureResizeEl(): HTMLDivElement {
     if (this.resizeEl) return this.resizeEl;
     const box = document.createElement("div");
-    box.className = "co-text-resize";
+    box.className = "komu-text-resize";
     // Rotation zones just OUTSIDE each corner (appended first → under the resize handles, so the
     // corner itself still resizes while the area just beyond it rotates). Hover → rotate cursor.
     for (const c of ["nw", "ne", "sw", "se"] as const) {
       const rd = document.createElement("div");
-      rd.className = `co-text-rotate r-${c}`;
+      rd.className = `komu-text-rotate r-${c}`;
       rd.style.cursor = ROTATE_CURSORS[c]; // shared rotate cursor (same one strokes/stamps use)
       rd.addEventListener("pointerdown", (e) => this.beginRotate(e));
       box.appendChild(rd);
@@ -2799,7 +2799,7 @@ export class TextLayer {
     // n/s handles only matter for shapes (free height); they're hidden for text/sticky (auto-height).
     for (const h of ["nw", "ne", "sw", "se", "w", "e", "n", "s"]) {
       const hd = document.createElement("div");
-      hd.className = `co-text-handle h-${h}`;
+      hd.className = `komu-text-handle h-${h}`;
       hd.addEventListener("pointerdown", (e) => this.beginResize(e, h));
       box.appendChild(hd);
     }
@@ -2832,9 +2832,9 @@ export class TextLayer {
       box.style.top = `${g.y * cam.scale + cam.y}px`;
       box.style.width = `${(g.width ?? 0) * cam.scale}px`;
       box.style.height = `${(g.height ?? 0) * cam.scale}px`;
-      box.classList.toggle("co-text-resize-shape", true); // free-aspect 8-handle chrome + rotate
-      box.classList.toggle("co-text-resize-stamp", false);
-      box.classList.toggle("co-text-resize-stroke", false);
+      box.classList.toggle("komu-text-resize-shape", true); // free-aspect 8-handle chrome + rotate
+      box.classList.toggle("komu-text-resize-stamp", false);
+      box.classList.toggle("komu-text-resize-stroke", false);
       this.applyRotation(box, g.rotation);
     } else if (el) {
       const box = this.ensureResizeEl();
@@ -2845,10 +2845,10 @@ export class TextLayer {
       box.style.width = `${el.offsetWidth}px`;
       box.style.height = `${el.offsetHeight}px`;
       // A shape has free width×height → show the n/s (vertical) handles; text/sticky don't.
-      box.classList.toggle("co-text-resize-shape", el.classList.contains("shape"));
+      box.classList.toggle("komu-text-resize-shape", el.classList.contains("shape"));
       // A stamp resizes uniformly (square) → corner handles only (hide the w/e side handles too).
-      box.classList.toggle("co-text-resize-stamp", obj?.type === "stamp");
-      box.classList.toggle("co-text-resize-stroke", false);
+      box.classList.toggle("komu-text-resize-stamp", obj?.type === "stamp");
+      box.classList.toggle("komu-text-resize-stroke", false);
       const rotatable = obj?.type === "text" || obj?.type === "stamp";
       this.applyRotation(box, rotatable ? this.effectiveGeom(id, obj).rotation : 0);
     }
@@ -2898,7 +2898,7 @@ export class TextLayer {
     if (this.edit?.id) ids.delete(this.edit.id); // not while editing the box's text
     if (!this.dotsEl) {
       this.dotsEl = document.createElement("div");
-      this.dotsEl.className = "co-connector-dots";
+      this.dotsEl.className = "komu-connector-dots";
       this.root.appendChild(this.dotsEl);
     }
     if (!ids.size) {
@@ -2927,7 +2927,7 @@ export class TextLayer {
       for (const side of SIDES) {
         if (locked && side !== locked) continue;
         const dot = document.createElement("div");
-        dot.className = locked ? "co-connector-dot is-snapped" : "co-connector-dot";
+        dot.className = locked ? "komu-connector-dot is-snapped" : "komu-connector-dot";
         dot.style.left = `${at[side][0]}px`;
         dot.style.top = `${at[side][1]}px`;
         dots.push(dot);
@@ -3783,7 +3783,7 @@ export class TextLayer {
       let el = this.remoteEdits.get(cid);
       if (!el) {
         el = document.createElement("div");
-        el.className = "co-text co-text-remote";
+        el.className = "komu-text komu-text-remote";
         this.root.appendChild(el);
         this.remoteEdits.set(cid, el);
       }

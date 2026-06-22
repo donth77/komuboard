@@ -1,7 +1,7 @@
 /**
- * <co-avatar-presence-row> — presence avatar stack as a standards-based Web Component.
+ * <komu-avatar-presence-row> — presence avatar stack as a standards-based Web Component.
  *
- * Like <co-dialog>, this is deliberately LIGHT DOM: it reuses Komuboard's global
+ * Like <komu-dialog>, this is deliberately LIGHT DOM: it reuses Komuboard's global
  * design system (the `.avatar-presence-row` / `.avatar` rules in styles.css, the
  * CSS tokens, and the global prefers-reduced-motion reset) instead of duplicating
  * styles behind a shadow boundary — class selectors don't pierce Shadow DOM.
@@ -283,11 +283,11 @@ export class CoAvatarPresenceRow extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-avatar-presence-row"))
-  customElements.define("co-avatar-presence-row", CoAvatarPresenceRow);
+if (!customElements.get("komu-avatar-presence-row"))
+  customElements.define("komu-avatar-presence-row", CoAvatarPresenceRow);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-avatar-presence-row": CoAvatarPresenceRow;
+    "komu-avatar-presence-row": CoAvatarPresenceRow;
   }
 }

@@ -1,6 +1,6 @@
-// <co-drawer> — slide-out menu drawer + scrim (light-DOM Web Component).
+// <komu-drawer> — slide-out menu drawer + scrim (light-DOM Web Component).
 //
-// Opened by the hamburger in <co-topbar> (host sets `open = true`); it closes
+// Opened by the hamburger in <komu-topbar> (host sets `open = true`); it closes
 // itself when the scrim is clicked. On mobile it hosts the settings controls
 // (grid style + theme switch) — the gear/Settings dialog is hidden on mobile.
 // The controls are shared with the desktop dialog (settings-controls.ts) and
@@ -71,10 +71,10 @@ export class CoDrawer extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-drawer")) customElements.define("co-drawer", CoDrawer);
+if (!customElements.get("komu-drawer")) customElements.define("komu-drawer", CoDrawer);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-drawer": CoDrawer;
+    "komu-drawer": CoDrawer;
   }
 }

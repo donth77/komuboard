@@ -1,4 +1,4 @@
-// <co-emoji-picker> — the FigJam-style emoji picker opened from the stamp wheel's "+". Category tabs +
+// <komu-emoji-picker> — the FigJam-style emoji picker opened from the stamp wheel's "+". Category tabs +
 // search + a lazy Noto-SVG grid (served from /emoji/<codepoint>.svg). Picking emits `emoji-pick`
 // (detail.cp = codepoint) → main.ts → canvas.setStamp("emoji:<cp>") + recents. Light DOM.
 import GROUPS from "./emoji-data.json";
@@ -19,7 +19,7 @@ export class CoEmojiPicker extends HTMLElement {
   #active = 0;
 
   connectedCallback(): void {
-    this.classList.add("co-emoji-picker");
+    this.classList.add("komu-emoji-picker");
     if (this.#wired) return;
     this.#wired = true;
     const tabs = groups
@@ -75,10 +75,10 @@ export class CoEmojiPicker extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-emoji-picker")) customElements.define("co-emoji-picker", CoEmojiPicker);
+if (!customElements.get("komu-emoji-picker")) customElements.define("komu-emoji-picker", CoEmojiPicker);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-emoji-picker": CoEmojiPicker;
+    "komu-emoji-picker": CoEmojiPicker;
   }
 }

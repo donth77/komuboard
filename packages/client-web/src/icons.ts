@@ -1,5 +1,5 @@
 // Lucide-style inline SVG icons, shared across the chrome (main shell +
-// <co-*> components). Kept framework-free: `icon(name)` returns an SVG string
+// <komu-*> components). Kept framework-free: `icon(name)` returns an SVG string
 // that inherits color via `currentColor`, so it themes with the surrounding CSS.
 
 export const ICONS: Record<string, string> = {

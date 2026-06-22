@@ -1,5 +1,5 @@
 /**
- * <co-dialog> — a reusable modal dialog as a standards-based Web Component
+ * <komu-dialog> — a reusable modal dialog as a standards-based Web Component
  * (custom element), wrapping the native <dialog> for free accessibility
  * (focus-trap, Esc, inert background) and fully custom styling/animation
  * (see the `.dialog` rules in styles.css).
@@ -11,7 +11,7 @@
  * properties pierce the boundary, but class selectors do not).
  *
  * Usage (declarative):
- *   <co-dialog title="…"> …body… <button slot="footer" data-dialog-close>Close</button> </co-dialog>
+ *   <komu-dialog title="…"> …body… <button slot="footer" data-dialog-close>Close</button> </komu-dialog>
  * Usage (programmatic):  createDialog({ title, body, footer, width, onClose })
  * Any element with [data-dialog-close] closes the dialog.
  */
@@ -97,7 +97,7 @@ export class CoDialog extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-dialog")) customElements.define("co-dialog", CoDialog);
+if (!customElements.get("komu-dialog")) customElements.define("komu-dialog", CoDialog);
 
 export interface DialogOptions {
   title: string;
@@ -108,9 +108,9 @@ export interface DialogOptions {
   onClose?: () => void;
 }
 
-/** Build a <co-dialog> programmatically and attach it to the document. */
+/** Build a <komu-dialog> programmatically and attach it to the document. */
 export function createDialog(opts: DialogOptions): CoDialog {
-  const el = document.createElement("co-dialog") as CoDialog;
+  const el = document.createElement("komu-dialog") as CoDialog;
   el.setAttribute("title", opts.title);
   if (opts.width) el.setAttribute("width", String(opts.width));
   appendContent(el, opts.body, null);

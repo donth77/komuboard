@@ -180,7 +180,7 @@ export class TextBar {
 
   constructor(private readonly host: TextBarHost) {
     const el = document.createElement("div");
-    el.className = "co-text-bar";
+    el.className = "komu-text-bar";
     el.style.display = "none";
     el.innerHTML =
       // Shape-only leading controls: shape-select + fill colour (shown only in shape mode).
@@ -456,14 +456,14 @@ export class TextBar {
     this.pop = pop;
   }
 
-  /** The shared <co-color-picker> for an arbitrary colour (reuses the draw tool's picker). */
+  /** The shared <komu-color-picker> for an arbitrary colour (reuses the draw tool's picker). */
   private openPicker(kind: ColorKind, anchor: HTMLElement): void {
     const sel = window.getSelection();
     this.pickerRange = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null; // save before focus moves
     this.pickerKind = kind;
     this.closePop();
     if (!this.picker) {
-      this.picker = document.createElement("co-color-picker") as CoColorPicker;
+      this.picker = document.createElement("komu-color-picker") as CoColorPicker;
       document.body.appendChild(this.picker);
       this.picker.addEventListener("color-change", (e) => {
         const color = (e as CustomEvent<{ color: string }>).detail.color;
@@ -615,10 +615,10 @@ export class TextBar {
     }
     document.body.appendChild(pop);
     const pw = pop.offsetWidth || 300;
-    // Anchor the field above the node's box. When editing, climb from the editor to its `.co-text`
+    // Anchor the field above the node's box. When editing, climb from the editor to its `.komu-text`
     // box (for shapes the editor is the inner body, so use the box rect — same placement a text node
     // gets). In selection mode there's no editor, so fall back to the toolbar's pre-hide position.
-    const editBox = this.editor?.closest<HTMLElement>(".co-text") ?? null;
+    const editBox = this.editor?.closest<HTMLElement>(".komu-text") ?? null;
     const er = editBox?.getBoundingClientRect();
     const ref = er && er.width ? er : barRect.width ? barRect : anchorRect;
     pop.style.left = `${Math.max(8, Math.min(ref.left + ref.width / 2 - pw / 2, window.innerWidth - pw - 8))}px`;
@@ -693,13 +693,13 @@ export class TextBar {
   }
   /** Paint a persistent highlight over the text being linked while the URL input is focused. The
    *  native selection can't be used — once focus moves to the input the editor has no selection to
-   *  render — so we use the CSS Custom Highlight API (`::highlight(co-link-target)`), which paints a
+   *  render — so we use the CSS Custom Highlight API (`::highlight(komu-link-target)`), which paints a
    *  range regardless of focus and without touching the DOM. Pass null to clear it. */
   private setLinkHighlight(range: Range | null): void {
     const reg = (CSS as unknown as { highlights?: Map<string, unknown> }).highlights;
     if (!reg || typeof Highlight === "undefined") return;
-    if (range && !range.collapsed) reg.set("co-link-target", new Highlight(range.cloneRange()));
-    else reg.delete("co-link-target");
+    if (range && !range.collapsed) reg.set("komu-link-target", new Highlight(range.cloneRange()));
+    else reg.delete("komu-link-target");
   }
 
   /** Font menu — a checkmark on the active family. */

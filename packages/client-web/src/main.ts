@@ -11,6 +11,7 @@ import {
   randomRoomId,
   roomIdFromUrl,
   setUserProfile,
+  USER_COLORS,
   usersMap,
   type PresenceState,
 } from "@komuboard/shared";
@@ -79,7 +80,7 @@ const applyGrid = (g: GridMode): void => {
   document.getElementById("board")?.setAttribute("data-grid", g);
 };
 
-// Icons now live in ./icons; the tool list lives inside <co-tool-dock>.
+// Icons now live in ./icons; the tool list lives inside <komu-tool-dock>.
 
 // --------------------------------------------------------------------------
 // Realtime: one Yjs document per room, synced via Y-PartyServer.
@@ -140,28 +141,28 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("#app root missing");
 
 app.innerHTML = `
-  <co-topbar id="topbar" room="${room}"></co-topbar>
+  <komu-topbar id="topbar" room="${room}"></komu-topbar>
 
   <main class="canvas" id="board" data-grid="${gridMode}"></main>
 
   <div class="zoom-pill" id="zoom-pill" aria-hidden="true">100%</div>
 
-  <co-tool-dock></co-tool-dock>
+  <komu-tool-dock></komu-tool-dock>
 
   <div class="sheet-wrap">
-    <co-draw-bar></co-draw-bar>
-    <co-sticky-bar class="hidden"></co-sticky-bar>
-    <co-shape-menu class="hidden"></co-shape-menu>
-    <co-stamp-wheel class="hidden"></co-stamp-wheel>
+    <komu-draw-bar></komu-draw-bar>
+    <komu-sticky-bar class="hidden"></komu-sticky-bar>
+    <komu-shape-menu class="hidden"></komu-shape-menu>
+    <komu-stamp-wheel class="hidden"></komu-stamp-wheel>
   </div>
 
-  <co-emoji-picker class="hidden"></co-emoji-picker>
+  <komu-emoji-picker class="hidden"></komu-emoji-picker>
 
-  <co-zoombar></co-zoombar>
+  <komu-zoombar></komu-zoombar>
 
   <button class="help-btn" id="help-btn" type="button" data-tip="Help" aria-label="Help">${icon("help")}</button>
 
-  <co-drawer room="${room}"></co-drawer>
+  <komu-drawer room="${room}"></komu-drawer>
 `;
 
 // --------------------------------------------------------------------------
@@ -206,22 +207,22 @@ publishProfile();
 usersMap(ydoc).observe(() => renderPresenceRow());
 
 // --------------------------------------------------------------------------
-// Tool dock + draw bar (<co-tool-dock>, <co-draw-bar>).
+// Tool dock + draw bar (<komu-tool-dock>, <komu-draw-bar>).
 // --------------------------------------------------------------------------
-const dock = document.querySelector("co-tool-dock");
-const drawBarEl = document.querySelector("co-draw-bar");
+const dock = document.querySelector("komu-tool-dock");
+const drawBarEl = document.querySelector("komu-draw-bar");
 if (drawBarEl) {
   drawBarEl.swatches = SWATCHES;
   drawBarEl.color = penColor;
 }
-const stickyBarEl = document.querySelector("co-sticky-bar");
+const stickyBarEl = document.querySelector("komu-sticky-bar");
 if (stickyBarEl) {
   stickyBarEl.color = DEFAULT_STICKY_COLOR;
   canvas.setStickyColor(DEFAULT_STICKY_COLOR);
 }
-const shapeMenuEl = document.querySelector("co-shape-menu");
-const stampWheelEl = document.querySelector("co-stamp-wheel");
-const emojiPickerEl = document.querySelector("co-emoji-picker");
+const shapeMenuEl = document.querySelector("komu-shape-menu");
+const stampWheelEl = document.querySelector("komu-stamp-wheel");
+const emojiPickerEl = document.querySelector("komu-emoji-picker");
 // The "Shapes and lines" menu has two groups: shape boxes (placed) and connectors (drawn as arrows).
 const DRAWABLE_SHAPES = new Set(["rectangle", "ellipse", "rhombus", "triangle"]);
 const CONNECTOR_KINDS = new Set(["line", "arrow", "elbow", "block"]);
@@ -296,7 +297,7 @@ dock?.addEventListener("tool-change", (e) => {
 });
 applyTool(currentTool); // sync initial state: select is default → draw bar hidden
 
-// <co-draw-bar> emits `pen-change` (bubbling) → handle once on #app.
+// <komu-draw-bar> emits `pen-change` (bubbling) → handle once on #app.
 app?.addEventListener("pen-change", (e) => {
   const d = (e as CustomEvent<PenChange>).detail;
   if (d.color !== undefined) canvas.setColor(d.color);
@@ -304,12 +305,12 @@ app?.addEventListener("pen-change", (e) => {
   if (d.style !== undefined) canvas.setStyle(d.style);
 });
 
-// <co-sticky-bar> emits `sticky-color` (bubbling) → set the colour for the next/edited sticky note.
+// <komu-sticky-bar> emits `sticky-color` (bubbling) → set the colour for the next/edited sticky note.
 app?.addEventListener("sticky-color", (e) => {
   canvas.setStickyColor((e as CustomEvent<{ color: string }>).detail.color);
 });
 
-// <co-shape-menu> emits `shape-change` → either set the shape box drawn next, or switch the tool
+// <komu-shape-menu> emits `shape-change` → either set the shape box drawn next, or switch the tool
 // into connector-draw mode (line/arrow/elbow/block draw on drag, snapping to shape sides).
 app?.addEventListener("shape-change", (e) => {
   const kind = (e as CustomEvent<{ kind: string }>).detail.kind;
@@ -319,7 +320,7 @@ app?.addEventListener("shape-change", (e) => {
 });
 
 // --------------------------------------------------------------------------
-// Stamp tool (<co-stamp-wheel> radial picker + <co-emoji-picker> popover).
+// Stamp tool (<komu-stamp-wheel> radial picker + <komu-emoji-picker> popover).
 // --------------------------------------------------------------------------
 const wheel = stampWheelEl as import("./stamp-wheel").CoStampWheel | null;
 wheel?.setProfile({ name: identity.name, color: identity.color, photo: identity.photo });
@@ -352,7 +353,7 @@ document.addEventListener("pointerdown", (e) => {
   emojiPickerEl?.classList.add("hidden");
 });
 
-// Shortcuts overlay (reusable <co-dialog>).
+// Shortcuts overlay (reusable <komu-dialog>).
 const shortcutsDialog = createDialog({
   title: "Keyboard shortcuts",
   width: 340,
@@ -480,7 +481,7 @@ window.addEventListener("keyup", (e) => {
   }
 });
 
-// Pen colour / width / style edits are handled inside <co-draw-bar>,
+// Pen colour / width / style edits are handled inside <komu-draw-bar>,
 // surfaced via the "pen-change" listener above.
 
 // --------------------------------------------------------------------------
@@ -489,8 +490,8 @@ window.addEventListener("keyup", (e) => {
 // light DOM, one delegated click handler + syncSettings() keep every instance in
 // step (see settings-controls.ts). Both prefs are per-viewer, persisted locally.
 // --------------------------------------------------------------------------
-const topbar = document.querySelector("co-topbar");
-const drawer = document.querySelector("co-drawer");
+const topbar = document.querySelector("komu-topbar");
+const drawer = document.querySelector("komu-drawer");
 if (drawer) drawer.profile = { name: identity.name, color: identity.color, photo: identity.photo };
 
 const syncSettings = (): void => syncSettingsControls(theme, gridMode);
@@ -588,7 +589,7 @@ drawer?.addEventListener("help", () => shortcutsDialog.open());
 document.addEventListener("click", (e) => {
   if (!(e.target as HTMLElement | null)?.closest('[data-act="profile"]')) return;
   document
-    .querySelector("co-avatar-presence-row")
+    .querySelector("komu-avatar-presence-row")
     ?.dispatchEvent(new CustomEvent("rename", { bubbles: true }));
   closeAppMenu();
 });
@@ -601,7 +602,7 @@ store.subscribe((state) => {
 });
 
 // Presence avatar row — avatars from awareness; click your own to rename.
-const presenceRowEl = document.querySelector("co-avatar-presence-row");
+const presenceRowEl = document.querySelector("komu-avatar-presence-row");
 if (presenceRowEl) presenceRowEl.max = 7; // show up to 7 avatars, then a clickable "+N" overflow
 let lastPresenceKey = "";
 function renderPresenceRow(): void {
@@ -638,13 +639,13 @@ function renderPresenceRow(): void {
     .join("/");
   if (key === lastPresenceKey) return;
   lastPresenceKey = key;
-  presenceRowEl.people = list; // the <co-avatar-presence-row> element renders + animates
+  presenceRowEl.people = list; // the <komu-avatar-presence-row> element renders + animates
 }
 provider.awareness.on("change", renderPresenceRow);
 renderPresenceRow();
 // ---- "Your profile" dialog (name + colour + avatar photo) — UI lives in ./ui/profile ----
 const profile = createProfileDialog({
-  swatches: SWATCHES,
+  swatches: [...USER_COLORS], // the 12-colour identity palette (matches auto-assigned avatar colours)
   initial: () => ({ name: identity.name, color: identity.color, photo: identity.photo }),
   // Empty name → keep the existing one (we own the identity, so the fallback lives here).
   onSave: (p) => {
@@ -673,8 +674,8 @@ presenceRowEl?.addEventListener("rename", () => profile.open());
 // remaining peers remove our avatar immediately instead of waiting for a timeout.
 window.addEventListener("pagehide", () => provider.awareness.setLocalState(null));
 
-// Zoom + fullscreen widget (<co-zoombar>).
-const zoombar = document.querySelector("co-zoombar");
+// Zoom + fullscreen widget (<komu-zoombar>).
+const zoombar = document.querySelector("komu-zoombar");
 const zoomPill = document.getElementById("zoom-pill");
 let zoomPillTimer = 0;
 canvas.setZoomListener((pct) => {
@@ -730,4 +731,4 @@ provider.awareness.on("change", () => {
 window.setInterval(updateConn, 1000);
 updateConn();
 
-// Connection + presence readouts now live inside <co-topbar> (setStatus / setSynced).
+// Connection + presence readouts now live inside <komu-topbar> (setStatus / setSynced).

@@ -1,4 +1,4 @@
-// <co-color-picker> — a custom colour picker (light-DOM Web Component).
+// <komu-color-picker> — a custom colour picker (light-DOM Web Component).
 //
 // Saturation/value square + hue slider + hex field + (where supported) an
 // eyedropper. Driven by the `value` property (a hex string); reports live edits
@@ -220,10 +220,10 @@ export class CoColorPicker extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-color-picker")) customElements.define("co-color-picker", CoColorPicker);
+if (!customElements.get("komu-color-picker")) customElements.define("komu-color-picker", CoColorPicker);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-color-picker": CoColorPicker;
+    "komu-color-picker": CoColorPicker;
   }
 }

@@ -40,7 +40,7 @@ This is consistent with the project's stated stack posture — **"React optional
 
 A survey of the client confirms the architecture that shapes the recommendation:
 
-- **Vanilla Web Components (custom elements), light DOM, no framework.** `<co-tool-dock>`, `<co-draw-bar>`, `<co-zoombar>`, `<co-avatar-presence-row>`, `<co-color-picker>`, `<co-dialog>`. The 2D board is **Konva.js**; VR is **A-Frame**. Light DOM (no Shadow DOM) per [ADR-0005](./adr/0005-ui-chrome-web-components.md) — components share the global stylesheet and a single ARIA tree.
+- **Vanilla Web Components (custom elements), light DOM, no framework.** `<komu-tool-dock>`, `<komu-draw-bar>`, `<komu-zoombar>`, `<komu-avatar-presence-row>`, `<komu-color-picker>`, `<komu-dialog>`. The 2D board is **Konva.js**; VR is **A-Frame**. Light DOM (no Shadow DOM) per [ADR-0005](./adr/0005-ui-chrome-web-components.md) — components share the global stylesheet and a single ARIA tree.
 - **Text reaches the screen three ways:**
   1. **Template literals + `innerHTML`** built once in `connectedCallback` (e.g. `tool-dock.ts` `TOOLS.map(...).join("")`; `draw-bar.ts` brush bar + popovers; `main.ts` shell).
   2. **`textContent`** for dynamic values (`main.ts` status / sync / zoom `${pct}%`; `draw-bar.ts` stroke width; `avatar-presence-row.ts` initials).

@@ -165,7 +165,7 @@ export class BoardCanvas {
   /** The stamp the next canvas tap places (`mark:<name>` | `emoji:<codepoint>`), or null. */
   private currentStamp: string | null = null;
   /** Random ±15° tilt previewed by the ghost — placed stamps land at exactly this angle. The stamp
-   *  preview itself is a DOM `.co-stamp` rendered by the text-layer (so it stacks above objects). */
+   *  preview itself is a DOM `.komu-stamp` rendered by the text-layer (so it stacks above objects). */
   private stampGhostRot = 0;
   /** Local copy/paste buffer (in-app, not the system clipboard): a snapshot of the objects copied
    *  with ⌘/Ctrl+C; ⌘/Ctrl+V clones them with a cascading offset. */
@@ -873,7 +873,7 @@ export class BoardCanvas {
     requestAnimationFrame(tick);
   }
 
-  /** Track the armed stamp's preview under the cursor. The ghost is a DOM `.co-stamp` owned by the
+  /** Track the armed stamp's preview under the cursor. The ghost is a DOM `.komu-stamp` owned by the
    *  text-layer, so it z-stacks ABOVE committed objects — exactly where the placed stamp will land
    *  (the old Konva ghost drew on the overlay, beneath the DOM layer, so it previewed under stickies). */
   private updateStampGhost(p: { x: number; y: number }): void {
@@ -1085,10 +1085,10 @@ export class BoardCanvas {
   private ensureConnectorHandles(): HTMLDivElement {
     if (this.connectorHandlesEl) return this.connectorHandlesEl;
     const wrap = document.createElement("div");
-    wrap.className = "co-connector-handles";
+    wrap.className = "komu-connector-handles";
     for (const which of ["from", "to"] as const) {
       const h = document.createElement("div");
-      h.className = "co-connector-handle";
+      h.className = "komu-connector-handle";
       h.dataset.which = which;
       h.addEventListener("pointerdown", (e) => {
         const id = this.soleSelectedConnector();
@@ -1684,7 +1684,7 @@ export class BoardCanvas {
     if (!corner) return null;
     const group = this.textLayer.selectedCount() >= 2;
     const handle = document.querySelector<HTMLElement>(
-      group ? `.co-group-handle.g-${corner}` : `.co-text-handle.h-${corner}`,
+      group ? `.komu-group-handle.g-${corner}` : `.komu-text-handle.h-${corner}`,
     );
     if (!handle) return null;
     const hr = handle.getBoundingClientRect();
@@ -2094,7 +2094,7 @@ export class BoardCanvas {
   private ensurePeerTip(): HTMLElement {
     if (this.peerTip) return this.peerTip;
     const el = document.createElement("div");
-    el.className = "co-peer-tip";
+    el.className = "komu-peer-tip";
     el.style.cssText =
       "position:absolute;display:none;align-items:center;gap:7px;transform:translate(-50%,calc(-100% - 9px));" +
       "background:#fff;color:#1f2024;padding:5px 11px 5px 6px;border-radius:10px;border:1px solid rgba(16,17,22,0.08);" +
@@ -2271,7 +2271,7 @@ export class BoardCanvas {
     // on desktop) so they don't fight node selection — except inside an active text editor, where
     // the native edit menu (paste etc.) is still wanted.
     this.stage.container().addEventListener("contextmenu", (e) => {
-      if (!(e.target as HTMLElement).closest?.(".co-text-editor")) e.preventDefault();
+      if (!(e.target as HTMLElement).closest?.(".komu-text-editor")) e.preventDefault();
     });
     // On touch, a tap normally generates emulated mouse events (mousedown/up/click) afterwards.
     // With the text/sticky tools that emulated mousedown lands on the canvas and blurs the editor

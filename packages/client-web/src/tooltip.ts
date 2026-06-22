@@ -6,7 +6,7 @@
  * hovered element belongs to. The previous approach (a ::after pseudo on each [data-tip])
  * was trapped inside its host's stacking context — e.g. a top-bar pill could be painted
  * behind a side panel. A body-level element at max z-index sidesteps that entirely (the same
- * reason the colour-picker popover, appended to <body>, always wins). See styles.css `.co-tip`.
+ * reason the colour-picker popover, appended to <body>, always wins). See styles.css `.komu-tip`.
  *
  * Any element carrying [data-tip] opts in. The pill prefers to sit above the element and
  * auto-flips below when the element hugs the top edge; it's clamped to the viewport so it
@@ -25,15 +25,17 @@ let anchor: HTMLElement | null = null;
 function pill(): HTMLDivElement {
   if (tip) return tip;
   tip = document.createElement("div");
-  tip.className = "co-tip";
+  tip.className = "komu-tip";
   tip.setAttribute("role", "tooltip");
   document.body.appendChild(tip);
   return tip;
 }
 
 function suppressed(el: HTMLElement): boolean {
-  // A focused editing surface (modal dialog) or an explicit opt-out keeps the pill hidden.
-  return !!el.closest(".dialog") || el.classList.contains("tip-off");
+  if (el.classList.contains("tip-off")) return true; // explicit opt-out
+  // A focused editing surface (modal dialog) keeps the pill hidden — EXCEPT where a region opts back
+  // in via [data-tip-in-dialog] (e.g. the profile colour swatches, where the name is the point).
+  return !!el.closest(".dialog") && !el.closest("[data-tip-in-dialog]");
 }
 
 function place(): void {

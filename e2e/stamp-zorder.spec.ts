@@ -15,7 +15,7 @@ import {
  * Stamp z-order coverage (ADR-0009): a stamp placed AFTER a sticky + a shape must stack ON TOP
  * (FigJam placement order), and so must its translucent placement PREVIEW. The preview regressed
  * because the ghost was drawn on the Konva overlay (beneath the DOM object layer) while the committed
- * stamp is a DOM `.co-stamp` (above) — so the preview appeared under the sticky, then popped on top.
+ * stamp is a DOM `.komu-stamp` (above) — so the preview appeared under the sticky, then popped on top.
  */
 
 /** A sticky at (0,0) 180² + a rectangle overlapping it — the scene both placement + preview test. */
@@ -40,7 +40,7 @@ test("stamp placed last stacks on top of an overlapping sticky + shape (DOM orde
   await injectSticky(a.page, { id: "sticky1", x: 0, y: 0, size: 180 });
   await injectShape(a.page, { id: "shape1", x: 40, y: 40, width: 160, height: 120, bg: "#a5d8ff" });
   await injectStamp(a.page, { id: "stamp1", x: 90, y: 90, size: 64 }); // centre over both, placed last
-  await expect.poll(() => a.page.locator(".co-stamp").count()).toBe(1);
+  await expect.poll(() => a.page.locator(".komu-stamp").count()).toBe(1);
 
   const idx = await a.page.evaluate(() => {
     const layer = document.querySelector(".text-layer")!;
@@ -77,8 +77,8 @@ test("REAL stamp tool: tap on an overlapping sticky+shape places the stamp on to
   await a.page.mouse.up();
 
   // A stamp object is created and lands LAST in orderArray. Count only COMMITTED stamps (they carry a
-  // data-id) — the armed tool also keeps a `.co-stamp.co-text-ghost` preview onscreen.
-  await expect.poll(() => a.page.locator(".co-stamp[data-id]").count()).toBe(1);
+  // data-id) — the armed tool also keeps a `.komu-stamp.komu-text-ghost` preview onscreen.
+  await expect.poll(() => a.page.locator(".komu-stamp[data-id]").count()).toBe(1);
   const order = await a.page.evaluate(() =>
     (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray(),
   );
@@ -90,7 +90,7 @@ test("REAL stamp tool: tap on an overlapping sticky+shape places the stamp on to
     const layer = document.querySelector(".text-layer")!;
     const objKids = [...layer.children].filter((e) => (e as HTMLElement).dataset?.id);
     const last = objKids[objKids.length - 1] as HTMLElement;
-    return last?.dataset.id === id && last.classList.contains("co-stamp");
+    return last?.dataset.id === id && last.classList.contains("komu-stamp");
   }, stampId);
   expect(lastIsStamp).toBe(true);
 
@@ -116,7 +116,7 @@ test("REAL stamp tool: the PREVIEW ghost renders above the sticky + shape (not j
   await a.page.mouse.move(at.x - 25, at.y - 25);
   await a.page.mouse.move(at.x, at.y, { steps: 4 });
 
-  await expect.poll(() => a.page.locator(".co-stamp.co-text-ghost").count()).toBe(1);
+  await expect.poll(() => a.page.locator(".komu-stamp.komu-text-ghost").count()).toBe(1);
   expect(await stampTypeCount(a.page)).toBe(0); // it's only a preview — nothing committed
 
   // The ghost is the LAST child of the text-layer → painted above the sticky + shape (the bug was it
@@ -124,7 +124,7 @@ test("REAL stamp tool: the PREVIEW ghost renders above the sticky + shape (not j
   const ghostIsLast = await a.page.evaluate(() => {
     const layer = document.querySelector(".text-layer")!;
     const last = layer.children[layer.children.length - 1] as HTMLElement;
-    return last?.classList.contains("co-stamp") && last.classList.contains("co-text-ghost");
+    return last?.classList.contains("komu-stamp") && last.classList.contains("komu-text-ghost");
   });
   expect(ghostIsLast).toBe(true);
 

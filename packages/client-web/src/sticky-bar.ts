@@ -1,7 +1,7 @@
-// <co-sticky-bar> — the sticky-note colour palette: a horizontal pill of circular swatches, shown
+// <komu-sticky-bar> — the sticky-note colour palette: a horizontal pill of circular swatches, shown
 // while the Sticky tool is active. Picking a swatch sets the colour of the next dropped note (and
 // recolours the one being edited). Emits `sticky-color` (bubbling → handled on #app in main.ts →
-// canvas). Light DOM; reuses the global `.sw` swatch styling. Sibling pattern to <co-draw-bar>.
+// canvas). Light DOM; reuses the global `.sw` swatch styling. Sibling pattern to <komu-draw-bar>.
 
 import { STICKY_COLORS, STICKY_COLOR_NAMES } from "@komuboard/shared";
 import { ensureSheetHandle, wireSheetHandle } from "./mobile-sheet";
@@ -50,10 +50,10 @@ export class CoStickyBar extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-sticky-bar")) customElements.define("co-sticky-bar", CoStickyBar);
+if (!customElements.get("komu-sticky-bar")) customElements.define("komu-sticky-bar", CoStickyBar);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-sticky-bar": CoStickyBar;
+    "komu-sticky-bar": CoStickyBar;
   }
 }

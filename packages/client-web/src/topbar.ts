@@ -1,4 +1,4 @@
-// <co-topbar> — the top app bar (light-DOM Web Component).
+// <komu-topbar> — the top app bar (light-DOM Web Component).
 //
 // Presentational shell: the hamburger menu button, the room pill (with the live
 // connection dot), the dev connection readout, and the presence row. App state
@@ -31,7 +31,7 @@ export class CoTopbar extends HTMLElement {
       '<div class="spacer"></div>' +
       '<div class="devstatus" title="connection status">WS <b data-testid="status">connecting…</b> · <b data-testid="synced">syncing…</b></div>' +
       // per-avatar tooltips live on the avatars themselves (a host title would double up)
-      '<co-avatar-presence-row id="presence-row" data-testid="presence-row"></co-avatar-presence-row>';
+      '<komu-avatar-presence-row id="presence-row" data-testid="presence-row"></komu-avatar-presence-row>';
 
     this.#dot = this.querySelector('[data-testid="dot"]');
     this.#status = this.querySelector('[data-testid="status"]');
@@ -65,10 +65,10 @@ export class CoTopbar extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-topbar")) customElements.define("co-topbar", CoTopbar);
+if (!customElements.get("komu-topbar")) customElements.define("komu-topbar", CoTopbar);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-topbar": CoTopbar;
+    "komu-topbar": CoTopbar;
   }
 }

@@ -10,7 +10,7 @@ import { connectPeer, uniqueRoom } from "./helpers";
  * AND its opacity fades up from 0; at rest it has neither (no running animation, opacity 1).
  */
 
-const PEER_AVATAR = "co-avatar-presence-row .avatar:not(.self):not(.more)";
+const PEER_AVATAR = "komu-avatar-presence-row .avatar:not(.self):not(.more)";
 
 /** Wait for more than `beforeCount` peer avatars, then watch them for ~700ms (covers the spring). */
 function sampleAvatars(

@@ -794,6 +794,23 @@ export const USER_COLORS: readonly string[] = [
   "#4f46e5",
 ];
 
+/** Friendly names for the identity palette (keyed by the exact USER_COLORS hex) — shown as the
+ *  avatar colour-swatch tooltips in the profile dialog. */
+export const USER_COLOR_NAMES: Readonly<Record<string, string>> = {
+  "#2563eb": "Blue",
+  "#db2777": "Pink",
+  "#16a34a": "Green",
+  "#f59e0b": "Amber",
+  "#7c3aed": "Violet",
+  "#0891b2": "Cyan",
+  "#dc2626": "Red",
+  "#0d9488": "Teal",
+  "#c026d3": "Fuchsia",
+  "#ea580c": "Orange",
+  "#65a30d": "Lime",
+  "#4f46e5": "Indigo",
+};
+
 export function pickUserColor(seed: number): string {
   const i = ((seed % USER_COLORS.length) + USER_COLORS.length) % USER_COLORS.length;
   return USER_COLORS[i] ?? "#2563eb";

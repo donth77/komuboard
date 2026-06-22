@@ -1,11 +1,12 @@
 // src/ui/profile.ts — the "Your profile" dialog (display name + colour + avatar photo).
 //
-// A self-contained UI module lifted out of main.ts: it owns the <co-dialog>, the draft state,
+// A self-contained UI module lifted out of main.ts: it owns the <komu-dialog>, the draft state,
 // the swatch grid, and the photo upload/crop. It reports a committed profile through the
 // `onSave` callback only — so all realtime / identity / persistence wiring stays in main.ts and
 // this module has no dependency on the Yjs provider. Light DOM; reuses the global
-// `.avatar-edit` / `.field` / `.swatches` styles + <co-dialog>.
+// `.avatar-edit` / `.field` / `.swatches` styles + <komu-dialog>.
 
+import { USER_COLOR_NAMES } from "@komuboard/shared";
 import { createDialog } from "../dialog";
 import { COLOR_NAMES } from "../draw-bar";
 import { initials, safePhotoUrl } from "../util";
@@ -54,7 +55,7 @@ export function createProfileDialog(opts: ProfileDialogOptions): { open: () => v
       '<button type="button" class="btn-link" id="profile-photo-clear">Remove</button>' +
       '<input type="file" id="profile-photo-input" accept="image/*" hidden /></div></div>' +
       '<label class="field"><span>Display name</span><input type="text" id="profile-name" maxlength="40" placeholder="Your name" /></label>' +
-      '<div class="field" id="profile-color-field"><span>Color</span><div class="swatches" id="profile-swatches"></div></div>',
+      '<div class="field" id="profile-color-field"><span>Color</span><div class="swatches" id="profile-swatches" data-tip-in-dialog></div></div>',
     footer:
       '<button type="button" class="btn-ghost" data-dialog-close>Cancel</button>' +
       '<button type="button" class="btn-primary" id="profile-save">Save</button>',
@@ -65,7 +66,8 @@ export function createProfileDialog(opts: ProfileDialogOptions): { open: () => v
   const dSwatches = document.getElementById("profile-swatches");
   const dPhotoInput = document.getElementById("profile-photo-input") as HTMLInputElement | null;
   const dPhotoClear = document.getElementById("profile-photo-clear");
-  // Avatar colours mirror the pen palette, minus white (a white avatar would be invisible).
+  // The selectable avatar colours are the identity palette (USER_COLORS, passed in). White is dropped
+  // defensively in case a palette ever includes it — a white avatar would be invisible.
   const palette = opts.swatches.filter((c) => c.toLowerCase() !== "#ffffff");
   let draft: ProfileDraft = opts.initial();
 
@@ -89,7 +91,7 @@ export function createProfileDialog(opts: ProfileDialogOptions): { open: () => v
     if (!dSwatches) return;
     dSwatches.innerHTML = palette
       .map((c) => {
-        const name = COLOR_NAMES[c.toUpperCase()] ?? c;
+        const name = USER_COLOR_NAMES[c] ?? COLOR_NAMES[c.toUpperCase()] ?? c;
         return `<button type="button" class="sw${c === draft.color ? " on" : ""}" data-color="${c}" data-tip="${name}" style="--sw:${c}" aria-label="${name}"></button>`;
       })
       .join("");
@@ -122,7 +124,7 @@ export function createProfileDialog(opts: ProfileDialogOptions): { open: () => v
     });
     dPhotoInput.value = "";
   });
-  // close is handled by <co-dialog>: header ✕, the Cancel [data-dialog-close], and backdrop click
+  // close is handled by <komu-dialog>: header ✕, the Cancel [data-dialog-close], and backdrop click
   document.getElementById("profile-save")?.addEventListener("click", () => {
     opts.onSave({ name: draft.name, color: draft.color, photo: draft.photo });
     dialog.close();

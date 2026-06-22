@@ -26,7 +26,7 @@ test("a peer's live stamp rotation streams in realtime", async ({ browser }) => 
   await a.page.keyboard.press("v");
   await a.page.mouse.click(c.x, c.y);
   await expect.poll(() => hasSelection(a.page)).toBe(true);
-  const zoneLoc = a.page.locator(".co-text-rotate.r-se");
+  const zoneLoc = a.page.locator(".komu-text-rotate.r-se");
   expect(await zoneLoc.count()).toBe(1); // a stamp has the same rotate zones as any box
   const z = (await zoneLoc.boundingBox())!;
   const gx = z.x + z.width / 2;

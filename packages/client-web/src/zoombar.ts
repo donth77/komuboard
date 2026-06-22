@@ -1,4 +1,4 @@
-// <co-zoombar> — the zoom + fullscreen widget (light-DOM Web Component).
+// <komu-zoombar> — the zoom + fullscreen widget (light-DOM Web Component).
 //
 // Buttons/typed-% emit a single `zoom` event ({ action, value? }); the host
 // pushes the live zoom level back in via the `percent` property (without
@@ -84,10 +84,10 @@ export class CoZoombar extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-zoombar")) customElements.define("co-zoombar", CoZoombar);
+if (!customElements.get("komu-zoombar")) customElements.define("komu-zoombar", CoZoombar);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-zoombar": CoZoombar;
+    "komu-zoombar": CoZoombar;
   }
 }

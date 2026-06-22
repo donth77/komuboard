@@ -1,8 +1,8 @@
-// <co-draw-bar> — the brush bar: a compact vertical floating column on desktop and a slide-up
+// <komu-draw-bar> — the brush bar: a compact vertical floating column on desktop and a slide-up
 // bottom sheet (with a pull-tab) on mobile. Pen/highlighter brushes + expandable popovers for
 // line style, colour and stroke width. Emits `pen-change` events (bubbling → handled on #app in
 // main.ts → canvas). Light DOM; reuses the global `.swatches`/`.seg`/range styles +
-// <co-color-picker>. See docs/adr/0005.
+// <komu-color-picker>. See docs/adr/0005.
 
 import { icon, iconFilled, lineWeightIcon } from "./icons";
 import type { StrokeStyle } from "@komuboard/shared";
@@ -247,7 +247,7 @@ export class CoDrawBar extends HTMLElement {
     // so it'd linger under the picker. The class rides along with the popover (gone on close).
     anchorPop.querySelector("[data-custom]")?.classList.add("tip-off");
     if (!this.#picker) {
-      this.#picker = document.createElement("co-color-picker") as CoColorPicker;
+      this.#picker = document.createElement("komu-color-picker") as CoColorPicker;
       document.body.appendChild(this.#picker);
       this.#picker.addEventListener("color-change", (e) => {
         this.#color = (e as CustomEvent<{ color: string }>).detail.color;
@@ -292,10 +292,10 @@ export class CoDrawBar extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-draw-bar")) customElements.define("co-draw-bar", CoDrawBar);
+if (!customElements.get("komu-draw-bar")) customElements.define("komu-draw-bar", CoDrawBar);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-draw-bar": CoDrawBar;
+    "komu-draw-bar": CoDrawBar;
   }
 }

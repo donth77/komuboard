@@ -47,7 +47,7 @@ test("resizing a host shape scales + repositions its attached stamp", async ({ b
   const tl = worldToScreen(cal, 18, 18);
   await a.page.mouse.click(tl.x, tl.y);
   await expect.poll(() => hasSelection(a.page)).toBe(true);
-  const h = await a.page.locator(".co-text-handle.h-se").boundingBox();
+  const h = await a.page.locator(".komu-text-handle.h-se").boundingBox();
   expect(h).not.toBeNull();
   await a.page.mouse.move(h!.x + h!.width / 2, h!.y + h!.height / 2);
   await a.page.mouse.down();
@@ -74,7 +74,7 @@ test("rotating a host shape orbits + spins its attached stamp", async ({ browser
 
   // Grab the bottom-right rotate zone (clear of the left tool dock) and swing it ~90° about the
   // shape centre (100,80).
-  const zoneLoc = a.page.locator(".co-text-rotate.r-se");
+  const zoneLoc = a.page.locator(".komu-text-rotate.r-se");
   const zone = await zoneLoc.boundingBox();
   expect(zone).not.toBeNull();
   const centre = worldToScreen(cal, 100, 80);
@@ -146,7 +146,7 @@ test("an attached stamp glides live during the host rotate (not just on release)
   await expect.poll(() => hasSelection(a.page)).toBe(true);
 
   const restX = (await a.page.locator(`[data-id="${stampId}"]`).boundingBox())!.x;
-  const zoneLoc = a.page.locator(".co-text-rotate.r-se");
+  const zoneLoc = a.page.locator(".komu-text-rotate.r-se");
   const z = (await zoneLoc.boundingBox())!;
   const centre = worldToScreen(cal, 100, 80);
   const r = Math.hypot(z.x + z.width / 2 - centre.x, z.y + z.height / 2 - centre.y);

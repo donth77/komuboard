@@ -1,6 +1,6 @@
-// <co-shape-menu> — the "Shapes and lines" picker: a vertical menu (lines/arrows on
+// <komu-shape-menu> — the "Shapes and lines" picker: a vertical menu (lines/arrows on
 // top, shapes below) shown when the Shapes tool is active. Picking an item sets the kind drawn next
-// and emits `shape-change` (bubbling → #app in main.ts → canvas). Light DOM. Sibling of <co-draw-bar>.
+// and emits `shape-change` (bubbling → #app in main.ts → canvas). Light DOM. Sibling of <komu-draw-bar>.
 // On mobile it's a mini bottom-sheet (drag-to-collapse) like the draw bar — see mobile-sheet.ts.
 
 import { ensureSheetHandle, wireSheetHandle } from "./mobile-sheet";
@@ -95,10 +95,10 @@ export class CoShapeMenu extends HTMLElement {
   }
 }
 
-if (!customElements.get("co-shape-menu")) customElements.define("co-shape-menu", CoShapeMenu);
+if (!customElements.get("komu-shape-menu")) customElements.define("komu-shape-menu", CoShapeMenu);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "co-shape-menu": CoShapeMenu;
+    "komu-shape-menu": CoShapeMenu;
   }
 }

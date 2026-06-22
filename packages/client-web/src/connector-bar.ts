@@ -84,7 +84,7 @@ export class ConnectorBar {
 
   constructor(private readonly host: ConnectorBarHost) {
     const el = document.createElement("div");
-    el.className = "co-connector-bar";
+    el.className = "komu-connector-bar";
     el.style.display = "none";
     el.innerHTML =
       `<button class="cb-btn" data-act="color" data-tip="Color"><span class="cb-color-dot" data-color></span><span class="cb-caret">▾</span></button>` +
@@ -147,7 +147,7 @@ export class ConnectorBar {
   private openPicker(anchor: HTMLElement): void {
     this.closePop();
     if (!this.picker) {
-      this.picker = document.createElement("co-color-picker") as CoColorPicker;
+      this.picker = document.createElement("komu-color-picker") as CoColorPicker;
       document.body.appendChild(this.picker);
       this.picker.addEventListener("color-change", (e) => {
         this.host.setColor((e as CustomEvent<{ color: string }>).detail.color);
