@@ -1593,15 +1593,15 @@ input[type="range"] {
   cursor: pointer;
 }
 .sw-emoji {
-  width: 32px;
-  height: 32px;
-  margin: -16px 0 0 -16px;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
   transition: transform 130ms var(--ease, ease-out);
   will-change: transform; /* own layer → hover scale composites without re-rasterising the filter */
 }
 .sw-emoji img {
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   pointer-events: none;
   /* The white sticker outline is baked into the image (emojiStickerUrl); just a cheap depth shadow
      here — the old 9-pass white-outline filter re-rasterised on every repaint and tanked the wheel. */

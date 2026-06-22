@@ -1083,7 +1083,16 @@ export class TextLayer {
       return;
     }
     const el = this.els.get(id);
-    if (!el || obj?.type !== "text") return;
+    if (!el) return;
+    if (obj?.type === "stamp") {
+      // A peer's live stamp rotation: effectiveGeom folds in remoteRotate; apply it to the box so the
+      // spin shows in realtime (not just on the release-commit render). Mirrors the text arm below.
+      const g = this.effectiveGeom(id, obj);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
+      this.applyRotation(el, g.rotation);
+      return;
+    }
+    if (obj?.type !== "text") return;
     const g = this.effectiveGeom(id, obj);
     this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
     this.applyRotation(el, g.rotation);
@@ -1999,6 +2008,47 @@ export class TextLayer {
       if (typeof att === "string" && hosts.has(att)) out.add(id);
     });
     return out;
+  }
+
+  /** Carry a host's attached stamps through its box transform (old → new): each stamp's centre is
+   *  re-mapped (un-rotate by old → scale per axis → rotate by new), its size scales by the geometric
+   *  mean of the axis scales, and the rotation delta is added. Drives sticky/shape rotate + resize so
+   *  the stamps stay stuck. Boxes are {cx, cy, w, h, rot°}. Call inside the host's commit transaction. */
+  private transformAttachedStamps(
+    hostId: string,
+    old: { cx: number; cy: number; w: number; h: number; rot: number },
+    neu: { cx: number; cy: number; w: number; h: number; rot: number },
+  ): void {
+    const stamps = this.attachedStampsOf(new Set([hostId]));
+    if (!stamps.size) return;
+    const oldRad = (old.rot * Math.PI) / 180;
+    const newRad = (neu.rot * Math.PI) / 180;
+    const dRot = neu.rot - old.rot;
+    const sx = neu.w / (old.w || 1);
+    const sy = neu.h / (old.h || 1);
+    const sizeScale = Math.sqrt(Math.abs(sx * sy)) || 1;
+    const cu = Math.cos(-oldRad);
+    const su = Math.sin(-oldRad);
+    const cr = Math.cos(newRad);
+    const sr = Math.sin(newRad);
+    for (const id of stamps) {
+      const m = this.objects.get(id);
+      const obj = m ? readObject(m) : null;
+      if (obj?.type !== "stamp") continue;
+      const dx = obj.x - old.cx;
+      const dy = obj.y - old.cy;
+      const lx = (cu * dx - su * dy) * sx; // un-rotate by old, then scale
+      const ly = (su * dx + cu * dy) * sy;
+      const nx = neu.cx + (cr * lx - sr * ly); // …then rotate by new about the new centre
+      const ny = neu.cy + (sr * lx + cr * ly);
+      const rot = ((((obj.rotation ?? 0) + dRot) % 360) + 360) % 360;
+      setStampGeom(this.opts.doc, id, {
+        x: nx,
+        y: ny,
+        size: obj.size * sizeScale,
+        rotation: rot,
+      });
+    }
   }
   /** Live drag: offset the selected boxes in the overlay (committed to the doc on release).
    *  `broadcast` is false during a canvas-driven group move — the canvas sends ONE unified "drag"
@@ -3155,6 +3205,19 @@ export class TextLayer {
           );
           setTextStyle(this.opts.doc, pv.id, { fontSize: pv.fontSize });
         }
+        // Carry attached stamps through a host (shape/sticky/text) resize — scale + reposition them.
+        if (!rs.isStamp && !rs.isStroke && rs.ow && rs.oh && pv.width != null) {
+          const ho = this.objects.get(pv.id);
+          const hobj = ho ? readObject(ho) : null;
+          const rot = hobj?.type === "text" ? (hobj.rotation ?? 0) : 0;
+          const nW = pv.width;
+          const nH = pv.height ?? pv.width; // a sticky/text box stays square — height tracks width
+          this.transformAttachedStamps(
+            pv.id,
+            { cx: rs.ox + rs.ow / 2, cy: rs.oy + rs.oh / 2, w: rs.ow, h: rs.oh, rot },
+            { cx: pv.x + nW / 2, cy: pv.y + nH / 2, w: nW, h: nH, rot },
+          );
+        }
       });
     }
     // Stop the live preview last, so the committed render overlaps the cleared preview on peers.
@@ -3249,7 +3312,23 @@ export class TextLayer {
       }
       setObjectsPoints(this.opts.doc, [{ id: rs.id, points: pts }]);
     } else if (obj?.type === "stamp") setStampGeom(this.opts.doc, rs.id, { rotation: deg });
-    else setTextGeometry(this.opts.doc, rs.id, { rotation: deg }); // commit (syncs the final angle)…
+    else if (obj?.type === "text") {
+      // A text/sticky/shape host: commit its rotation AND orbit any attached stamps about its centre
+      // (one transaction → one undo step). The centre is rotation-invariant, so old/new share it.
+      const g = this.effectiveGeom(rs.id, obj);
+      const sz = this.sizes.get(rs.id);
+      const w = g.width ?? sz?.w ?? 0;
+      const h = g.height ?? sz?.h ?? 0;
+      const box = { cx: g.x + w / 2, cy: g.y + h / 2, w, h };
+      this.opts.doc.transact(() => {
+        setTextGeometry(this.opts.doc, rs.id, { rotation: deg }); // commit (syncs the final angle)…
+        this.transformAttachedStamps(
+          rs.id,
+          { ...box, rot: rs.startRotation },
+          { ...box, rot: deg },
+        );
+      });
+    } else if (obj) setTextGeometry(this.opts.doc, rs.id, { rotation: deg }); // e.g. a connector
     this.opts.awareness.setLocalStateField("textrotate", null); // …then drop the live preview
     this.updateSelectionBar();
   };
