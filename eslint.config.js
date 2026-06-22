@@ -27,4 +27,19 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Node build scripts (run with `node`, not part of the browser/TS build) — Node globals.
+    files: ["**/scripts/**/*.{js,mjs}"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        fetch: "readonly",
+        URL: "readonly",
+        Buffer: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+      },
+    },
+  },
 );

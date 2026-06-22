@@ -43,7 +43,8 @@ const result = groups.map((g) => ({
     .map((e) => ({ c: e.emoji, u: notoStem(e.emoji), n: e.name }))
     .filter((e) => {
       const ok = have.has(e.u);
-      ok ? kept++ : dropped++;
+      if (ok) kept++;
+      else dropped++;
       return ok;
     }),
 }));
