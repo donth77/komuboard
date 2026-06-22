@@ -40,6 +40,24 @@ gantt
 
 ---
 
+## 1a. Current status (2026-06-22)
+
+> _A "you are here" snapshot. The granular checklists in §2 predate the M1 audit, the renderer migration, and the stamp work, so some boxes there lag reality — this section is the reconciled source of truth; §2 boxes are being ticked off against it._
+
+**Done — M1 core authoring + presence.** Infinite pan/zoom canvas, pen, sticky, shapes (rect/ellipse/line/arrow), text, **select/move/resize/delete + rotate**, multi-select marquee, **copy/paste/duplicate**, undo/redo, mouse + touch input, the dotted grid, zoom-to-cursor + zoom HUD, the Hand tool, labeled live cursors + presence facepile, and the tool dock / top bar / colour + width controls. Two-client convergence, presence, live drag/draw/resize, and copy-paste are covered by Playwright.
+
+**Pulled forward from Phase 2 (M3) and shipped early — _ahead of M2, against the sequencing rule above_.** **Connectors** (snap to shape anchors, re-route on move), the **eraser**, and a full **stamp tool** (FigJam radial wheel + emoji/mark/avatar stickers, placement, transform, and **host attachment** — a stamp dropped on a sticky/shape rides its move/rotate/resize and is deleted with it, live for peers). These were valuable but mean persistence now lags the feature set it should have preceded.
+
+**Major architecture change — [ADR-0009](./adr/0009-render-model-dom-unification.md), Phases 0–3 done.** The 2D board migrated off the Konva canvas to a **DOM-unified renderer**: every object (text/shape/sticky/stamp/stroke/connector) is a DOM element z-ordered by `orderArray`, giving true FigJam per-object placement stacking. `Konva.Transformer` and all Konva object layers were retired (only the camera/cursor stages + a transient-chrome overlay remain on Konva). The Yjs model was untouched — view-layer only. Several §2 lines describing a "Konva render layer bound to Yjs" are now historical.
+
+**Biggest open gaps (in priority order):**
+
+1. **M2 — persistence & rooms hardening (barely started).** Basic SQLite DO durability exists, but snapshot/compaction, reconnection UX, hibernate-rehydrate verification, room slugs, the share flow + permissions, and abuse guards are not built. This is the foundational gap and the stated prerequisite for the Phase-2 work already shipped.
+2. **ADR-0009 Phase 4 — performance.** No viewport culling yet (pan/zoom and mount cost scale with _total_ board size, not visible count); LOD at far zoom, dense-board profiling, and an a11y pass are pending. See [docs/09](./09-tech-debt-and-audit-backlog.md).
+3. **Remaining M1 polish.** Group/ungroup + lock, z-order controls, arrow-key nudge, context menus, and much of the onboarding / templates / minimap / share chrome.
+
+---
+
 ## 2. Milestone task checklists
 
 Tasks use GitHub task-list syntax so they parse into an interactive checklist. Each milestone groups work into **Setup · Client · Worker/DO · Persistence · Tests · Docs**.
@@ -100,7 +118,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 **Client (canvas + tools)**
 
 - [x] Build the infinite **pan/zoom** canvas (Konva stage; wheel/pinch zoom, drag/space-pan).
-- [x] Bind a Konva render layer **directly to the Yjs doc** (reconcile shapes ↔ Y.Map/Y.Array on change).
+- [x] Bind the render layer **directly to the Yjs doc** (reconcile objects ↔ Y.Map/Y.Array on change). _(Originally a Konva layer; migrated to the DOM-unified renderer in [ADR-0009](./adr/0009-render-model-dom-unification.md).)_
 - [x] Implement **freehand pen/marker** (color + thickness) writing stroke points into Yjs.
 - [x] Implement **sticky notes** (color + editable text).
 - [x] Implement **basic shapes**: rectangle, ellipse, line, arrow.
@@ -111,8 +129,8 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [x] Render the infinite **dotted-paper grid backdrop** — _done when:_ the canvas fills the viewport with a fixed-density radial dot grid that pans/zooms with content and stays crisp at all zoom levels.
 - [ ] Add explicit **pan affordances** (Hand tool, space-drag, middle-mouse, trackpad two-finger) — _done when:_ each path moves the viewport without mutating content and the cursor changes to grab/grabbing.
 - [x] Add **zoom-to-cursor** scroll/`Cmd/Ctrl`+scroll and `Cmd/Ctrl`+`+`/`-` zoom within the 10%–400% range — _done when:_ scroll zooms toward the pointer and the zoom % readout updates live.
-- [ ] **Rotate** objects (sticky/shape) via a rotation handle — _done when:_ a selected object rotates to an arbitrary angle and the angle persists/syncs.
-- [ ] **Copy / cut / paste / duplicate** objects with offset — _done when:_ `Cmd/Ctrl`+C/X/V and `Cmd/Ctrl`+D (and Alt-drag) create offset copies that sync to peers.
+- [x] **Rotate** objects (sticky/shape/stamp/stroke/connector) via a rotation handle — _done when:_ a selected object rotates to an arbitrary angle and the angle persists/syncs.
+- [x] **Copy / cut / paste / duplicate** objects with offset — _done when:_ `Cmd/Ctrl`+C/X/V and `Cmd/Ctrl`+D (and Alt-drag) create offset copies that sync to peers. _(Copy/paste/duplicate with a cascading offset shipped + e2e-covered; Alt-drag is the remaining nicety.)_
 - [ ] **Group / ungroup** and **lock / unlock** objects — _done when:_ `Cmd/Ctrl`+G/Shift+G group/ungroup and `Cmd/Ctrl`+L locks/unlocks the selection.
 - [ ] **Arrow-key nudge** (1px) and Shift+arrow (10px) for the selection — _done when:_ arrow keys move the selection 1px and Shift+arrow moves it 10px.
 - [ ] **Z-order** controls (bring forward / send back) — _done when:_ the selection's stacking order changes via menu/shortcut and re-renders for all peers.
@@ -281,7 +299,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 **Client (collaboration)**
 
 - [ ] **Cursor chat** (type at cursor; ephemeral via awareness).
-- [ ] **Emoji stamps / reactions** + **high-five**.
+- [~] **Emoji stamps** _(done — persistent placed-sticker tool with host attachment)_ · **reactions / high-five** _(pending — ephemeral awareness float, see Reaction picker below)_.
 - [ ] **Comments** (anchored threads, persisted in Yjs).
 - [ ] **Follow** + **spotlight/presentation** mode (drive remote viewports via awareness).
 - [ ] **Minimap** overview + viewport indicator.
@@ -308,7 +326,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 - [ ] **Frames/sections** (grouping + clipping).
 - [ ] **Templates** picker that seeds a board.
 - [ ] **Image upload** → R2 → render image node for all peers.
-- [ ] **Eraser** tool.
+- [x] **Eraser** tool. _(Shipped early — geometry-based point-to-polyline erase on the DOM renderer, with a fading ghost-trail.)_
 - [ ] **Sticky Sort** (by color/author/reactions/theme).
 - [ ] **Alignment/snapping guides**.
 - [ ] **Export** PNG / SVG / PDF.
