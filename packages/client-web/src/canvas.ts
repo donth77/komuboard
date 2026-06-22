@@ -22,9 +22,7 @@ import {
   readUserProfile,
   setConnectorEnds,
   setConnectorStyle,
-  setObjectsPoints,
   sideMidpoint,
-  translateObjects,
   type BoardObject,
   type ConnectorCap,
   type ConnectorEnd,
@@ -61,8 +59,6 @@ const CURSOR_HZ = 30;
 const LERP = 0.3;
 const SELECT_BLUE = "#4a9eff";
 // Konva attr that tags a rendered node with its object id (the select tool's hit→id contract).
-// One const so the writer (renderObjects) and reader (objIdOf) can't drift on a string literal.
-const OBJ_ID_ATTR = "objId";
 // arrow pointer (Lucide mouse-pointer-2): used for the local CSS cursor
 // (black fill, white edge) AND remote presence cursors (filled in each user's colour).
 const CURSOR_PATH =
@@ -143,9 +139,8 @@ function downsamplePoints(pts: number[], maxVerts: number): number[] {
  */
 export class BoardCanvas {
   private readonly stage: Konva.Stage;
-  private readonly content = new Konva.Layer();
   private readonly overlay = new Konva.Layer();
-  /** Top layer for selection chrome (marquee + transform box) — never wiped by renderObjects. */
+  /** Top Konva layer for selection chrome (the marquee + the multi-select union box). */
   private readonly uiLayer = new Konva.Layer();
   /** Light-blue per-node outlines drawn under the union transform box for multi-selections. */
   private readonly highlightGroup = new Konva.Group({ listening: false });
@@ -167,8 +162,6 @@ export class BoardCanvas {
   private readonly remoteSelGroupRects = new Map<number, Konva.Rect>();
   /** Floating tooltip (avatar + name) shown when hovering another user's selection on the canvas. */
   private peerTip: HTMLElement | null = null;
-  /** Live map of object id → its rendered Konva node (rebuilt every render). */
-  private readonly nodeById = new Map<string, Konva.Line>();
   /** The stamp the next canvas tap places (`mark:<name>` | `emoji:<codepoint>`), or null. */
   private currentStamp: string | null = null;
   /** Translucent placement preview of the armed stamp, tracking the cursor (overlay layer). */
@@ -178,7 +171,6 @@ export class BoardCanvas {
   private stampGhostRot = 0;
   /** Decoded stamp images keyed by url — re-arming a used stamp swaps instantly (no reload flash). */
   private readonly stampImgCache = new Map<string, HTMLImageElement | HTMLCanvasElement>();
-  private readonly selected = new Set<string>();
   /** Local copy/paste buffer (in-app, not the system clipboard): a snapshot of the objects copied
    *  with ⌘/Ctrl+C; ⌘/Ctrl+V clones them with a cascading offset. */
   private clipboard: BoardObject[] = [];
@@ -255,9 +247,7 @@ export class BoardCanvas {
   private drawing: { id: string; points: number[] } | null = null;
   private marquee: Konva.Rect | null = null;
   private marqueeStart: { x: number; y: number } | null = null;
-  private marqueeBase = new Set<string>();
   private marqueeAdditive = false;
-  private moveState: { startX: number; startY: number; dx: number; dy: number } | null = null;
   /** Active while dragging a multi-node selection as one unit (strokes + text + connectors together).
    *  Coordinates the three per-type move subsystems; `start` is the grab point for the shared delta. */
   private groupMoving = false;
@@ -305,7 +295,6 @@ export class BoardCanvas {
   private readonly onWindowPointerUp = (): void => {
     if (this.groupMoving) this.endGroupMove();
     else if (this.textLayer.isMoving()) this.textLayer.endMove();
-    else if (this.moveState) this.endMove();
     else if (this.connectorMove) this.endConnectorMove();
     else if (this.marquee) this.endMarquee();
     // Two-click: releasing a tap on an already-sole-selected box enters its text editor.
@@ -317,7 +306,6 @@ export class BoardCanvas {
   };
   private resizeObserver: ResizeObserver | null = null;
   /** Cache of content-relative client rects per object id; cleared whenever geometry rebuilds. */
-  private readonly rectCache = new Map<string, Rect>();
   private raf = 0;
   private animating = false;
   private selectionListener: ((count: number) => void) | null = null;
@@ -334,7 +322,6 @@ export class BoardCanvas {
       width: opts.container.clientWidth,
       height: opts.container.clientHeight,
     });
-    this.stage.add(this.content);
     this.stage.add(this.overlay);
     this.stage.add(this.uiLayer);
     // Peers' selection outlines sit in the overlay, in world space (so they pan/zoom
@@ -608,43 +595,6 @@ export class BoardCanvas {
   private point(): { x: number; y: number } {
     const p = this.stage.getRelativePointerPosition();
     return p ? { x: p.x, y: p.y } : { x: 0, y: 0 };
-  }
-
-  /** Content-relative client rect of an object's node, cached until renderObjects clears it. */
-  private nodeRect(id: string, node: Konva.Node): Rect {
-    let r = this.rectCache.get(id);
-    if (!r) {
-      // skipShadow: the selection box should hug the node, not its drop shadow — a stamp's soft shadow
-      // otherwise inflates the box (and the inflation grows/shifts as the stamp rotates).
-      r = node.getClientRect({ relativeTo: node.getLayer() ?? this.content, skipShadow: true });
-      this.rectCache.set(id, r);
-    }
-    return r;
-  }
-
-  /** World-space bbox of a stroke straight from its points (+ stroke half-width). */
-  private strokeBBox(obj: StrokeObject): Rect {
-    const p = obj.points;
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (let i = 0; i + 1 < p.length; i += 2) {
-      const x = p[i] as number;
-      const y = p[i + 1] as number;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    if (minX > maxX) return { x: 0, y: 0, width: 0, height: 0 };
-    const pad = (obj.style.includes("highlight") ? obj.width * 1.6 : obj.width) / 2 + 1;
-    return {
-      x: minX - pad,
-      y: minY - pad,
-      width: maxX - minX + pad * 2,
-      height: maxY - minY + pad * 2,
-    };
   }
 
   private onDocChanged(): void {
@@ -1157,7 +1107,6 @@ export class BoardCanvas {
             // endpoint handles are immediately usable. A connector bound to ANY shape instead stays in
             // draw mode for rapid diagramming (the observeDeep above already created its group, so the
             // selection chrome can attach). publishSelection goes out after the addConnector commit.
-            this.selected.clear();
             // ADR-0009 P3: select the new connector in the text layer (unified path). selectText →
             // onSelectionChange → reattachTransformer (notify + publish) + updateConnectorChrome (handles/bar).
             this.textLayer.selectText(d.id);
@@ -1195,8 +1144,7 @@ export class BoardCanvas {
   /** The single selected connector id, or null when the selection isn't exactly one connector. */
   private soleSelectedConnector(): string | null {
     // Connectors are selected in the text layer now (ADR-0009 P3): sole = exactly one text-layer
-    // selection that is a connector, with no Konva-stroke selection alongside.
-    if (this.selected.size) return null;
+    // selection that is a connector.
     const ids = this.textLayer.selectedIds();
     if (ids.length !== 1 || ids[0] == null) return null;
     const m = this.objects.get(ids[0]);
@@ -1612,7 +1560,7 @@ export class BoardCanvas {
       // together. A press on an unselected node, or outside the box, falls through to normal select.
       // (Shift extends the selection; transform handles were already intercepted above.)
       if (!shift && this.isGroupSelection()) {
-        const hitId = tid ?? this.objIdOf(e.target);
+        const hitId = tid;
         const u = this.selectionUnionRect();
         const onSelected = hitId != null && this.isSelectedAny(hitId);
         const inEmptySpace =
@@ -1630,7 +1578,6 @@ export class BoardCanvas {
         const TWO_CLICK_MS = 700;
         const alreadySole =
           !shift &&
-          this.selected.size === 0 &&
           !this.textLayer.isStampId(tid) && // a stamp isn't text-editable → no two-click-to-edit
           !this.textLayer.isInkId(tid) && // nor is a stroke (ADR-0009 P3)
           this.textLayer.isSelected(tid) &&
@@ -1650,28 +1597,14 @@ export class BoardCanvas {
       this.textTapEdit = null;
       this.textSelectAt = null;
       // Everything visible is a DOM object now (ADR-0009 P3): the precise text-layer hit-test (`tid`,
-      // above — now screen-constant for connectors) is the only object hit-test, so a connector click
-      // is already handled there. A press reaching here missed every object → clear and fall through
-      // to the marquee. (`id` below is the Konva e.target, used only by the dead legacy stroke path.)
-      const id = this.objIdOf(e.target);
+      // above — now screen-constant for connectors) is the only object hit-test, so a connector/stroke
+      // click is already handled there. A press reaching here missed every object → clear + marquee.
       if (!shift) {
         this.textLayer.clearSelection(); // clicking empty space drops the text + connector selection
         this.clearConnectorSelection();
       }
-      if (id) {
-        if (shift) {
-          if (this.selected.has(id)) this.selected.delete(id);
-          else this.selected.add(id);
-          this.reattachTransformer();
-          if (this.selected.has(id)) this.beginMove();
-        } else {
-          if (!this.selected.has(id)) this.setSelection([id]);
-          this.beginMove();
-        }
-      } else {
-        if (!shift) this.clearSelection();
-        this.beginMarquee(shift);
-      }
+      if (!shift) this.clearSelection();
+      this.beginMarquee(shift);
     });
     this.stage.on("pointermove", () => {
       if (this.textTapEdit) {
@@ -1681,7 +1614,6 @@ export class BoardCanvas {
       }
       if (this.groupMoving) this.updateGroupMove();
       else if (this.textLayer.isMoving()) this.textLayer.moveTo(this.point());
-      else if (this.moveState) this.updateMove();
       else if (this.connectorMove) this.updateConnectorMove();
       else if (this.marquee) this.updateMarquee();
       else if (this.tool === "select" && !this.resizing) {
@@ -1697,37 +1629,16 @@ export class BoardCanvas {
     // which also covers native double-clicks, so no separate dblclick handler is needed.)
   }
 
-  /** Walk up from a hit node to its owning object id (null for empty canvas). */
-  private objIdOf(node: Konva.Node): string | null {
-    let n: Konva.Node | null = node;
-    while (n && n !== this.stage) {
-      const id = n.getAttr(OBJ_ID_ATTR);
-      if (typeof id === "string") return id;
-      n = n.getParent();
-    }
-    return null;
-  }
-
-  private setSelection(ids: string[]): void {
-    this.selected.clear();
-    for (const id of ids) {
-      if (this.nodeById.has(id)) this.selected.add(id);
-    }
-    this.reattachTransformer();
-  }
   clearSelection(): void {
     this.textLayer.clearSelection();
     if (this.selectedConnectors.size) {
       this.selectedConnectors.clear();
       this.refreshConnectorSelection();
     }
-    if (!this.selected.size) return;
-    this.selected.clear();
-    this.reattachTransformer();
   }
   /** Select every object on the board (⌘A). */
   selectAll(): void {
-    this.setSelection([]); // strokes select via the text-layer now (ADR-0009 P3); canvas.selected unused
+    // Strokes select via the text-layer now (ADR-0009 P3); the canvas keeps no stroke selection.
     this.textLayer.selectAll();
     for (const id of this.connectorIds) this.selectedConnectors.add(id);
     this.refreshConnectorSelection();
@@ -1740,15 +1651,11 @@ export class BoardCanvas {
     const connIds = [...this.selectedConnectors];
     this.selectedConnectors.clear();
     if (connIds.length) deleteObjects(this.opts.doc, connIds); // observer re-renders without them
-    if (!this.selected.size) return;
-    const ids = [...this.selected];
-    this.selected.clear();
-    deleteObjects(this.opts.doc, ids); // observer re-renders; reattach drops the gone ids
   }
 
   /** Copy the current selection (strokes + connectors + text/shapes) into the in-app clipboard. */
   copySelection(): void {
-    const ids = [...this.selected, ...this.selectedConnectors, ...this.textLayer.selectedIds()];
+    const ids = [...this.selectedConnectors, ...this.textLayer.selectedIds()];
     if (!ids.length) return; // nothing selected → keep whatever's already on the clipboard
     const objs: BoardObject[] = [];
     for (const id of ids) {
@@ -1788,10 +1695,8 @@ export class BoardCanvas {
   /** Select freshly-pasted objects across all three selection subsystems (strokes / text / connectors). */
   private selectPasted(clones: BoardObject[]): void {
     this.clearSelection();
-    const strokeIds = clones.filter((o) => o.type === "stroke").map((o) => o.id);
     const textIds = clones.filter((o) => o.type === "text").map((o) => o.id);
     const connIds = clones.filter((o) => o.type === "connector").map((o) => o.id);
-    if (strokeIds.length) this.setSelection(strokeIds); // strokes → transformer + notify + publish
     for (const id of textIds) this.textLayer.selectText(id, true); // additive
     for (const id of connIds) if (this.connectorIds.has(id)) this.selectedConnectors.add(id);
     if (connIds.length) this.refreshConnectorSelection();
@@ -1799,14 +1704,12 @@ export class BoardCanvas {
     this.publishSelection();
   }
   hasSelection(): boolean {
-    return (
-      this.selected.size > 0 || this.selectedConnectors.size > 0 || this.textLayer.hasSelection()
-    );
+    return this.selectedConnectors.size > 0 || this.textLayer.hasSelection();
   }
 
   /** Rotate the current selection by `delta` degrees about each object's own centre (the [ / ] keyboard
-   *  nudge). Shapes/stickies/text spin via a stored angle (text layer); strokes bake the rotation into
-   *  their points and connectors into their endpoints (a rotated connector detaches from any shape). */
+   *  nudge). Shapes/stickies/text/strokes spin via the text layer; free connectors bake the rotation
+   *  into their endpoints here (a rotated connector detaches from any shape). */
   rotateSelection(delta: number): void {
     this.textLayer.rotateSelected(delta);
     const rad = (delta * Math.PI) / 180;
@@ -1816,20 +1719,6 @@ export class BoardCanvas {
       x: cx + (px - cx) * cos - (py - cy) * sin,
       y: cy + (px - cx) * sin + (py - cy) * cos,
     });
-    const strokeUpdates: { id: string; points: number[] }[] = [];
-    for (const id of this.selected) {
-      const obj = readObject(this.objects.get(id)!);
-      if (obj?.type !== "stroke") continue;
-      const b = this.strokeBBox(obj);
-      const cx = b.x + b.width / 2;
-      const cy = b.y + b.height / 2;
-      const pts: number[] = [];
-      for (let i = 0; i + 1 < obj.points.length; i += 2) {
-        const p = spin(obj.points[i]!, obj.points[i + 1]!, cx, cy);
-        pts.push(p.x, p.y);
-      }
-      strokeUpdates.push({ id, points: pts });
-    }
     const connUpdates: {
       id: string;
       from: { x: number; y: number };
@@ -1846,9 +1735,8 @@ export class BoardCanvas {
       const cy = (a.y + z.y) / 2;
       connUpdates.push({ id, from: spin(a.x, a.y, cx, cy), to: spin(z.x, z.y, cx, cy) });
     }
-    if (!strokeUpdates.length && !connUpdates.length) return;
+    if (!connUpdates.length) return;
     this.opts.doc.transact(() => {
-      if (strokeUpdates.length) setObjectsPoints(this.opts.doc, strokeUpdates);
       for (const u of connUpdates)
         setConnectorEnds(this.opts.doc, u.id, { from: u.from, to: u.to });
     });
@@ -1886,18 +1774,9 @@ export class BoardCanvas {
   }
   /** Test/debug hook: a rendered object's content-relative bounding rect (null if not drawn). */
   nodeContentRect(id: string): Rect | null {
-    // ADR-0009 P3: ink + DOM objects live in the text-layer; its world rect honours live previews
+    // ADR-0009 P3: every object lives in the text-layer; its world rect honours live previews
     // (a peer's in-progress resize), which the old Konva node rect did not.
-    const textRect = this.textLayer.worldRectOf(id);
-    if (textRect) return textRect;
-    const node = this.nodeById.get(id);
-    return node ? node.getClientRect({ relativeTo: node.getLayer() ?? this.content }) : null;
-  }
-  /** Test/debug hook: total object nodes vs. how many are currently drawn (viewport-culling check). */
-  drawnNodeCount(): { total: number; visible: number } {
-    let visible = 0;
-    for (const node of this.nodeById.values()) if (node.visible()) visible++;
-    return { total: this.nodeById.size, visible };
+    return this.textLayer.worldRectOf(id);
   }
   /** Undo / redo your own edits (remote edits are untracked, so they're never reverted). */
   undo(): void {
@@ -1911,8 +1790,7 @@ export class BoardCanvas {
     this.notifySelection();
   }
   private notifySelection(): void {
-    const count =
-      this.selected.size + this.selectedConnectors.size + this.textLayer.selectedCount();
+    const count = this.selectedConnectors.size + this.textLayer.selectedCount();
     this.textLayer.setGroupSelected(count >= 2); // hide a shape's snap dots inside a multi-node group
     this.selectionListener?.(count);
   }
@@ -1924,7 +1802,7 @@ export class BoardCanvas {
    */
   private publishSelection(): void {
     // strokes + connectors + text so peers outline everything I've selected
-    const ids = [...this.selected, ...this.selectedConnectors, ...this.textLayer.selectedIds()];
+    const ids = [...this.selectedConnectors, ...this.textLayer.selectedIds()];
     const key = ids.slice().sort().join(",");
     if (key === this.lastPublishedSelection) return;
     // A live marquee resolves the selection on every pointermove; cap that broadcast
@@ -1940,11 +1818,10 @@ export class BoardCanvas {
     this.opts.awareness.setLocalStateField("selection", ids.length ? ids : null);
   }
 
-  /** Reconcile selection chrome after every render: prune ids whose nodes vanished, then redraw the
-   *  selection outlines and republish. (Named for the retired Konva.Transformer it once drove; the
-   *  transform box itself is now the text-layer's DOM chrome — see the P3 Step 4 note below.) */
+  /** Reconcile selection chrome after every render: redraw the selection outlines and republish.
+   *  (Named for the retired Konva.Transformer it once drove; the transform box itself is now the
+   *  text-layer's DOM chrome — see the P3 Step 4 note below.) */
   private reattachTransformer(): void {
-    for (const id of [...this.selected]) if (!this.nodeById.has(id)) this.selected.delete(id);
     // ADR-0009 P3 Step 4: every object (single OR group) resizes/rotates via the text-layer's DOM
     // chrome — the Konva transformer/proxy is never attached. notifySelection() drives the text-layer
     // to show its single-box or multi-node group transform box for the current selection.
@@ -1953,64 +1830,19 @@ export class BoardCanvas {
     this.publishSelection();
   }
 
-  private beginMove(): void {
-    const p = this.point();
-    this.moveState = { startX: p.x, startY: p.y, dx: 0, dy: 0 };
-    this.stage.container().style.cursor = "move";
-  }
-  private updateMove(): void {
-    if (!this.moveState) return;
-    const p = this.point();
-    this.moveState.dx = p.x - this.moveState.startX;
-    this.moveState.dy = p.y - this.moveState.startY;
-    for (const id of this.selected) {
-      this.nodeById.get(id)?.position({ x: this.moveState.dx, y: this.moveState.dy });
-    }
-    this.renderSelectionBoxes();
-    this.content.batchDraw();
-    // Stream the in-progress move to peers (throttled like cursors). The doc only commits
-    // on release (endMove), so this preview is ephemeral — no undo/persistence churn. Suppressed
-    // during a group move: updateGroupMove sends ONE unified "drag" for all stroke + text ids.
-    const now = Date.now();
-    if (!this.groupMoving && now - this.lastDragSent >= 1000 / CURSOR_HZ) {
-      this.lastDragSent = now;
-      this.opts.awareness.setLocalStateField("drag", {
-        ids: [...this.selected],
-        dx: this.moveState.dx,
-        dy: this.moveState.dy,
-      });
-    }
-  }
-  private endMove(): void {
-    const m = this.moveState;
-    this.moveState = null;
-    this.stage.container().style.cursor = this.tool === "select" ? CURSOR_URL : "grab";
-    // Commit the move to the doc first (peers re-render at the baked coords), then stop the
-    // live preview — this ordering lets the committed geometry land before the offset clears.
-    if (m && (Math.abs(m.dx) >= 0.01 || Math.abs(m.dy) >= 0.01)) {
-      this.opts.doc.transact(() => {
-        if (this.selected.size) translateObjects(this.opts.doc, [...this.selected], m.dx, m.dy);
-      });
-    }
-    this.opts.awareness.setLocalStateField("drag", null);
-  }
-
   // ---- group move: drag a whole multi-node selection (any mix of types) as one unit ----
   /** Whether the current selection spans 2+ nodes across all subsystems (so it has a group box). */
   private isGroupSelection(): boolean {
-    return this.selected.size + this.textLayer.selectedCount() + this.selectedConnectors.size >= 2;
+    return this.textLayer.selectedCount() + this.selectedConnectors.size >= 2;
   }
   /** Whether `id` belongs to the current selection, whatever its type. */
   private isSelectedAny(id: string): boolean {
-    return (
-      this.selected.has(id) || this.textLayer.isSelected(id) || this.selectedConnectors.has(id)
-    );
+    return this.textLayer.isSelected(id) || this.selectedConnectors.has(id);
   }
   private beginGroupMove(): void {
     const p = this.point();
     this.groupMoving = true;
     this.groupMoveStart = { x: p.x, y: p.y };
-    if (this.selected.size) this.beginMove(); // strokes
     if (this.textLayer.selectedCount()) this.textLayer.beginMove(p); // text / sticky / shape
     // Connectors move as free bodies, EXCEPT those bound to a selected shape — they re-route with it.
     if (this.selectedConnectors.size)
@@ -2019,7 +1851,6 @@ export class BoardCanvas {
   }
   private updateGroupMove(): void {
     const p = this.point();
-    if (this.moveState) this.updateMove(); // strokes (its own peer broadcast is suppressed)
     if (this.textLayer.isMoving()) this.textLayer.moveTo(p, false); // text (broadcast suppressed)
     if (this.connectorMove) this.updateConnectorMove(); // connectors (own awareness field)
     this.renderSelectionBoxes(); // faint per-stroke outlines follow the moving strokes
@@ -2032,7 +1863,7 @@ export class BoardCanvas {
     const now = Date.now();
     if (now - this.lastDragSent >= 1000 / CURSOR_HZ) {
       this.lastDragSent = now;
-      const ids = [...this.selected, ...this.textLayer.selectedIds()];
+      const ids = [...this.textLayer.selectedIds()];
       this.opts.awareness.setLocalStateField("drag", ids.length ? { ids, dx, dy } : null);
     }
   }
@@ -2041,7 +1872,6 @@ export class BoardCanvas {
     this.groupMoveStart = null;
     // Commit every subsystem in ONE transaction so undo reverts the whole group move in a single step.
     this.opts.doc.transact(() => {
-      if (this.moveState) this.endMove();
       if (this.textLayer.isMoving()) this.textLayer.endMove();
       if (this.connectorMove) this.endConnectorMove();
     });
@@ -2053,7 +1883,7 @@ export class BoardCanvas {
    *  multi-selection's union box rotates the whole group (single boxes use the text layer's own
    *  rotate handles). Returns null for an empty or single-object selection. */
   private rotationCornerOf(world: { x: number; y: number }): RotateCorner | null {
-    if (this.selected.size === 0 && !this.isGroupSelection()) return null;
+    if (!this.isGroupSelection()) return null;
     const u = this.selectionUnionRect();
     if (!u) return null;
     // Start the rotate band just BEYOND the resize anchors (~11px out) so the two don't fight, and
@@ -2088,7 +1918,6 @@ export class BoardCanvas {
   private beginMarquee(additive: boolean): void {
     const p = this.point();
     this.marqueeStart = p;
-    this.marqueeBase = new Set(additive ? [...this.selected] : []);
     this.marqueeAdditive = additive;
     this.marquee = new Konva.Rect({
       x: p.x,
@@ -2129,13 +1958,11 @@ export class BoardCanvas {
   }
   private applyMarquee(box: Rect): void {
     // Strokes are text-layer objects now (ADR-0009 P3) → marquee-selected via selectInBox below, not
-    // the Konva hit graph; canvas.selected only carries marqueeBase (legacy, normally empty).
-    const hits = new Set(this.marqueeBase);
-    this.setSelection([...hits]);
+    // the Konva hit graph.
     this.textLayer.selectInBox(box, this.marqueeAdditive); // text/strokes aren't Konva nodes — select separately
-    this.selectConnectorsInBox(box); // connectors aren't in nodeById — test their polyline bbox
-    // All three subsystems are settled now — re-evaluate the transform box vs the union group box and
-    // redraw it (setSelection ran before text/connectors were known, so its box pass was incomplete).
+    this.selectConnectorsInBox(box); // connectors aren't Konva nodes — test their polyline bbox
+    // Both subsystems are settled now — re-evaluate the transform box vs the union group box and
+    // redraw the selection chrome for the resulting marquee selection.
     this.reattachTransformer();
   }
 
@@ -2176,35 +2003,16 @@ export class BoardCanvas {
 
   /** Light-blue per-node outlines for a multi-selection (the union gets the transform box). */
   private renderSelectionBoxes(): void {
+    // Per-node multi-selection outlines were drawn here for Konva-selected strokes; every object is a
+    // text-layer DOM node now (ADR-0009 P3), so there is nothing canvas-side to outline.
     this.highlightGroup.destroyChildren();
-    // Faint per-node outlines for any residual multi-node Konva selection. The union transform box
-    // is now the text-layer's DOM group chrome (updateGroupChrome), not a Konva transformer/proxy.
-    if (this.selected.size > 1) {
-      const sw = this.viewport.screenPx(1.2);
-      for (const id of this.selected) {
-        const node = this.nodeById.get(id);
-        if (!node) continue;
-        const r = node.getClientRect({ relativeTo: node.getLayer() ?? this.content });
-        this.highlightGroup.add(
-          new Konva.Rect({
-            x: r.x,
-            y: r.y,
-            width: r.width,
-            height: r.height,
-            stroke: "#8fbcff",
-            strokeWidth: sw,
-            listening: false,
-          }),
-        );
-      }
-    }
     this.uiLayer.batchDraw();
   }
 
   /**
-   * The union of every selected node's world-space AABB — strokes (Konva client rects), text /
-   * sticky / shape boxes (live geometry from the text layer), and connector polylines — in
-   * content/world coordinates. null when nothing measurable is selected.
+   * The union of every selected node's world-space AABB — text / sticky / shape / stroke boxes (live
+   * geometry from the text layer) and connector polylines — in content/world coordinates. null when
+   * nothing measurable is selected.
    */
   private selectionUnionRect(): Rect | null {
     let minX = Infinity;
@@ -2217,15 +2025,6 @@ export class BoardCanvas {
       maxX = Math.max(maxX, x + w);
       maxY = Math.max(maxY, y + h);
     };
-    for (const id of this.selected) {
-      const node = this.nodeById.get(id);
-      if (!node) continue;
-      const r = node.getClientRect({
-        relativeTo: node.getLayer() ?? this.content,
-        skipShadow: true,
-      });
-      fold(r.x, r.y, r.width, r.height);
-    }
     for (const r of this.textLayer.selectedWorldRects()) fold(r.x, r.y, r.width, r.height);
     for (const id of this.selectedConnectors) {
       const m = this.objects.get(id);
@@ -2248,8 +2047,8 @@ export class BoardCanvas {
     // Gather each peer's (color + selected ids) and a signature of the same. Cursor /
     // name awareness ticks don't change the signature, so those (frequent) changes skip
     // the rebuild. Geometry (move/resize/delete) and zoom aren't in the signature, so
-    // those callers pass force=true; node membership only changes via renderObjects,
-    // which is one of those forced callers — so the cached path stays correct.
+    // those callers pass force=true; selection membership only changes on a doc change,
+    // and onDocChanged is one of those forced callers — so the cached path stays correct.
     const peers: { clientId: number; color: string; ids: string[] }[] = [];
     const parts: string[] = [];
     this.opts.awareness.getStates().forEach((state, clientId) => {
@@ -2353,12 +2152,6 @@ export class BoardCanvas {
       maxY = Math.max(maxY, y + h);
     };
     for (const id of ids) {
-      const node = this.nodeById.get(id);
-      if (node && node.visible()) {
-        const r = this.nodeRect(id, node);
-        fold(r.x, r.y, r.width, r.height);
-        continue;
-      }
       const tr = this.textLayer.worldRectOf(id);
       if (tr) {
         fold(tr.x, tr.y, tr.width, tr.height);
@@ -2495,21 +2288,11 @@ export class BoardCanvas {
       if (resize?.nodes) for (const n of resize.nodes) if (n?.id) dragging.add(n.id);
     });
     // Never disturb an in-progress local gesture — canvas drag/marquee OR a text-layer move/resize.
-    const busy =
-      !!this.moveState ||
-      !!this.marquee ||
-      this.textLayer.isMoving() ||
-      this.textLayer.isResizing();
+    const busy = !!this.marquee || this.textLayer.isMoving() || this.textLayer.isResizing();
     if (!busy) {
       const taken = (id: string): boolean =>
         dragging.has(id) || (remoteSel.has(id) && !this.prevRemoteSel.has(id));
       let changed = false;
-      for (const id of [...this.selected]) {
-        if (taken(id)) {
-          this.selected.delete(id); // a peer took it over → release my transform box
-          changed = true;
-        }
-      }
       // Strokes/connectors/stamps/text/shapes now hold their selection in the text-layer (ADR-0009
       // P3), so yield any of THOSE a peer just took too — else my box lingers (last-writer-wins).
       const textTaken = this.textLayer.selectedIds().filter(taken);
@@ -2528,8 +2311,8 @@ export class BoardCanvas {
   /**
    * Render every *remote* peer's in-progress stroke as an ephemeral preview so drawing streams
    * live (the doc only commits the finished stroke via addStroke). Previews are keyed by the
-   * eventual stroke id and dropped the moment the committed node appears (here or in
-   * renderObjects/pruneCommittedDraws) or the peer's draw awareness clears (e.g. cancel).
+   * eventual stroke id and dropped the moment the committed stroke appears (here or in
+   * pruneCommittedDraws) or the peer's draw awareness clears (e.g. cancel).
    */
   private renderRemoteDraws(): void {
     const self = this.opts.awareness.clientID;
@@ -2626,12 +2409,6 @@ export class BoardCanvas {
       this.opts.awareness.setLocalStateField("draw", null); // cancelled → stop the live preview
     }
     if (this.marquee) this.cancelMarquee();
-    if (this.moveState) {
-      for (const id of this.selected) this.nodeById.get(id)?.position({ x: 0, y: 0 });
-      this.moveState = null;
-      this.opts.awareness.setLocalStateField("drag", null); // cancelled → stop the live preview
-      this.content.batchDraw();
-    }
     if (this.resizing) {
       this.resizing = false;
       this.opts.awareness.setLocalStateField("resize", null); // cancelled → stop the live preview
