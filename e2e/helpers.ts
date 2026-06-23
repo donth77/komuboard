@@ -46,9 +46,28 @@ export function uniqueRoom(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Open a page in its own browser context, join `room`, and wait until it's connected. */
-export async function connectPeer(browser: Browser, room: string): Promise<Peer> {
+/**
+ * Open a page in its own browser context, join `room`, and wait until it's connected.
+ *
+ * Each context starts with empty storage, so the first-run identity nudge would otherwise pop up in
+ * every test (and can overlap the top-right chrome). It's suppressed by default; pass
+ * `{ showNudge: true }` in the dedicated nudge test to see it.
+ */
+export async function connectPeer(
+  browser: Browser,
+  room: string,
+  opts?: { showNudge?: boolean },
+): Promise<Peer> {
   const ctx = await browser.newContext();
+  if (!opts?.showNudge) {
+    await ctx.addInitScript(() => {
+      try {
+        localStorage.setItem("komuboard-identity-nudged", "1");
+      } catch {
+        /* storage blocked — nudge is harmless anyway */
+      }
+    });
+  }
   const page = await ctx.newPage();
   await page.goto(`/?room=${room}`);
   await page.waitForFunction(

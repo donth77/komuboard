@@ -50,6 +50,9 @@ importers:
       partysocket:
         specifier: ^1.1.4
         version: 1.2.0(react@19.2.7)
+      qrcode-generator:
+        specifier: ^2.0.4
+        version: 2.0.4
       y-partyserver:
         specifier: ^2.2.0
         version: 2.2.0(@cloudflare/workers-types@4.20260619.1)(partyserver@0.5.8(@cloudflare/workers-types@4.20260619.1))(yjs@13.6.31)
@@ -1570,6 +1573,9 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
+  qrcode-generator@2.0.4:
+    resolution: {integrity: sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==}
+
   react@19.2.7:
     resolution: {integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==}
     engines: {node: '>=0.10.0'}
@@ -3080,6 +3086,8 @@ snapshots:
   prettier@3.8.4: {}
 
   punycode@2.3.1: {}
+
+  qrcode-generator@2.0.4: {}
 
   react@19.2.7:
     optional: true

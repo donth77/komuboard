@@ -31,7 +31,9 @@ export class CoTopbar extends HTMLElement {
       '<div class="spacer"></div>' +
       '<div class="devstatus" title="connection status">WS <b data-testid="status">connecting…</b> · <b data-testid="synced">syncing…</b></div>' +
       // per-avatar tooltips live on the avatars themselves (a host title would double up)
-      '<komu-avatar-presence-row id="presence-row" data-testid="presence-row"></komu-avatar-presence-row>';
+      '<komu-avatar-presence-row id="presence-row" data-testid="presence-row"></komu-avatar-presence-row>' +
+      // icon-only Share, pinned to the far right with the presence row immediately to its left
+      `<button class="btn-share" data-act="share" type="button" data-testid="share" aria-label="Share board" title="Share board">${icon("share", "ico")}</button>`;
 
     this.#dot = this.querySelector('[data-testid="dot"]');
     this.#status = this.querySelector('[data-testid="status"]');
@@ -42,6 +44,8 @@ export class CoTopbar extends HTMLElement {
         ?.closest<HTMLElement>("[data-act]")
         ?.getAttribute("data-act");
       if (act === "nav") this.dispatchEvent(new CustomEvent("nav-toggle", { bubbles: true }));
+      else if (act === "share")
+        this.dispatchEvent(new CustomEvent("share-board", { bubbles: true }));
     });
   }
 

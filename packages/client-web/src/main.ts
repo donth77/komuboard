@@ -36,6 +36,8 @@ import "./drawer";
 import "./tooltip"; // body-level singleton tooltip for every [data-tip] element (always top-most)
 import { icon } from "./icons";
 import { createProfileDialog } from "./ui/profile";
+import { maybeShowIdentityNudge } from "./ui/identity-nudge";
+import { createShareDialog } from "./ui/share";
 import { paintProfile } from "./util";
 import { SWATCHES } from "./palette";
 
@@ -107,6 +109,8 @@ interface Identity {
   name: string;
   color: string;
   photo?: string;
+  /** True when the name was auto-generated this visit (never customized) — drives the first-run nudge. */
+  fresh: boolean;
 }
 function loadIdentity(): Identity {
   let id = localStorage.getItem("komuboard-uid");
@@ -115,9 +119,11 @@ function loadIdentity(): Identity {
     localStorage.setItem("komuboard-uid", id);
   }
   let name = localStorage.getItem("komuboard-name");
+  let fresh = false;
   if (!name) {
     name = randomGuestName();
     localStorage.setItem("komuboard-name", name);
+    fresh = true;
   }
   let color = localStorage.getItem("komuboard-color");
   if (!color) {
@@ -125,7 +131,7 @@ function loadIdentity(): Identity {
     color = pickUserColor(seed);
     localStorage.setItem("komuboard-color", color);
   }
-  return { id, name, color, photo: localStorage.getItem("komuboard-photo") ?? undefined };
+  return { id, name, color, photo: localStorage.getItem("komuboard-photo") ?? undefined, fresh };
 }
 const identity = loadIdentity();
 const user: PresenceState = { name: identity.name, color: identity.color };
@@ -601,6 +607,20 @@ mobileMql.addEventListener("change", closeAppMenu); // breakpoint flip → drop 
 document.getElementById("help-btn")?.addEventListener("click", () => shortcutsDialog.open());
 drawer?.addEventListener("help", () => shortcutsDialog.open());
 
+// Share → "Share this board" dialog (room link + QR + Copy). Built lazily on first open; the room is
+// fixed per page load, so the dialog is reused thereafter.
+let shareDialog: ReturnType<typeof createShareDialog> | null = null;
+function openShare(): void {
+  if (!shareDialog) {
+    const u = new URL(window.location.href);
+    u.searchParams.set("room", room);
+    shareDialog = createShareDialog(u.toString());
+  }
+  shareDialog.open();
+}
+topbar?.addEventListener("share-board", openShare);
+drawer?.addEventListener("share", openShare); // mobile overflow drawer item (if present)
+
 // "Edit profile" (the dropdown + drawer item) → open the profile editor by re-dispatching the
 // avatar row's `rename` intent, so it works even when that row is hidden (e.g. when solo).
 document.addEventListener("click", (e) => {
@@ -686,6 +706,15 @@ const profile = createProfileDialog({
 });
 // Clicking your own avatar (the row's `rename` intent) opens the profile editor.
 presenceRowEl?.addEventListener("rename", () => profile.open());
+
+// First-run only: gently point a brand-new (auto-named) visitor at the profile editor, since the
+// presence row that normally hosts your clickable avatar is hidden while you're alone. Non-blocking.
+maybeShowIdentityNudge({
+  name: identity.name,
+  color: identity.color,
+  fresh: identity.fresh,
+  onEdit: () => profile.open(),
+});
 // The provider only drops our presence on the legacy "unload" event, which modern
 // browsers routinely skip on tab close (bfcache). Announce departure on pagehide so
 // remaining peers remove our avatar immediately instead of waiting for a timeout.

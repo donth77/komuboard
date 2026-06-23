@@ -121,6 +121,215 @@ body {
 .devstatus b {
   color: var(--ink);
 }
+/* ── Share: the topbar "Share" button + the "Share this board" dialog ─────────────────────────── */
+.btn-share {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+.btn-share:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+}
+.btn-share .ico {
+  width: 17px;
+  height: 17px;
+}
+/* ── First-run identity nudge — dismissible "set your name" card (see ui/identity-nudge.ts) ─────── */
+.identity-nudge {
+  position: fixed;
+  top: 64px;
+  right: 14px;
+  z-index: 40;
+  width: 290px;
+  max-width: calc(100vw - 28px);
+  padding: 13px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(-8px);
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.identity-nudge.in {
+  opacity: 1;
+  transform: none;
+}
+.identity-nudge.leaving {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
+.identity-nudge-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-right: 16px; /* clear the × in the corner */
+}
+.identity-nudge-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.identity-nudge-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+.identity-nudge-hint {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.identity-nudge-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 11px;
+}
+.identity-nudge-edit {
+  height: 30px;
+  padding: 0 13px;
+  font:
+    600 12px Inter,
+    system-ui,
+    sans-serif;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+.identity-nudge-edit:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+}
+.identity-nudge-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+.identity-nudge-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .identity-nudge {
+    transition: none;
+  }
+}
+.share-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.share-qr {
+  width: 172px;
+  height: 172px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.share-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.share-cap {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.share-url-row {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+.share-url {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.share-copy {
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+.share-copy.ok {
+  background: #3db46b;
+}
+.share-helper {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+.share-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.share-native,
+.share-done {
+  height: 34px;
+  padding: 0 14px;
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.share-native {
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.share-done {
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+}
 .iconbtn {
   display: inline-grid;
   place-items: center;
