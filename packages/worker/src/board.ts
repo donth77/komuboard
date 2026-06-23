@@ -1,5 +1,7 @@
 import { YServer } from "y-partyserver";
+import type { Connection, ConnectionContext, WSMessage } from "partyserver";
 import { encodeDocUpdate, loadStoredDoc } from "./persistence";
+import { CLOSE_RATE_LIMIT, CLOSE_ROOM_FULL, ConnectionLimiter, overCapacity } from "./abuse-guard";
 
 /**
  * Board — one Durable Object per room, hosting the room's single Yjs document
@@ -17,6 +19,48 @@ export class Board extends YServer {
 
   // Debounced autosave: onSave() runs ~2s after edits settle (10s hard cap).
   static override callbackOptions = { debounceWait: 2000, debounceMaxWait: 10_000 };
+
+  // Per-connection inbound rate limiters. In-memory on purpose: a flood keeps the DO awake so the
+  // bucket lives through the burst, and it's fine to discard on hibernation (which only happens once
+  // the room is idle — i.e. nobody's flooding).
+  readonly #limiters = new Map<string, ConnectionLimiter>();
+
+  // Room-size cap. The newly-accepted socket is already in getConnections(), so a count past the cap
+  // means this connection is the overflow — refuse it before the Yjs sync handshake runs.
+  override onConnect(connection: Connection, ctx: ConnectionContext): void | Promise<void> {
+    if (overCapacity([...this.getConnections()].length)) {
+      connection.close(CLOSE_ROOM_FULL, "Room is full");
+      return;
+    }
+    return super.onConnect(connection, ctx);
+  }
+
+  // Per-connection rate limit: allow → hand to Yjs; drop → swallow (Yjs resyncs on the next exchange);
+  // close → tear down a sustained flood.
+  override onMessage(connection: Connection, message: WSMessage): void | Promise<void> {
+    const now = Date.now();
+    let limiter = this.#limiters.get(connection.id);
+    if (!limiter) {
+      limiter = new ConnectionLimiter(now);
+      this.#limiters.set(connection.id, limiter);
+    }
+    const decision = limiter.check(now);
+    if (decision === "allow") return super.onMessage(connection, message);
+    if (decision === "close") {
+      this.#limiters.delete(connection.id);
+      connection.close(CLOSE_RATE_LIMIT, "Rate limit exceeded");
+    }
+  }
+
+  override onClose(
+    connection: Connection,
+    code: number,
+    reason: string,
+    wasClean: boolean,
+  ): void | Promise<void> {
+    this.#limiters.delete(connection.id);
+    return super.onClose(connection, code, reason, wasClean);
+  }
 
   override async onLoad(): Promise<void> {
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS ydoc (id TEXT PRIMARY KEY, data BLOB)");

@@ -257,7 +257,7 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 
 - [ ] Verify **WebSocket Hibernation** evicts the idle DO and rehydrates document state from SQLite on next message.
 - [ ] Implement room lifecycle: create-on-first-connect, TTL/idle handling, last-writer state flush.
-- [ ] Add a basic **room-size cap** and **per-connection rate limit** (abuse guard).
+- [x] Add a basic **room-size cap** and **per-connection rate limit** (abuse guard).
 - [ ] Add an optional **D1** room index/metadata table (room id, created-at, last-active).
 - [ ] Mint a **human-readable room slug** for new boards — _done when:_ creating a board produces a unique `adjective-animal-NN`-style slug that routes to the room with no collisions.
 - [ ] Land **anonymous users directly in a room** (generated code, color, default name; no modal/signup) — _done when:_ opening any room URL grants an editable anonymous session with a human-readable code, assigned identity color, and editable default name.
