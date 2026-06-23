@@ -228,16 +228,16 @@ Tasks use GitHub task-list syntax so they parse into an interactive checklist. E
 
 **Client**
 
-- [ ] Add reconnection UX: "reconnecting…" banner, optimistic local edits buffered by **PartySocket**, seamless resync on reconnect.
+- [x] Add reconnection UX: "reconnecting…" banner, optimistic local edits buffered by **PartySocket**, seamless resync on reconnect.
 - [ ] Show a "board restored" state on cold rehydrate; handle empty/unknown room ids gracefully.
 
 **Client (room pill, share, anonymous join)**
 
 - [ ] Render the **room pill** with room name/slug and a live connection dot — _done when:_ the pill shows the current room slug (mono, disambiguated glyphs) with a green pulsing dot when the socket is connected and an amber/red state on disconnect; tapping reveals room details/rename/copy.
 - [ ] Render the **room-code copy control** — _done when:_ clicking the copy icon writes the room code/URL to the clipboard and politely announces "Copied!".
-- [ ] Render the primary **Share button** and open the **Share dialog** — _done when:_ clicking Share opens a labeled, focus-trapped, elevated card ("Share this board"), and Esc/backdrop/X closes it and returns focus to the Share button.
+- [x] Render the primary **Share button** and open the **Share dialog** — _done when:_ clicking Share opens a labeled, focus-trapped, elevated card ("Share this board"), and Esc/backdrop/X closes it and returns focus to the Share button.
 - [ ] Show the read-only **room URL field** with **Copy-link** + confirmation — _done when:_ the field shows `komuboard.app/r/<room-slug>` (slug = current room, selectable) and Copy writes the full URL and shows a "Copied" state.
-- [ ] Render a scannable **QR code** for the room URL with caption — _done when:_ the QR encodes the exact room URL (decodes back to it) and shows "Scan to join on mobile or VR".
+- [x] Render a scannable **QR code** for the room URL with caption — _done when:_ the QR encodes the exact room URL (decodes back to it) and shows "Scan to join".
 - [ ] Add **Email/mailto share** and **native share-sheet** handoff — _done when:_ Email opens a prefilled mailto with the room link and, on supported devices, a Share action invokes the OS share sheet.
 - [ ] Add the **"anyone with the link can edit" permission toggle** with "No signup required" helper — _done when:_ toggling access changes link-joiner edit rights, the state persists on the room, and the helper text + shield/check icon render.
 - [ ] Place link/QR **joiners at a sensible viewport** with a join toast — _done when:_ a user joining via link/QR lands zoomed-to-fit (or at the inviter's spotlight view) and all peers see a join toast.

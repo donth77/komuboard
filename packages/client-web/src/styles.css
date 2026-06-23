@@ -244,6 +244,75 @@ body {
     transition: none;
   }
 }
+/* ── Reconnection banner — top-center "Reconnecting…" / "Back online" pill (see ui/connection-banner.ts) ── */
+.conn-banner {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 16px;
+  font:
+    600 13px Inter,
+    system-ui,
+    sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-6px);
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease),
+    visibility var(--dur);
+}
+.conn-banner.in {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+.conn-banner[data-mode="online"] {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 40%, var(--border));
+}
+.conn-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-top-color: var(--accent);
+  animation: conn-spin 0.7s linear infinite;
+}
+@keyframes conn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.conn-check {
+  color: var(--good);
+  font-weight: 800;
+}
+@media (prefers-reduced-motion: reduce) {
+  .conn-banner {
+    transform: translateX(-50%);
+    transition:
+      opacity var(--dur) var(--ease),
+      visibility var(--dur);
+  }
+  .conn-banner.in {
+    transform: translateX(-50%);
+  }
+  .conn-spinner {
+    animation: none;
+  }
+}
 .share-body {
   display: flex;
   flex-direction: column;

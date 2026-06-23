@@ -37,6 +37,7 @@ import "./tooltip"; // body-level singleton tooltip for every [data-tip] element
 import { icon } from "./icons";
 import { createProfileDialog } from "./ui/profile";
 import { maybeShowIdentityNudge } from "./ui/identity-nudge";
+import { createConnectionBanner } from "./ui/connection-banner";
 import { createShareDialog } from "./ui/share";
 import { paintProfile } from "./util";
 import { SWATCHES } from "./palette";
@@ -634,8 +635,12 @@ document.addEventListener("click", (e) => {
 // --------------------------------------------------------------------------
 // Status / presence dev readout.
 // --------------------------------------------------------------------------
+// A dropped-then-restored connection surfaces a top-center "Reconnecting…" → "Back online" pill
+// (offline edits are buffered in the Yjs doc and resync automatically). Silent on first connect.
+const connBanner = createConnectionBanner();
 store.subscribe((state) => {
   topbar?.setStatus(state.status);
+  connBanner.update(state.status);
 });
 
 // Presence avatar row — avatars from awareness; click your own to rename.
