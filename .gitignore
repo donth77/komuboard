@@ -40,3 +40,7 @@ Thumbs.db
 
 # Noto emoji SVGs — fetched offline via scripts/fetch-emoji.sh (not committed)
 packages/client-web/public/emoji/
+
+# Planning artifacts (design docs + UI mockups) — kept locally, not committed to the repo.
+/docs/
+/mockups/

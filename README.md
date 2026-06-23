@@ -4,33 +4,6 @@
 
 **Komuboard** is a free-to-run, realtime, online collaborative whiteboard that works everywhere: desktop (mouse), mobile/tablet (touch), and VR headsets (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence — no signup. The same board document is the single source of truth shared by both the 2D web renderer and the immersive 3D VR renderer, so what you sketch on a phone shows up on a headset and vice versa, in real time.
 
-> Note: "Komuboard" is a working/placeholder name — feel free to rename it before launch. (The repository directory is currently `whiteboard-vr`, which is historical and shares a name with reference product #1 "Whiteboard VR"; the product itself is **Komuboard**.)
-
-## What is this?
-
-This repository began as a **planning package** and now also carries the **M0 code foundations** under `packages/`. It holds the canonical design and architecture documents that define what Komuboard is, how it looks, how it's built, how it stays free, and how it gets shipped. Use it to align on scope and architecture before the first line of product code lands. `docs/index.html` is an **interactive combined view of all the documents** — open it in a browser to read the whole package with navigation, rather than opening each Markdown file individually. The document text renders fully offline; the embedded architecture/sequence **diagrams fetch a renderer from a CDN, so they need an internet connection on first load**.
-
-## Documents
-
-Read in numeric order; each doc cross-links the others.
-
-| #   | Document                                                                                                         | What it covers                                                                                                                                                                                      |
-| --- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| —   | [README.md](./README.md)                                                                                         | This index: pitch, doc map, stack, repo plan, quickstart.                                                                                                                                           |
-| 01  | [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md)                           | Vision, problem, target users + jobs-to-be-done, the 4 reference products, competitive comparison, guiding principles, glossary.                                                                    |
-| 02  | [docs/02-features-and-scope.md](./docs/02-features-and-scope.md)                                                 | Full feature catalog, MoSCoW, the 3 phases with user stories + acceptance criteria, non-goals, feature-to-reference traceability.                                                                   |
-| 03  | [docs/03-visual-design-ui-ux.md](./docs/03-visual-design-ui-ux.md)                                               | Design language + tokens, component inventory, desktop/mobile/VR layouts + wireframes, keyboard shortcuts, cursor/presence UX, accessibility.                                                       |
-| 04  | [docs/04-technical-architecture.md](./docs/04-technical-architecture.md)                                         | System + component diagrams, Yjs data model, sync + awareness protocol, Durable Object design, persistence, R2, VR rendering, sequence diagrams.                                                    |
-| 05  | [docs/05-scaling-and-cost.md](./docs/05-scaling-and-cost.md)                                                     | Free-tier limit tables, the cost-model math (20:1 rule, hibernation), concurrency/capacity estimates, partysub sharding, the "$0 today" upgrade path.                                               |
-| 06  | [docs/06-implementation-roadmap.md](./docs/06-implementation-roadmap.md)                                         | Milestones M0–M5, granular task checklists, repo layout, CI/CD, testing strategy, risk register, KPIs, definition-of-done.                                                                          |
-| 07  | [docs/07-engineering-quality-security-accessibility.md](./docs/07-engineering-quality-security-accessibility.md) | Performance & optimization, code maintainability, security & privacy, deep accessibility (WCAG 2.2 AA + XR), and a potential-issues / challenges register.                                          |
-| 08  | [docs/08-localization-i18n-plan.md](./docs/08-localization-i18n-plan.md)                                         | Localization / i18n plan: why React isn't required, the vanilla `data-i18n` sweep + change-notifier, dynamic-string handling, Konva/VR text, plurals via `Intl`, string inventory, migration steps. |
-| 09  | [docs/09-tech-debt-and-audit-backlog.md](./docs/09-tech-debt-and-audit-backlog.md)                               | Live tech-debt / audit backlog: concrete file-level findings from the M1 performance / quality / organization audits — what's addressed vs remaining, with severities and recommended timing.       |
-
-## UI mockups
-
-The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockups** and matching **PNG screenshots** of the interface: **desktop** canvas + toolbar, **mobile/tablet** touch layout, **VR window mode**, the first-run **onboarding** flow, and the **design-token** style tile — plus an **aidesigner-generated alternative** mockup. `docs/index.html` includes a **Mockups gallery** so you can browse them all (and the screenshots) alongside the documents in one view.
-
 ## Headline features
 
 - **Infinite pan/zoom canvas** with freehand pen/marker (color, thickness), sticky notes, shapes (rectangle, ellipse, line, arrow), and text.
@@ -44,7 +17,7 @@ The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockup
 
 - **Language + build:** TypeScript everywhere; Vite; pnpm workspaces monorepo.
 - **Shared document / CRDT:** Yjs (single source of truth) + `y-protocols/awareness` for ephemeral presence (cursors, selections, VR avatar poses, cursor-chat).
-- **2D renderer:** custom renderer bound to the Yjs doc, drawn with Konva.js (Canvas 2D), with a documented migration path to PixiJS (WebGL).
+- **2D renderer:** custom renderer bound to the Yjs doc (DOM-unified for per-object z-order), with a documented migration path to WebGL.
 - **Realtime backend:** Cloudflare Workers + Durable Objects; PartyServer (one room per DO) + Y-PartyServer (per-room Yjs doc); PartySocket on the client; partysub to shard very large rooms.
 - **Persistence:** Yjs update log + compacted snapshots in DO SQLite storage; uploaded assets in Cloudflare R2; optional D1 for a room index.
 - **VR layer:** A-Frame + Three.js (WebXR) — board as a textured 3D surface, strokes written into the same Yjs doc, avatars + cursors synced via awareness.
@@ -52,59 +25,21 @@ The [`mockups/`](./mockups/) folder holds clickable, high-fidelity **HTML mockup
 - **Auth:** anonymous-first (room id in URL); optional named accounts later.
 - **Client libs + tooling:** Lucide icons; light state store (Zustand/signals); **React optional** (acceptable for toolbar/panels, not part of the canonical renderer stack); Vitest (unit), Playwright (e2e + multiplayer); GitHub Actions → `wrangler deploy` + Pages deploy.
 
-## Reference products
-
-Komuboard learns from four products — see [docs/01](./docs/01-product-vision-and-references.md) for what we borrow from each.
-
-1. [Whiteboard VR — Online Collaboration](https://devpost.com/software/whiteboard-vr-online-collaboration) ([source](https://github.com/marlon360/whiteboard-vr)) — our closest spiritual predecessor: cross-reality + room-code, no signup.
-2. [Figma FigJam](https://www.figma.com/figjam/) — cursor chat, stamps, spotlight, clean infinite canvas.
-3. [Miro](https://miro.com/online-whiteboard/) — shape/connector/template breadth, voting, timer, presentation mode.
-4. [Canva Whiteboards](https://www.canva.com/online-whiteboard/) — sticky-note Sort, colorful labeled cursors, AI summarize.
-
-**Komuboard's differentiator:** truly free-to-self-host on edge infra, and a single shared document across 2D and immersive VR.
-
-## Run it for $0
-
-Komuboard is designed to host **and** run for $0 on a single Cloudflare account at meaningful concurrency. Static assets (the SPA + A-Frame/VR bundles) serve from Cloudflare Pages' global CDN, which does not consume Worker requests. Realtime collaboration runs on Workers + Durable Objects: one Durable Object per room (PartyServer + Y-PartyServer), using the WebSocket Hibernation API so idle rooms stop accruing duration charges while clients stay connected. Cursor/presence traffic is ephemeral awareness, throttled and binary-encoded to respect the 20:1 inbound-WebSocket billing ratio and the free request budget; content edits persist as compact Yjs updates in the DO's SQLite storage, and uploaded images live in R2 (zero egress). See [docs/05-scaling-and-cost.md](./docs/05-scaling-and-cost.md) for the full math, capacity tables, and the upgrade path. _Exact free-tier figures change — verify against current Cloudflare docs._
-
-## Planned repo structure
+## Repo structure
 
 ```text
 komuboard/
-├── README.md                 # this index
-├── docs/                     # the planning package (01–08)
-│   ├── index.html            # interactive combined view of all docs
-│   ├── 01-product-vision-and-references.md
-│   ├── 02-features-and-scope.md
-│   ├── 03-visual-design-ui-ux.md
-│   ├── 04-technical-architecture.md
-│   ├── 05-scaling-and-cost.md
-│   ├── 06-implementation-roadmap.md
-│   ├── 07-engineering-quality-security-accessibility.md
-│   ├── 08-localization-i18n-plan.md
-│   ├── 09-tech-debt-and-audit-backlog.md
-│   └── adr/                  # architecture decision records (one per ratified decision)
-├── mockups/                  # high-fidelity HTML UI mockups + PNG screenshots
-│   ├── desktop.html          # desktop canvas + toolbar mockup (+ desktop.png)
-│   ├── mobile.html           # mobile/tablet touch layout (+ mobile.png)
-│   ├── vr.html               # VR window-mode mockup (+ vr.png)
-│   ├── onboarding.html       # first-run / room-join onboarding (+ onboarding.png)
-│   ├── tokens.html           # design-token style tile (+ tokens.png)
-│   ├── tokens.css            # shared design tokens consumed by every mockup
-│   ├── img/                  # PNG screenshots of each mockup
-│   └── ai/                   # AI-generated alternative mockup (aidesigner, HTML)
+├── README.md                 # this file
 ├── package.json              # pnpm workspace root
 ├── pnpm-workspace.yaml
 └── packages/
-    ├── client-web/           # 2D SPA: Konva renderer bound to Yjs, toolbar/panels
+    ├── client-web/           # 2D SPA: renderer bound to Yjs, toolbar/panels
     ├── vr/                   # A-Frame + Three.js WebXR renderer (same Yjs doc)
     ├── shared/               # shared types, Yjs schema, awareness protocol, utils
     └── worker/               # Cloudflare Worker + Durable Object (PartyServer / Y-PartyServer)
 ```
 
 ## Dev quickstart
-
-> **Status:** M1 in progress — a pnpm monorepo with a deployable Cloudflare Worker + Durable Object (Y-PartyServer) syncing a per-room Yjs document, and a Vite web client with a Konva canvas: freehand pen, select/move/resize, infinite pan/zoom, and live cursors + presence + shared selections. See [docs/06](./docs/06-implementation-roadmap.md) for the roadmap.
 
 ```bash
 # Install all workspace dependencies (Node 22+, pnpm 9)
@@ -116,10 +51,10 @@ pnpm dev
 
 # Quality gates
 pnpm typecheck && pnpm lint && pnpm test   # vitest unit tests
-pnpm test:e2e                              # boots worker + web, asserts the WS echo
+pnpm test:e2e                              # boots worker + web, asserts realtime sync
 
 # Deploy the realtime backend (requires a Cloudflare account)
 pnpm --filter @komuboard/worker deploy
 ```
 
-Welcome aboard. Start with [docs/01-product-vision-and-references.md](./docs/01-product-vision-and-references.md), or open `docs/index.html` for the full interactive read.
+Welcome aboard — `pnpm install && pnpm dev`, then open two tabs on the same room and draw.

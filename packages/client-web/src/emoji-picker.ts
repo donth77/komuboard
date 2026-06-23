@@ -1,4 +1,4 @@
-// <komu-emoji-picker> — the FigJam-style emoji picker opened from the stamp wheel's "+". Category tabs +
+// <komu-emoji-picker> — the emoji picker opened from the stamp wheel's "+". Category tabs +
 // search + a lazy Noto-SVG grid (served from /emoji/<codepoint>.svg). Picking emits `emoji-pick`
 // (detail.cp = codepoint) → main.ts → canvas.setStamp("emoji:<cp>") + recents. Light DOM.
 import GROUPS from "./emoji-data.json";
