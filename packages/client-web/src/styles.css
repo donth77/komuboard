@@ -313,6 +313,59 @@ body {
     animation: none;
   }
 }
+/* ── Join toasts — bottom-center "<name> joined" stack (see ui/join-toast.ts) ─────────────────────── */
+.join-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  z-index: 44;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.join-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 15px;
+  font:
+    500 13px Inter,
+    system-ui,
+    sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 8px 22px -10px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.join-toast.in {
+  opacity: 1;
+  transform: none;
+}
+.join-toast b {
+  font-weight: 700;
+}
+.join-toast-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .join-toast {
+    transform: none;
+    transition: opacity var(--dur) var(--ease);
+  }
+}
 .share-body {
   display: flex;
   flex-direction: column;

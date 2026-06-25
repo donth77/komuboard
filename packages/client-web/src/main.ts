@@ -38,6 +38,7 @@ import { icon } from "./icons";
 import { createProfileDialog } from "./ui/profile";
 import { maybeShowIdentityNudge } from "./ui/identity-nudge";
 import { createConnectionBanner } from "./ui/connection-banner";
+import { createJoinToasts } from "./ui/join-toast";
 import { createShareDialog } from "./ui/share";
 import { paintProfile } from "./util";
 import { SWATCHES } from "./palette";
@@ -646,6 +647,33 @@ store.subscribe((state) => {
 // Presence avatar row — avatars from awareness; click your own to rename.
 const presenceRowEl = document.querySelector("komu-avatar-presence-row");
 if (presenceRowEl) presenceRowEl.max = 7; // show up to 7 avatars, then a clickable "+N" overflow
+
+// Join toasts: announce peers who arrive *after* the room's initial roster settles, so the people
+// already present when you connect don't all toast at once. Keyed by stable identity id (not
+// clientId) so one toast per person, not per tab.
+const joinToasts = createJoinToasts();
+const knownPeerIds = new Set<string>();
+let joinReady = false;
+let joinSettleStarted = false;
+provider.on("sync", () => {
+  if (joinSettleStarted) return;
+  joinSettleStarted = true;
+  window.setTimeout(() => {
+    joinReady = true;
+  }, 800);
+});
+function detectJoins(list: PresencePerson[]): void {
+  const present = new Set<string>();
+  for (const p of list) {
+    if (p.me) continue;
+    present.add(p.id);
+    if (knownPeerIds.has(p.id)) continue;
+    knownPeerIds.add(p.id);
+    if (joinReady) joinToasts.show(p.name, p.color);
+  }
+  for (const id of [...knownPeerIds]) if (!present.has(id)) knownPeerIds.delete(id); // a rejoin re-toasts
+}
+
 let lastPresenceKey = "";
 function renderPresenceRow(): void {
   if (!presenceRowEl) return;
@@ -682,6 +710,7 @@ function renderPresenceRow(): void {
   if (key === lastPresenceKey) return;
   lastPresenceKey = key;
   presenceRowEl.people = list; // the <komu-avatar-presence-row> element renders + animates
+  detectJoins(list); // membership changed → check for newcomers to toast
 }
 provider.awareness.on("change", renderPresenceRow);
 renderPresenceRow();
@@ -770,6 +799,28 @@ function updateConn(): void {
 }
 provider.on("status", updateConn);
 provider.on("sync", updateConn);
+
+// Land a link/QR joiner on the board's content: zoom-to-fit once, on the first sync, when the board
+// already has content and they haven't started interacting. Only on the *initial* sync — never on
+// later edits, which would yank the viewport mid-work. Suppressed in e2e (geometry tests assume 100%).
+const autoFitEnabled =
+  (window as Window & { __komuboardAutoFit?: boolean }).__komuboardAutoFit !== false;
+let didInitialFit = false;
+let userMovedViewport = false;
+const markViewportMoved = (): void => {
+  userMovedViewport = true;
+};
+boardEl.addEventListener("pointerdown", markViewportMoved, { capture: true, once: true });
+boardEl.addEventListener("wheel", markViewportMoved, { capture: true, once: true, passive: true });
+provider.on("sync", () => {
+  if (!autoFitEnabled || didInitialFit || userMovedViewport) return;
+  if (ydoc.getMap("objects").size === 0) return; // empty board → nothing to frame
+  didInitialFit = true;
+  requestAnimationFrame(() => {
+    if (!userMovedViewport) canvas.zoomToFit();
+  });
+});
+
 let lastConnCount = -1;
 provider.awareness.on("change", () => {
   // Connection state doesn't change at cursor frequency; only react when the peer count

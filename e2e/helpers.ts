@@ -49,25 +49,29 @@ export function uniqueRoom(prefix: string): string {
 /**
  * Open a page in its own browser context, join `room`, and wait until it's connected.
  *
- * Each context starts with empty storage, so the first-run identity nudge would otherwise pop up in
- * every test (and can overlap the top-right chrome). It's suppressed by default; pass
- * `{ showNudge: true }` in the dedicated nudge test to see it.
+ * Each context starts with empty storage. Two onboarding behaviours are suppressed by default so
+ * they don't perturb other suites: the first-run identity nudge (it can overlap the top-right
+ * chrome) and the auto zoom-to-fit on join (geometry tests assume a fixed 100% viewport). Opt in
+ * per-feature with `{ showNudge: true }` / `{ autoFit: true }`.
  */
 export async function connectPeer(
   browser: Browser,
   room: string,
-  opts?: { showNudge?: boolean },
+  opts?: { showNudge?: boolean; autoFit?: boolean },
 ): Promise<Peer> {
   const ctx = await browser.newContext();
-  if (!opts?.showNudge) {
-    await ctx.addInitScript(() => {
+  await ctx.addInitScript(
+    (o) => {
       try {
-        localStorage.setItem("komuboard-identity-nudged", "1");
+        if (!o.showNudge) localStorage.setItem("komuboard-identity-nudged", "1");
+        if (!o.autoFit)
+          (window as unknown as { __komuboardAutoFit?: boolean }).__komuboardAutoFit = false;
       } catch {
-        /* storage blocked — nudge is harmless anyway */
+        /* storage blocked — these are best-effort test conveniences */
       }
-    });
-  }
+    },
+    { showNudge: !!opts?.showNudge, autoFit: !!opts?.autoFit },
+  );
   const page = await ctx.newPage();
   await page.goto(`/?room=${room}`);
   await page.waitForFunction(
