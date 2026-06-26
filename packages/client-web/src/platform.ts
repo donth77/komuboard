@@ -16,3 +16,11 @@ export const IS_MAC = detectMac();
 export const MOD_KEY = IS_MAC ? "⌘" : "Ctrl";
 export const ALT_KEY = IS_MAC ? "⌥" : "Alt";
 export const SHIFT_KEY = IS_MAC ? "⇧" : "Shift";
+
+/**
+ * The media query that drives the touch layout: narrow phones (by width) OR any coarse-pointer device
+ * (tablets). Keyed off input type, not just width, because a tablet has no keyboard — so the
+ * keyboard-only desktop actions need their on-screen touch affordances there too. The CSS `@media`
+ * blocks mirror this string.
+ */
+export const TOUCH_MEDIA = "(max-width: 640px), (pointer: coarse)";

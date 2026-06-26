@@ -18,7 +18,7 @@ import {
 import { BoardCanvas, type ToolId } from "./canvas";
 import { createAppStore } from "./store";
 import { createDialog } from "./dialog";
-import { MOD_KEY, SHIFT_KEY } from "./platform";
+import { MOD_KEY, SHIFT_KEY, TOUCH_MEDIA } from "./platform";
 import { settingsControlsHTML, syncSettingsControls } from "./settings-controls";
 import "./avatar-presence-row";
 import type { PresencePerson } from "./avatar-presence-row";
@@ -237,7 +237,7 @@ const emojiPickerEl = document.querySelector("komu-emoji-picker");
 // The "Shapes and lines" menu has two groups: shape boxes (placed) and connectors (drawn as arrows).
 const DRAWABLE_SHAPES = new Set(["rectangle", "ellipse", "rhombus", "triangle"]);
 const CONNECTOR_KINDS = new Set(["line", "arrow", "elbow", "block"]);
-const mobileMql = window.matchMedia("(max-width: 640px)");
+const mobileMql = window.matchMedia(TOUCH_MEDIA);
 let currentTool: ToolId = "select";
 
 // Mobile selection action bar — fills the bottom tool-sheet slot when an object is selected on the
@@ -418,7 +418,7 @@ const shortcutsDialog = createDialog({
     `<div class="kbd-row"><span>Group / ungroup</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">G</kbd> / <kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">G</kbd></span></div>` +
     `<div class="kbd-row"><span>Lock / unlock (toggle)</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">L</kbd></span></div>` +
     '<div class="kbd-row"><span>Rotate (±15° / ±90° with Shift)</span><span><kbd class="kbd">[</kbd> / <kbd class="kbd">]</kbd></span></div>' +
-    `<div class="kbd-row"><span>Bring to front / send to back</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">]</kbd> / <kbd class="kbd">[</kbd></span></div>` +
+    `<div class="kbd-row"><span>Bring to front / send to back</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">]</kbd> / <kbd class="kbd">[</kbd></span></div>` +
     `<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     `<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     '<div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
@@ -479,18 +479,17 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     return;
   }
-  // ⌘⇧] bring to front · ⌘⇧[ send to back (z-order). Checked before the plain-bracket rotate below.
-  if (
-    (e.metaKey || e.ctrlKey) &&
-    e.shiftKey &&
-    (e.code === "BracketLeft" || e.code === "BracketRight")
-  ) {
+  // ⌘] bring to front · ⌘[ send to back (z-order). NOT the ⇧ variant — macOS Chrome/Safari grab
+  // ⌘⇧[ / ⌘⇧] for tab switching before the page sees them (un-preventable). ⌘[ / ⌘] map to history
+  // back/forward, which IS preventable; we only override it when there's a selection. Checked before
+  // the plain-bracket rotate below.
+  if ((e.metaKey || e.ctrlKey) && (e.code === "BracketLeft" || e.code === "BracketRight")) {
     if (canvas.hasSelection()) {
       if (e.code === "BracketRight") canvas.bringSelectionToFront();
       else canvas.sendSelectionToBack();
       e.preventDefault();
     }
-    return;
+    return; // no selection → fall through to the browser's native history nav
   }
   // [ / ] rotate the selection by ±15° about its centre; Shift = ±90°. Uses e.code so Shift+[ (which
   // yields "{") still registers as the left bracket. No modifier → distinct from the ⌘⇧ z-order above.
@@ -674,6 +673,10 @@ function openShare(): void {
 }
 topbar?.addEventListener("share-board", openShare);
 drawer?.addEventListener("share", openShare); // mobile overflow drawer item (if present)
+
+// On-screen undo/redo (touch layout) — the same actions as ⌘Z / ⌘⇧Z, for devices with no keyboard.
+topbar?.addEventListener("undo", () => canvas.undo());
+topbar?.addEventListener("redo", () => canvas.redo());
 
 // "Edit profile" (the dropdown + drawer item) → open the profile editor by re-dispatching the
 // avatar row's `rename` intent, so it works even when that row is hidden (e.g. when solo).

@@ -2,10 +2,11 @@ import { expect, test } from "@playwright/test";
 import { calibrate, connectPeer, injectSticky, orderIds, uniqueRoom } from "./helpers";
 
 /**
- * Z-order keyboard shortcuts (desktop): ⌘⇧] brings the selection to the front of the order array
- * (rendered last = on top), ⌘⇧[ sends it to the back. See main.ts + schema bringToFront/sendToBack.
+ * Z-order keyboard shortcuts (desktop): ⌘] brings the selection to the front of the order array
+ * (rendered last = on top), ⌘[ sends it to the back. (No Shift — macOS Chrome grabs ⌘⇧[ / ⌘⇧] for
+ * tab switching before the page can preventDefault.) See main.ts + schema bringToFront/sendToBack.
  */
-test("z-order: cmd-shift-] brings to front, cmd-shift-[ sends to back", async ({ browser }) => {
+test("z-order: cmd-] brings to front, cmd-[ sends to back", async ({ browser }) => {
   const a = await connectPeer(browser, uniqueRoom("zkbd"));
   const box = (await a.page.locator("#board").boundingBox())!;
   const cx = box.x + box.width / 2;
@@ -20,10 +21,10 @@ test("z-order: cmd-shift-] brings to front, cmd-shift-[ sends to back", async ({
   await a.page.mouse.click(cx, cy); // select s1 (the back one)
   const mod = process.platform === "darwin" ? "Meta" : "Control";
 
-  await a.page.keyboard.press(`${mod}+Shift+BracketRight`); // bring to front
+  await a.page.keyboard.press(`${mod}+BracketRight`); // bring to front
   await expect.poll(() => orderIds(a.page)).toEqual(["s2", "s1"]);
 
-  await a.page.keyboard.press(`${mod}+Shift+BracketLeft`); // send to back
+  await a.page.keyboard.press(`${mod}+BracketLeft`); // send to back
   await expect.poll(() => orderIds(a.page)).toEqual(["s1", "s2"]);
 
   await a.close();

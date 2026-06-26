@@ -57,11 +57,20 @@ export function uniqueRoom(prefix: string): string {
 export async function connectPeer(
   browser: Browser,
   room: string,
-  opts?: { showNudge?: boolean; autoFit?: boolean; viewport?: { width: number; height: number } },
+  opts?: {
+    showNudge?: boolean;
+    autoFit?: boolean;
+    viewport?: { width: number; height: number };
+    /** Emulate a coarse-pointer touch device (Chromium mobile emulation) — for the tablet tests,
+     *  where the touch chrome is gated on `pointer: coarse`, not width. */
+    touch?: boolean;
+  },
 ): Promise<Peer> {
-  // A manually-created context ignores test.use({ viewport }), so pass it through explicitly (the
-  // mobile suites need a ≤640px phone viewport to get the mobile chrome).
-  const ctx = await browser.newContext(opts?.viewport ? { viewport: opts.viewport } : {});
+  // A manually-created context ignores test.use({ viewport }), so pass options through explicitly.
+  const ctx = await browser.newContext({
+    ...(opts?.viewport ? { viewport: opts.viewport } : {}),
+    ...(opts?.touch ? { hasTouch: true, isMobile: true } : {}),
+  });
   await ctx.addInitScript(
     (o) => {
       try {

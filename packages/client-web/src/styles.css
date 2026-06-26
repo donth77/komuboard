@@ -99,6 +99,11 @@ body {
 .spacer {
   flex: 1;
 }
+/* On-screen undo/redo cluster — hidden on desktop (keyboard), shown on the touch layout (see below). */
+.tb-history {
+  display: none;
+  gap: 6px;
+}
 .dot {
   width: 9px;
   height: 9px;
@@ -372,7 +377,8 @@ body {
 .selection-actions {
   display: none;
 }
-@media (max-width: 640px) {
+/* Touch layout: narrow phones OR any coarse-pointer device (tablets — no keyboard for the shortcuts). */
+@media (max-width: 640px), (pointer: coarse) {
   .selection-actions {
     display: flex; /* override the base; .mini-sheet makes it a flush, sliding column */
     background: var(--surface);
@@ -2330,9 +2336,10 @@ input[type="range"] {
 }
 
 /* ====================================================================
-   Mobile (≤640px) — last in the file so every override wins on order.
+   Touch layout — phones (≤640px) OR any coarse-pointer device (tablets, which have no keyboard for
+   the desktop shortcuts). Last in the file so every override wins on order.
    ==================================================================== */
-@media (max-width: 640px) {
+@media (max-width: 640px), (pointer: coarse) {
   /* Every mobile mini-sheet (draw bar, sticky palette, shape menu) shares this: it lives in a
      .sheet-wrap clip whose bottom edge is the dock's top, so it expands out of / collapses into the
      toolbar. A grab handle drives the drag-to-collapse (wireSheetHandle in mobile-sheet.ts). Their
@@ -2398,6 +2405,10 @@ input[type="range"] {
   }
   .nav-btn {
     display: inline-grid;
+  }
+  /* on-screen undo/redo — the touch layout's keyboard-shortcut substitute */
+  .tb-history {
+    display: flex;
   }
 
   /* tool dock → centered bottom bar (clears the home indicator) */

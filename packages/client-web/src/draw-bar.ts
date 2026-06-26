@@ -9,6 +9,7 @@ import type { StrokeStyle } from "@komuboard/shared";
 import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
 import { wireSheetHandle } from "./mobile-sheet";
+import { TOUCH_MEDIA } from "./platform";
 
 /** The `pen-change` event detail — only the changed field(s) are present. */
 export interface PenChange {
@@ -152,7 +153,7 @@ export class CoDrawBar extends HTMLElement {
     this.#pop = pop;
     this.#wirePop(which, pop);
     const r = anchor.getBoundingClientRect();
-    if (window.matchMedia("(max-width: 640px)").matches) {
+    if (window.matchMedia(TOUCH_MEDIA).matches) {
       // mobile: the bar is a bottom sheet → open the popover UPWARD, centered over the button
       const w = pop.offsetWidth;
       const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
@@ -259,7 +260,7 @@ export class CoDrawBar extends HTMLElement {
     this.#picker.value = this.#color || "#1E1E1E";
     this.#picker.classList.remove("hidden"); // un-hide first so offsetHeight/Width are measurable
     const r = anchorPop.getBoundingClientRect();
-    if (window.matchMedia("(max-width: 640px)").matches) {
+    if (window.matchMedia(TOUCH_MEDIA).matches) {
       // mobile: right-align the picker with the colour popover and stack it ABOVE (not over) it,
       // so both stay visible — picker on top, then the palette, then the sheet.
       const w = this.#picker.offsetWidth || 232;

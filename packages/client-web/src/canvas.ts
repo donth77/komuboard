@@ -1657,14 +1657,14 @@ export class BoardCanvas {
     const allLocked = ids.every((id) => this.objects.get(id)?.get("locked") === true);
     this.setSelectionLocked(!allLocked);
   }
-  /** Bring the selection to the front of the z-order (mobile action bar + ⌘⇧]). */
+  /** Bring the selection to the front of the z-order (mobile action bar + ⌘]). */
   bringSelectionToFront(): void {
     const ids = this.selectionIds();
     if (!ids.length) return;
     bringToFront(this.opts.doc, ids);
     this.reattachTransformer();
   }
-  /** Send the selection to the back of the z-order (mobile action bar + ⌘⇧[). */
+  /** Send the selection to the back of the z-order (mobile action bar + ⌘[). */
   sendSelectionToBack(): void {
     const ids = this.selectionIds();
     if (!ids.length) return;
