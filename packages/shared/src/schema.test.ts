@@ -5,6 +5,7 @@ import {
   addStamp,
   addStroke,
   addText,
+  bringToFront,
   cloneObject,
   DEFAULT_CONNECTOR_WIDTH,
   DEFAULT_TEXT_SIZE,
@@ -12,6 +13,7 @@ import {
   deleteObjects,
   expandGroups,
   groupObjects,
+  sendToBack,
   objectsMap,
   orderArray,
   readObject,
@@ -147,6 +149,45 @@ describe("delete / translate / setObjectsPoints", () => {
     addStroke(doc, stroke("s1", [0, 0]));
     setObjectsPoints(doc, [{ id: "s1", points: [9, 9, 8, 8] }]);
     expect(asStroke(readObject(objectsMap(doc).get("s1")!)).points).toEqual([9, 9, 8, 8]);
+  });
+});
+
+describe("z-order: bringToFront / sendToBack", () => {
+  it("bringToFront moves ids to the end of the order array (front = rendered on top)", () => {
+    const doc = new Y.Doc();
+    for (const id of ["a", "b", "c", "d"]) addStroke(doc, stroke(id));
+    bringToFront(doc, ["a"]);
+    expect(orderArray(doc).toArray()).toEqual(["b", "c", "d", "a"]);
+  });
+
+  it("sendToBack moves ids to the start", () => {
+    const doc = new Y.Doc();
+    for (const id of ["a", "b", "c", "d"]) addStroke(doc, stroke(id));
+    sendToBack(doc, ["d"]);
+    expect(orderArray(doc).toArray()).toEqual(["d", "a", "b", "c"]);
+  });
+
+  it("preserves the relative order of multiple moved ids", () => {
+    const doc = new Y.Doc();
+    for (const id of ["a", "b", "c", "d"]) addStroke(doc, stroke(id));
+    bringToFront(doc, ["b", "a"]); // a precedes b in the array → stays a-before-b at the front
+    expect(orderArray(doc).toArray()).toEqual(["c", "d", "a", "b"]);
+  });
+
+  it("skips locked objects", () => {
+    const doc = new Y.Doc();
+    for (const id of ["a", "b", "c"]) addStroke(doc, stroke(id));
+    setLocked(doc, ["a"], true);
+    bringToFront(doc, ["a"]);
+    expect(orderArray(doc).toArray()).toEqual(["a", "b", "c"]); // unchanged
+  });
+
+  it("no-ops on an empty or unknown selection", () => {
+    const doc = new Y.Doc();
+    addStroke(doc, stroke("a"));
+    bringToFront(doc, []);
+    sendToBack(doc, ["nope"]);
+    expect(orderArray(doc).toArray()).toEqual(["a"]);
   });
 });
 

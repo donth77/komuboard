@@ -57,9 +57,11 @@ export function uniqueRoom(prefix: string): string {
 export async function connectPeer(
   browser: Browser,
   room: string,
-  opts?: { showNudge?: boolean; autoFit?: boolean },
+  opts?: { showNudge?: boolean; autoFit?: boolean; viewport?: { width: number; height: number } },
 ): Promise<Peer> {
-  const ctx = await browser.newContext();
+  // A manually-created context ignores test.use({ viewport }), so pass it through explicitly (the
+  // mobile suites need a ≤640px phone viewport to get the mobile chrome).
+  const ctx = await browser.newContext(opts?.viewport ? { viewport: opts.viewport } : {});
   await ctx.addInitScript(
     (o) => {
       try {
@@ -96,11 +98,18 @@ export async function drawStroke(page: Page): Promise<{ cx: number; cy: number }
   return { cx, cy };
 }
 
-/** Object ids in a page's Yjs doc, in z-order. */
+/** Object ids in a page's Yjs doc (objects-map insertion order — NOT z-order). */
 export function objectIds(page: Page): Promise<string[]> {
   return page.evaluate(() => [
     ...(window as unknown as BoardWindow).__komuboard.doc.getMap("objects").keys(),
   ]);
+}
+
+/** Object ids in z-order: the `order` array, front (on top) = last. */
+export function orderIds(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    (window as unknown as BoardWindow).__komuboard.doc.getArray("order").toArray(),
+  );
 }
 
 /** Number of remote-peer selection outlines currently rendered on a page (-1 if canvas not ready). */

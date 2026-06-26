@@ -21,7 +21,7 @@ export function createShareDialog(roomUrl: string): CoDialog {
 
   const cap = document.createElement("p");
   cap.className = "share-cap";
-  cap.textContent = "Scan to join";
+  cap.textContent = "Scan for link";
 
   // Room link + Copy.
   const row = document.createElement("div");

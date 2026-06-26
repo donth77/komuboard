@@ -21,7 +21,7 @@ test("share: the topbar button opens a dialog with the room link, a QR, and Copy
 
   // A QR code is rendered locally (an SVG), plus the join caption + no-signup helper.
   expect(await a.page.locator(".share-qr svg").count()).toBe(1);
-  await expect(a.page.locator(".share-cap")).toContainText("Scan to join");
+  await expect(a.page.locator(".share-cap")).toContainText("Scan for link");
   await expect(a.page.locator(".share-helper")).toContainText("anyone with the link can edit");
 
   await a.page.screenshot({ path: "test-results/share-dialog.png" });

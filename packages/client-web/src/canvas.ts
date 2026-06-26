@@ -9,6 +9,7 @@ import {
   addStamp,
   CONNECTOR_SIDES,
   DEFAULT_CONNECTOR_COLOR,
+  bringToFront,
   DEFAULT_CONNECTOR_WIDTH,
   DEFAULT_SHAPE_FILL,
   DEFAULT_STAMP_SIZE,
@@ -16,6 +17,7 @@ import {
   defaultCapsFor,
   deleteObjects,
   groupObjects,
+  sendToBack,
   objectsMap,
   orderArray,
   randomId,
@@ -56,6 +58,8 @@ export interface CanvasOptions {
   onPlaced?: () => void;
   /** Fired after a stamp is placed, with its src — the host can bump the emoji recents. */
   onStampPlaced?: (src: string) => void;
+  /** localStorage key for persisting this board's camera (pan/zoom) across reloads; omitted = none. */
+  viewKey?: string;
 }
 
 const CURSOR_HZ = 30;
@@ -357,14 +361,19 @@ export class BoardCanvas {
     this.uiLayer.add(this.highlightGroup);
 
     // Camera owns the stage transform; re-sync our viewport-dependent chrome on any change.
-    this.viewport = new ViewportController(this.stage, opts.container, () => {
-      this.scaleCursors();
-      this.syncCursorStage(); // keep the cursor stage locked to the camera
-      this.renderSelectionBoxes();
-      this.renderRemoteSelections(true); // zoom changes screen-space geometry → force rebuild
-      this.textLayer.syncTransform(); // keep HTML text boxes (incl. connector <svg>) locked to the camera
-      this.updateConnectorChrome(); // keep the endpoint handles locked to the camera
-    });
+    this.viewport = new ViewportController(
+      this.stage,
+      opts.container,
+      () => {
+        this.scaleCursors();
+        this.syncCursorStage(); // keep the cursor stage locked to the camera
+        this.renderSelectionBoxes();
+        this.renderRemoteSelections(true); // zoom changes screen-space geometry → force rebuild
+        this.textLayer.syncTransform(); // keep HTML text boxes (incl. connector <svg>) locked to the camera
+        this.updateConnectorChrome(); // keep the endpoint handles locked to the camera
+      },
+      opts.viewKey,
+    );
     // The text overlay positions HTML boxes in screen space from the live camera transform.
     this.textLayer = new TextLayer({
       container: opts.container,
@@ -528,6 +537,11 @@ export class BoardCanvas {
   resetZoom(): void {
     this.viewport.resetZoom();
   }
+  /** Restore this board's persisted camera (pan/zoom) if one was saved. Returns whether it did —
+   *  the host uses that to skip the on-load auto-fit. */
+  restoreSavedView(): boolean {
+    return this.viewport.restoreSavedView();
+  }
   /** Set an absolute zoom (1 = 100%), clamped to the supported range. */
   zoomTo(scale: number): void {
     this.viewport.zoomTo(scale);
@@ -549,7 +563,9 @@ export class BoardCanvas {
       maxY = Math.max(maxY, r.y + r.height);
     }
     if (minX > maxX) return;
-    this.viewport.zoomToFitBox({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
+    // maxScale 1: never zoom IN past 100% when auto-framing — a small/sparse board lands centred at
+    // natural size rather than slamming to the 500% cap (it still zooms OUT to fit a large board).
+    this.viewport.zoomToFitBox({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, 1);
   }
 
   private point(): { x: number; y: number } {
@@ -1640,6 +1656,60 @@ export class BoardCanvas {
     if (!ids.length) return;
     const allLocked = ids.every((id) => this.objects.get(id)?.get("locked") === true);
     this.setSelectionLocked(!allLocked);
+  }
+  /** Bring the selection to the front of the z-order (mobile action bar + ⌘⇧]). */
+  bringSelectionToFront(): void {
+    const ids = this.selectionIds();
+    if (!ids.length) return;
+    bringToFront(this.opts.doc, ids);
+    this.reattachTransformer();
+  }
+  /** Send the selection to the back of the z-order (mobile action bar + ⌘⇧[). */
+  sendSelectionToBack(): void {
+    const ids = this.selectionIds();
+    if (!ids.length) return;
+    sendToBack(this.opts.doc, ids);
+    this.reattachTransformer();
+  }
+  /** Summary of the current selection for the mobile action bar: count, whether it's all-locked (lock
+   *  toggle label), whether it forms one group (Group vs Ungroup), and whether it overlaps any other
+   *  object (so Bring-to-front / Send-to-back are worth offering). */
+  selectionMeta(): { count: number; locked: boolean; grouped: boolean; overlapping: boolean } {
+    const ids = this.selectionIds();
+    const locked =
+      ids.length > 0 && ids.every((id) => this.objects.get(id)?.get("locked") === true);
+    const first = ids[0];
+    const gid = first ? this.objects.get(first)?.get("groupId") : undefined;
+    const grouped =
+      typeof gid === "string" && ids.every((id) => this.objects.get(id)?.get("groupId") === gid);
+    return { count: ids.length, locked, grouped, overlapping: this.selectionOverlapsOthers(ids) };
+  }
+
+  /** Whether any selected object's world AABB intersects a *non-selected* object's — i.e. restacking
+   *  would visibly matter. Drives whether the mobile bar offers Bring-to-front / Send-to-back. */
+  private selectionOverlapsOthers(ids: string[]): boolean {
+    const sel = new Set(ids);
+    const selRects: { x: number; y: number; width: number; height: number }[] = [];
+    for (const id of ids) {
+      const r = this.textLayer.worldRectOf(id);
+      if (r) selRects.push(r);
+    }
+    if (!selRects.length) return false;
+    for (const id of orderArray(this.opts.doc).toArray()) {
+      if (sel.has(id)) continue;
+      const o = this.textLayer.worldRectOf(id);
+      if (!o) continue;
+      for (const s of selRects) {
+        if (
+          s.x < o.x + o.width &&
+          s.x + s.width > o.x &&
+          s.y < o.y + o.height &&
+          s.y + s.height > o.y
+        )
+          return true;
+      }
+    }
+    return false;
   }
 
   /** Copy the current selection (strokes + connectors + text/shapes) into the in-app clipboard. */

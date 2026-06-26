@@ -568,6 +568,40 @@ export function expandGroups(doc: Y.Doc, ids: Iterable<string>): Set<string> {
   return out;
 }
 
+/** Move `ids` to the front of the z-order — the END of the order array (rendered last = on top).
+ *  Locked objects are skipped; the moved objects keep their relative order. */
+export function bringToFront(doc: Y.Doc, ids: Iterable<string>): void {
+  reorderZ(doc, ids, "front");
+}
+
+/** Move `ids` to the back of the z-order — the START of the order array. Locked objects skipped. */
+export function sendToBack(doc: Y.Doc, ids: Iterable<string>): void {
+  reorderZ(doc, ids, "back");
+}
+
+function reorderZ(doc: Y.Doc, ids: Iterable<string>, to: "front" | "back"): void {
+  doc.transact(() => {
+    const objs = objectsMap(doc);
+    const move = new Set<string>();
+    for (const id of ids) {
+      const m = objs.get(id);
+      if (m && m.get("locked") !== true) move.add(id); // don't reorder locked objects
+    }
+    if (!move.size) return;
+    const order = orderArray(doc);
+    const arr = order.toArray();
+    const moving = arr.filter((id) => move.has(id)); // existing entries only, in their current order
+    if (!moving.length) return;
+    // Delete each moved entry back→front so earlier indices stay valid.
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const id = arr[i];
+      if (id !== undefined && move.has(id)) order.delete(i, 1);
+    }
+    if (to === "front") order.push(moving);
+    else order.insert(0, moving);
+  });
+}
+
 export function deleteObjects(doc: Y.Doc, ids: Iterable<string>): void {
   const idSet = new Set(ids);
   if (!idSet.size) return;

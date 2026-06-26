@@ -36,6 +36,22 @@ export const ICONS: Record<string, string> = {
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   settings:
     '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  // Duplicate (Lucide copy) — overlapping rounded squares.
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  // Delete (Lucide trash-2).
+  trash:
+    '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/>',
+  // Lock / unlock (Lucide lock / lock-open).
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  unlock:
+    '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+  // Group / ungroup (Lucide group / ungroup).
+  group:
+    '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="7" height="5" x="7" y="7" rx="1"/><rect width="7" height="5" x="10" y="12" rx="1"/>',
+  ungroup:
+    '<rect width="8" height="6" x="5" y="4" rx="1"/><rect width="8" height="6" x="11" y="14" rx="1"/>',
+  // Rotate (Lucide rotate-cw).
+  rotate: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
 };
 
 export function icon(name: string, cls = "ico"): string {
@@ -62,4 +78,17 @@ const LINE_WEIGHT_PATH =
   "M16.94 25.09c0-1.55 1.25-2.8 2.8-2.8h90.4c1.55 0 2.8 1.25 2.8 2.8v4.4c0 1.55-1.25 2.8-2.8 2.8H19.74c-1.55 0-2.8-1.25-2.8-2.8v-4.4ZM16.94 50.55c0-1.55 1.25-2.8 2.8-2.8h90.4c1.55 0 2.8 1.25 2.8 2.8v10.4c0 1.55-1.25 2.8-2.8 2.8H19.74c-1.55 0-2.8-1.25-2.8-2.8v-10.4ZM16.94 82.02c0-1.55 1.25-2.8 2.8-2.8h90.4c1.55 0 2.8 1.25 2.8 2.8v22.4c0 1.55-1.25 2.8-2.8 2.8H19.74c-1.55 0-2.8-1.25-2.8-2.8v-22.4Z";
 export function lineWeightIcon(cls = "ico"): string {
   return `<svg class="${cls}" viewBox="0 0 128 128" fill="currentColor"><path fill-rule="evenodd" d="${LINE_WEIGHT_PATH}"/></svg>`;
+}
+
+// Bring-to-front / send-to-back — filled glyphs from the design assets (overlapping squares, the
+// active one solid). Native viewBoxes; sources: src/assets/{bring-to-front,send-to-back}.svg.
+const BRING_FRONT_PATH =
+  "M 6 4 C 4.895 4 4 4.895 4 6 L 4 12 C 4 13.105 4.895 14 6 14 L 8 14 L 8 20 C 8 21.093063 8.9069372 22 10 22 L 16 22 L 16 24 C 16 25.105 16.895 26 18 26 L 24 26 C 25.105 26 26 25.105 26 24 L 26 18 C 26 16.895 25.105 16 24 16 L 22 16 L 22 10 C 22 8.9069372 21.093063 8 20 8 L 14 8 L 14 6 C 14 4.895 13.105 4 12 4 L 6 4 z M 10 10 L 20 10 L 20 20 L 10 20 L 10 10 z";
+export function bringFrontIcon(cls = "ico"): string {
+  return `<svg class="${cls}" viewBox="0 0 30 30" fill="currentColor"><path d="${BRING_FRONT_PATH}"/></svg>`;
+}
+const SEND_BACK_PATH =
+  "M 5 2 C 3.347656 2 2 3.347656 2 5 L 2 21 C 2 22.652344 3.347656 24 5 24 L 12 24 L 12 35 C 12 36.644531 13.355469 38 15 38 L 26 38 L 26 45 C 26 46.652344 27.347656 48 29 48 L 45 48 C 46.652344 48 48 46.652344 48 45 L 48 29 C 48 27.347656 46.652344 26 45 26 L 38 26 L 38 15 C 38 13.355469 36.644531 12 35 12 L 24 12 L 24 5 C 24 3.347656 22.652344 2 21 2 Z M 24 14 L 35 14 C 35.566406 14 36 14.433594 36 15 L 36 26 L 29 26 C 27.347656 26 26 27.347656 26 29 L 26 36 L 15 36 C 14.433594 36 14 35.566406 14 35 L 14 24 L 21 24 C 22.652344 24 24 22.652344 24 21 Z";
+export function sendBackIcon(cls = "ico"): string {
+  return `<svg class="${cls}" viewBox="0 0 50 50" fill="currentColor"><path d="${SEND_BACK_PATH}"/></svg>`;
 }

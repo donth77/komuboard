@@ -39,6 +39,7 @@ import { createProfileDialog } from "./ui/profile";
 import { maybeShowIdentityNudge } from "./ui/identity-nudge";
 import { createConnectionBanner } from "./ui/connection-banner";
 import { createJoinToasts } from "./ui/join-toast";
+import { createSelectionBar } from "./ui/selection-bar";
 import { createShareDialog } from "./ui/share";
 import { paintProfile } from "./util";
 import { SWATCHES } from "./palette";
@@ -183,6 +184,8 @@ const canvas = new BoardCanvas({
   doc: ydoc,
   awareness: provider.awareness,
   user,
+  // Persist + restore this room's camera (pan/zoom) across reloads (see the auto-fit block below).
+  viewKey: `komuboard-view-${room}`,
   // Revert to select after a text/sticky box is placed + finished (drives the dock highlight too).
   requestTool: (tool) => selectTool(tool),
   // After drawing / placing a sticky / placing a shape, collapse the mobile mini-sheet to reclaim
@@ -236,6 +239,39 @@ const DRAWABLE_SHAPES = new Set(["rectangle", "ellipse", "rhombus", "triangle"])
 const CONNECTOR_KINDS = new Set(["line", "arrow", "elbow", "block"]);
 const mobileMql = window.matchMedia("(max-width: 640px)");
 let currentTool: ToolId = "select";
+
+// Mobile selection action bar — fills the bottom tool-sheet slot when an object is selected on the
+// touch layout (desktop hides it via CSS, having the keyboard + transform chrome). Gated on select
+// mode so it never collides with a drawing tool's option sheet. Group/Ungroup show by context.
+const selectionBar = createSelectionBar({
+  onDuplicate: () => {
+    canvas.copySelection();
+    canvas.pasteSelection(); // clones with a cascade offset and selects the copies
+  },
+  onRotate: () => canvas.rotateSelection(15),
+  onBringFront: () => canvas.bringSelectionToFront(),
+  onSendBack: () => canvas.sendSelectionToBack(),
+  onGroup: () => canvas.groupSelection(),
+  onUngroup: () => canvas.ungroupSelection(),
+  onLock: () => canvas.toggleSelectionLock(),
+  onDelete: () => canvas.deleteSelection(),
+});
+let lastSelCount = 0;
+function updateSelectionBar(): void {
+  const visible = lastSelCount > 0 && currentTool === "select";
+  const meta = visible ? canvas.selectionMeta() : null;
+  selectionBar.update({
+    visible,
+    locked: meta?.locked ?? false,
+    canGroup: !!meta && meta.count >= 2 && !meta.grouped,
+    canUngroup: meta?.grouped ?? false,
+    canReorder: meta?.overlapping ?? false,
+  });
+}
+canvas.setSelectionListener((count) => {
+  lastSelCount = count;
+  updateSelectionBar();
+});
 // Each of these tools owns a mobile mini-sheet (draw bar / sticky palette / shape menu).
 const sheetForTool = (tool: ToolId): Element | null =>
   tool === "pen"
@@ -252,6 +288,7 @@ const ALL_SHEETS = [drawBarEl, stickyBarEl, shapeMenuEl, stampWheelEl];
 function applyTool(tool: ToolId): void {
   currentTool = tool;
   canvas.setTool(tool);
+  updateSelectionBar(); // a non-select tool hides the action bar; returning to select may show it
   const active = sheetForTool(tool);
   for (const el of ALL_SHEETS) {
     el?.classList.toggle("hidden", el !== active);
@@ -380,6 +417,8 @@ const shortcutsDialog = createDialog({
     '<div class="kbd-row"><span>Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">Backspace</kbd></span></div>' +
     `<div class="kbd-row"><span>Group / ungroup</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">G</kbd> / <kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">G</kbd></span></div>` +
     `<div class="kbd-row"><span>Lock / unlock (toggle)</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">L</kbd></span></div>` +
+    '<div class="kbd-row"><span>Rotate (±15° / ±90° with Shift)</span><span><kbd class="kbd">[</kbd> / <kbd class="kbd">]</kbd></span></div>' +
+    `<div class="kbd-row"><span>Bring to front / send to back</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">]</kbd> / <kbd class="kbd">[</kbd></span></div>` +
     `<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     `<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     '<div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
@@ -440,9 +479,22 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     return;
   }
+  // ⌘⇧] bring to front · ⌘⇧[ send to back (z-order). Checked before the plain-bracket rotate below.
+  if (
+    (e.metaKey || e.ctrlKey) &&
+    e.shiftKey &&
+    (e.code === "BracketLeft" || e.code === "BracketRight")
+  ) {
+    if (canvas.hasSelection()) {
+      if (e.code === "BracketRight") canvas.bringSelectionToFront();
+      else canvas.sendSelectionToBack();
+      e.preventDefault();
+    }
+    return;
+  }
   // [ / ] rotate the selection by ±15° about its centre; Shift = ±90°. Uses e.code so Shift+[ (which
-  // yields "{") still registers as the left bracket.
-  if (e.code === "BracketLeft" || e.code === "BracketRight") {
+  // yields "{") still registers as the left bracket. No modifier → distinct from the ⌘⇧ z-order above.
+  if ((e.code === "BracketLeft" || e.code === "BracketRight") && !e.metaKey && !e.ctrlKey) {
     if (canvas.hasSelection()) {
       canvas.rotateSelection((e.code === "BracketLeft" ? -1 : 1) * (e.shiftKey ? 90 : 15));
       e.preventDefault();
@@ -805,7 +857,11 @@ provider.on("sync", updateConn);
 // later edits, which would yank the viewport mid-work. Suppressed in e2e (geometry tests assume 100%).
 const autoFitEnabled =
   (window as Window & { __komuboardAutoFit?: boolean }).__komuboardAutoFit !== false;
-let didInitialFit = false;
+// Restore this room's persisted camera if there is one — and count that as "already framed" so the
+// auto-fit doesn't override it. A genuine first-time visitor has no saved view, so they still get
+// the auto-fit (now capped at 100%, so a sparse board no longer slams to 500%).
+const restoredView = canvas.restoreSavedView();
+let didInitialFit = restoredView;
 let userMovedViewport = false;
 const markViewportMoved = (): void => {
   userMovedViewport = true;

@@ -366,6 +366,58 @@ body {
     transition: opacity var(--dur) var(--ease);
   }
 }
+/* ── Mobile selection action bar — a mini-sheet (like draw/sticky/shape) holding the icon row (see
+   ui/selection-bar.ts). The shared .mini-sheet rules add the position/slide/collapse; here it's the
+   surface + button row. Desktop hides it (keyboard + transform chrome handle this there). ── */
+.selection-actions {
+  display: none;
+}
+@media (max-width: 640px) {
+  .selection-actions {
+    display: flex; /* override the base; .mini-sheet makes it a flush, sliding column */
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom: 0; /* flush with the dock below */
+  }
+  .sa-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+  .sa-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 42px;
+    height: 44px;
+    color: var(--ink);
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .sa-btn:active {
+    background: var(--surface-2);
+  }
+  .sa-ico {
+    width: 20px;
+    height: 20px;
+  }
+  .sa-danger {
+    color: var(--bad);
+  }
+  /* The dock merges with the selection sheet while it's out — parallels #app.sheet-open for the tool
+     sheets, but keyed off the sheet itself so no extra JS state is needed. */
+  #app:has(.selection-actions.mini-sheet:not(.hidden)) .dock {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-top-color: transparent;
+    box-shadow: 0 14px 20px -8px rgba(16, 17, 22, 0.22);
+  }
+  #app:has(.selection-actions.mini-sheet.collapsed) .dock {
+    border-top-color: var(--border);
+  }
+}
 .share-body {
   display: flex;
   flex-direction: column;

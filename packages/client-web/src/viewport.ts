@@ -30,14 +30,23 @@ export class ViewportController {
   private zoomAnim: number | null = null;
   private zoomTarget: number | null = null;
 
+  // Debounced persistence of the camera (pan/zoom), keyed by storageKey, so a reload restores
+  // exactly where the user was instead of resetting + auto-fitting.
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(
     private readonly stage: Konva.Stage,
     private readonly container: HTMLElement,
     /** Re-sync viewport-dependent chrome owned by BoardCanvas (cursors, transformer, outlines). */
     private readonly onTransform: () => void,
+    /** localStorage key to persist this board's camera across reloads; omitted = no persistence. */
+    private readonly storageKey?: string,
   ) {
     this.bindWheel();
-    this.stage.on("dragmove", () => this.syncGrid()); // hand-pan: keep the grid under the camera
+    this.stage.on("dragmove", () => {
+      this.syncGrid(); // hand-pan: keep the grid under the camera
+      this.scheduleSave();
+    });
     this.syncGrid();
   }
 
@@ -131,8 +140,13 @@ export class ViewportController {
     this.stopZoomAnim();
     this.zoomAroundCenter(this.clamp(scale));
   }
-  /** Frame a world-space box in view (or reset when the box is empty). */
-  zoomToFitBox(box: { x: number; y: number; width: number; height: number }): void {
+  /** Frame a world-space box in view (or reset when the box is empty). `maxScale` caps how far it
+   *  may zoom IN — the on-load auto-fit passes 1 (100%) so a small/sparse board lands at natural
+   *  size + centred rather than slamming to the 500% zoom cap. */
+  zoomToFitBox(
+    box: { x: number; y: number; width: number; height: number },
+    maxScale = MAX_ZOOM,
+  ): void {
     if (!box.width || !box.height) {
       this.resetZoom();
       return;
@@ -140,7 +154,8 @@ export class ViewportController {
     const pad = 96;
     const sw = this.stage.width();
     const sh = this.stage.height();
-    const scale = this.clamp(Math.min((sw - pad) / box.width, (sh - pad) / box.height));
+    const fit = Math.min((sw - pad) / box.width, (sh - pad) / box.height);
+    const scale = this.clamp(Math.min(fit, maxScale));
     this.stage.scale({ x: scale, y: scale });
     this.stage.position({
       x: (sw - box.width * scale) / 2 - box.x * scale,
@@ -214,6 +229,56 @@ export class ViewportController {
     this.syncGrid();
     this.stage.batchDraw();
     this.notifyZoom();
+    this.scheduleSave();
+  }
+
+  /** Persist the camera (debounced) so a reload restores exactly where the user was. */
+  private scheduleSave(): void {
+    const key = this.storageKey;
+    if (!key) return;
+    if (this.saveTimer !== null) clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      try {
+        localStorage.setItem(
+          key,
+          JSON.stringify({ s: this.stage.scaleX(), x: this.stage.x(), y: this.stage.y() }),
+        );
+      } catch {
+        /* storage disabled/full → silently skip persistence */
+      }
+    }, 250);
+  }
+
+  /** Apply this board's persisted camera if one exists. Returns whether a view was restored — the
+   *  caller uses that to skip the on-load auto-fit (a restored view is already "framed"). */
+  restoreSavedView(): boolean {
+    const key = this.storageKey;
+    if (!key) return false;
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(key);
+    } catch {
+      return false;
+    }
+    if (!raw) return false;
+    try {
+      const v = JSON.parse(raw) as { s?: unknown; x?: unknown; y?: unknown };
+      if (
+        typeof v.s !== "number" ||
+        typeof v.x !== "number" ||
+        typeof v.y !== "number" ||
+        !Number.isFinite(v.s) ||
+        !Number.isFinite(v.x) ||
+        !Number.isFinite(v.y)
+      ) {
+        return false;
+      }
+      this.applyTransform(this.clamp(v.s), { x: v.x, y: v.y });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private zoomAroundCenter(newScale: number): void {

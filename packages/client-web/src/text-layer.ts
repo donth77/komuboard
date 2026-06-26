@@ -403,6 +403,9 @@ export class TextLayer {
     opts.container.addEventListener("pointermove", this.onHoverMove, true);
     this.observer = (): void => this.render();
     this.objects.observeDeep(this.observer);
+    // Z-order lives in the `order` array, which can change WITHOUT touching the objects map (a
+    // bring-to-front / send-to-back, local or from a peer). Observe it too so the restack renders.
+    orderArray(this.opts.doc).observe(this.observer);
     this.opts.awareness.on("change", this.onAwareness);
     this.bar = new TextBar({
       setFontFamily: (css) => this.applyBlock({ fontFamily: css }),
