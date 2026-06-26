@@ -3,6 +3,8 @@ import * as Y from "yjs";
 import YProvider from "y-partyserver/provider";
 import type { Awareness } from "y-protocols/awareness";
 import {
+  CLOSE_RATE_LIMIT,
+  CLOSE_ROOM_FULL,
   DEFAULT_STICKY_COLOR,
   PARTY,
   pickUserColor,
@@ -38,6 +40,7 @@ import { icon } from "./icons";
 import { createProfileDialog } from "./ui/profile";
 import { maybeShowIdentityNudge } from "./ui/identity-nudge";
 import { createConnectionBanner } from "./ui/connection-banner";
+import { createRefusedDialog } from "./ui/refused-dialog";
 import { createJoinToasts } from "./ui/join-toast";
 import { createSelectionBar } from "./ui/selection-bar";
 import { createShareDialog } from "./ui/share";
@@ -696,7 +699,30 @@ document.addEventListener("click", (e) => {
 const connBanner = createConnectionBanner();
 store.subscribe((state) => {
   topbar?.setStatus(state.status);
-  connBanner.update(state.status);
+  if (!connectionRefused) connBanner.update(state.status); // a deliberate refusal owns the UI instead
+});
+
+// When the room DO *deliberately* refuses us (full room / rate-limited flood) it closes with a 4xxx
+// code. Without this we'd reconnect forever showing "Reconnecting…"; instead stop retrying and explain
+// why, with a way to try again or start fresh.
+let connectionRefused = false;
+const refusedDialog = createRefusedDialog({
+  onRetry: () => {
+    connectionRefused = false;
+    provider.connect(); // re-attempt; if the room is still full, connection-close fires again
+  },
+  onNewBoard: () => {
+    const u = new URL(window.location.href);
+    u.searchParams.set("room", randomRoomId());
+    window.location.href = u.toString(); // a fresh, empty room
+  },
+});
+provider.on("connection-close", (event: { code?: number }) => {
+  if (event?.code !== CLOSE_ROOM_FULL && event?.code !== CLOSE_RATE_LIMIT) return;
+  connectionRefused = true;
+  provider.disconnect(); // halt the auto-reconnect loop (shouldConnect = false)
+  connBanner.update("connected"); // dismiss any "Reconnecting…" pill — the dialog owns this state
+  refusedDialog.show(event.code);
 });
 
 // Presence avatar row — avatars from awareness; click your own to rename.

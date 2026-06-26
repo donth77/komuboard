@@ -13,7 +13,13 @@ export type BoardWindow = {
       getArray(name: string): { toArray(): string[] };
       transact(fn: () => void): void;
     };
-    provider: { wsconnected: boolean; connect(): void; disconnect(): void };
+    provider: {
+      wsconnected: boolean;
+      shouldConnect: boolean;
+      connect(): void;
+      disconnect(): void;
+      emit(name: string, args: unknown[]): void;
+    };
     awareness: {
       clientID: number;
       getLocalState(): { selection?: string[]; cursor?: { x: number; y: number } } | null;

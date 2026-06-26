@@ -5,8 +5,10 @@
 // The rate-limit logic lives here as a pure, time-injected class so it unit-tests deterministically
 // (the DO just feeds it Date.now()); see abuse-guard.test.ts.
 
-/** Max simultaneous WebSocket connections per room. */
-export const MAX_CONNECTIONS = 50;
+// The connection cap + the close codes are part of the client/server contract, so they live in
+// @komuboard/shared (the client reads the codes to explain a refusal); re-exported here for the DO.
+export { CLOSE_RATE_LIMIT, CLOSE_ROOM_FULL, MAX_CONNECTIONS } from "@komuboard/shared";
+import { MAX_CONNECTIONS } from "@komuboard/shared";
 
 /** Sustained inbound messages/sec allowed per connection (token-bucket refill rate). */
 export const MSG_RATE_PER_SEC = 200;
@@ -16,13 +18,6 @@ export const MSG_BURST = 600;
 
 /** After this many messages are dropped on a still-empty bucket, the connection is a flood → close it. */
 export const MAX_DROPPED_BEFORE_CLOSE = 2000;
-
-// WebSocket close codes. Application code may only set 1000 or 3000–4999, so the reserved policy
-// codes (1008/1013) are off-limits — we use the 4xxx app range, mnemonic of HTTP 429/503.
-/** Connection refused because the room is at capacity. */
-export const CLOSE_ROOM_FULL = 4503;
-/** Connection closed for sustained message flooding. */
-export const CLOSE_RATE_LIMIT = 4429;
 
 /**
  * Whether a room is over capacity given its current connection count. Called from onConnect, where

@@ -9,6 +9,17 @@
 /** The PartyServer "party" name; the worker routes /parties/main/:roomId. */
 export const PARTY = "main" as const;
 
+/**
+ * WebSocket close codes the room DO uses to *deliberately* refuse a connection (the client recognizes
+ * these to stop its retry loop and explain why, instead of reconnecting forever). App range (4xxx),
+ * since the spec reserves 1xxx and only 1000/3000–4999 are settable from app code.
+ */
+export const CLOSE_ROOM_FULL = 4503; // room at capacity
+export const CLOSE_RATE_LIMIT = 4429; // closed for sustained message flooding
+
+/** Max simultaneous editors per room (the cap behind CLOSE_ROOM_FULL). */
+export const MAX_CONNECTIONS = 50;
+
 // Yjs document schema + presence types (the shared contract for canvas content).
 export * from "./schema";
 

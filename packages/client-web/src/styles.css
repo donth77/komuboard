@@ -424,6 +424,32 @@ body {
     border-top-color: var(--border);
   }
 }
+/* ── "Connection refused" dialog (room full / rate limited) — see ui/refused-dialog.ts ─────────────── */
+.refused-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+  text-align: center;
+}
+.refused-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.refused-sub {
+  margin: 0;
+  max-width: 22rem;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.refused-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .share-body {
   display: flex;
   flex-direction: column;
