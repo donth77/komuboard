@@ -412,6 +412,47 @@ body {
   .sa-danger {
     color: var(--bad);
   }
+  /* Insert launcher sheet — five labelled options, opened by the dock + on phones (ui/insert-sheet.ts).
+     A mini-sheet like the selection bar, so it slides up flush out of the dock. */
+  .insert-sheet {
+    display: flex;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom: 0; /* flush with the dock below */
+  }
+  .insert-row {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 4px;
+  }
+  .insert-btn {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    gap: 5px;
+    padding: 9px 2px;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-radius: 12px;
+    cursor: pointer;
+    font:
+      500 11px Inter,
+      system-ui,
+      sans-serif;
+  }
+  .insert-btn:active {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .insert-ico {
+    width: 24px;
+    height: 24px;
+  }
+  .insert-label {
+    line-height: 1;
+  }
   /* The dock merges with the selection sheet while it's out — parallels #app.sheet-open for the tool
      sheets, but keyed off the sheet itself so no extra JS state is needed. */
   #app:has(.selection-actions.mini-sheet:not(.hidden)) .dock {
@@ -900,6 +941,17 @@ body {
 .tool.disabled:hover {
   background: transparent;
   color: var(--muted);
+}
+/* The mobile "Insert" (+) launcher is phone-only — hidden on the desktop rail + the tablet bar, where
+   the five insert tools show inline. A phone media query (below) re-shows it + hides those five. */
+.tool[data-tool="insert"] {
+  display: none;
+}
+/* The + launcher's "open / standing in for an active insert tool" state is a subtle fill, not the blue
+   selected-tool accent — so it doesn't read as the active canvas tool. */
+.tool[data-tool="insert"].active {
+  background: var(--surface-2);
+  color: var(--ink);
 }
 .ico {
   width: 21px;
@@ -1654,14 +1706,15 @@ input[type="range"] {
 .sheet-handle {
   display: none;
   position: relative;
-  height: 22px;
+  height: 30px;
   cursor: pointer;
+  outline: none; /* focusable (tabindex -1, for the editor-blur keepTool path) but decorative */
   touch-action: none; /* dragging the handle drives the sheet, never scrolls it */
 }
 .sheet-handle::before {
   content: "";
   position: absolute;
-  top: 9px;
+  top: 13px; /* centred in the 30px tab */
   left: 50%;
   transform: translateX(-50%);
   width: 40px;
@@ -2382,7 +2435,7 @@ input[type="range"] {
     min-width: 0;
     flex-direction: column; /* grab handle on top, content below */
     align-items: stretch;
-    gap: 4px; /* handle(22) + this gap = the 26px collapsed tab → only the handle peeks */
+    gap: 4px; /* the 30px handle is the collapsed tab; this gap sits above the content, below the tab */
     padding: 0 8px 10px;
     border-radius: 16px 16px 0 0;
     /* No shadow on the sheet itself — it's a flush extension of the dock, whose downward shadow
@@ -2395,7 +2448,7 @@ input[type="range"] {
   }
   /* the grab handle is a fixed-height row at the top; never let it flex-grow to fill the sheet */
   .mini-sheet > .sheet-handle {
-    flex: 0 0 22px;
+    flex: 0 0 30px;
   }
   .draw-bar .db-row {
     flex-direction: row;
@@ -2403,9 +2456,10 @@ input[type="range"] {
     gap: 6px;
   }
   .mini-sheet.collapsed {
-    /* Leave only the 22px grab handle peeking — short of the content below it (the sticky's active
-       swatch has a selection ring that overflows ~3px upward, so a taller tab would reveal its tip). */
-    transform: translateY(calc(100% - 22px));
+    /* Leave the 30px grab tab peeking — roomy enough to spot/grab above the dock, still short of the
+       content below it. (The tab grew with the handle, so the sticky swatch's ~3px ring overflow is
+       pushed down with the content and stays hidden.) */
+    transform: translateY(calc(100% - 30px));
   }
   .mini-sheet.hidden {
     /* override the global `.hidden { display:none }` so the sheet can animate down into the dock */
@@ -2717,10 +2771,35 @@ input[type="range"] {
   box-shadow: 0 0 0 1.5px #4a9eff;
   border-radius: 2px;
 }
+/* Uploaded image — an <img> box sized by width/height (not square like a stamp). */
+.komu-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 6px;
+  pointer-events: none; /* selection via hit-test, like text/stamp */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.komu-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+.komu-image.selected {
+  box-shadow: 0 0 0 1.5px #4a9eff;
+}
 /* Locked object (⌘L) — a small lock badge in the top-right so it's clear at a glance the object can't
    be moved / resized / edited / deleted. Re-click it (still selectable) + ⇧⌘L to unlock. */
 .komu-text[data-locked]::after,
-.komu-stamp[data-locked]::after {
+.komu-stamp[data-locked]::after,
+.komu-image[data-locked]::after {
   content: "🔒";
   position: absolute;
   top: 1px;
@@ -2730,6 +2809,51 @@ input[type="range"] {
   opacity: 0.75;
   pointer-events: none;
   filter: drop-shadow(0 1px 1px rgba(16, 17, 22, 0.35));
+}
+/* While an image file is dragged over the board, ring the canvas to signal a drop target. */
+#app.drag-target #board {
+  box-shadow: inset 0 0 0 2.5px #4a9eff;
+}
+/* Transient bottom toast — image-upload errors (bad type / too large / failed). Neutral dark so it
+   reads on either theme; mirrors the join-toast motion. See showToast() in main.ts. */
+.komu-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  z-index: 60;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.komu-toast {
+  max-width: min(92vw, 420px);
+  padding: 9px 15px;
+  font:
+    500 13px Inter,
+    system-ui,
+    sans-serif;
+  color: #fff;
+  background: #2a2d36;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.komu-toast.show {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .komu-toast {
+    transform: none;
+    transition: opacity var(--dur) var(--ease);
+  }
 }
 /* ── Ink (strokes + connectors) rendered as SVG, ADR-0009 Phase 3 ─────────────────────────────── */
 /* Each stroke/connector is its own <svg>, positioned in screen space (left/top) + scale() for zoom;
@@ -3172,6 +3296,11 @@ input[type="range"] {
 /* A stamp resizes uniformly (square) → corner handles only; hide the w/e side handles too. */
 .komu-text-resize-stamp .komu-text-handle.h-w,
 .komu-text-resize-stamp .komu-text-handle.h-e {
+  display: none;
+}
+/* An image resizes aspect-locked → corner handles only too (a side handle would distort it). */
+.komu-text-resize-image .komu-text-handle.h-w,
+.komu-text-resize-image .komu-text-handle.h-e {
   display: none;
 }
 /* ADR-0009 P3 Step 2: a selected stroke shows only the outline box — resize/rotate handles arrive
@@ -3698,4 +3827,32 @@ input[type="range"] {
   background:
     linear-gradient(135deg, transparent 44%, #e03131 44%, #e03131 56%, transparent 56%),
     var(--surface, #ffffff);
+}
+
+/* ── Phone-only tool dock (narrow widths) ────────────────────────────────────────────────────────
+   On small phones the bottom bar's nine tools are too cramped to tap reliably, so we collapse the five
+   "insert" tools (sticky / text / shape / stamp / image) behind a single + launcher and drop Hand
+   (you pan with two fingers). That leaves Select · Pen · Eraser · + — each big and evenly spaced.
+   This is WIDTH-only (no `pointer: coarse`), so tablets ≥641px keep all nine inline — as requested. */
+@media (max-width: 640px) {
+  .dock {
+    justify-content: space-evenly;
+    gap: 0;
+  }
+  .tool {
+    width: 50px;
+    height: 50px;
+    border-radius: 13px;
+  }
+  .tool .ico {
+    width: 24px;
+    height: 24px;
+  }
+  .tool[data-group="insert"],
+  .tool[data-tool="hand"] {
+    display: none; /* collapsed behind + (insert tools) / covered by two-finger pan (hand) */
+  }
+  .tool[data-tool="insert"] {
+    display: grid; /* …and the launcher itself appears */
+  }
 }

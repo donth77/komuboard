@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import {
   addConnector,
+  addImage,
   addObject,
   addStroke,
   cloneObject,
@@ -43,7 +44,19 @@ import { TextLayer } from "./text-layer";
 import { ConnectorBar } from "./connector-bar";
 import { ROTATE_CURSORS, type RotateCorner } from "./cursors";
 
-export type ToolId = "select" | "hand" | "pen" | "eraser" | "stamp" | "text" | "sticky" | "shapes";
+// "image" and "insert" are momentary UI actions (open a file picker / the mobile insert sheet) rather
+// than sustained canvas modes — the host intercepts them before setTool, so the canvas never runs in them.
+export type ToolId =
+  | "select"
+  | "hand"
+  | "pen"
+  | "eraser"
+  | "stamp"
+  | "text"
+  | "sticky"
+  | "shapes"
+  | "image"
+  | "insert";
 
 export interface CanvasOptions {
   container: HTMLElement;
@@ -510,6 +523,56 @@ export class BoardCanvas {
   setStamp(src: string): void {
     this.currentStamp = src;
     this.stampGhostRot = Math.round((Math.random() * 30 - 15) * 10) / 10;
+  }
+  /** Whether the active tool, on a canvas tap/drag, would actually place a node. Drives the mobile +
+   *  launcher's morph: it shows the active insert tool's glyph only when something IS about to be
+   *  placed, and reverts to "+" otherwise (e.g. the Stamp tool with no stamp picked yet). Sticky/text
+   *  are always ready; shapes default to a rectangle (or a connector); a stamp needs a pick. */
+  insertArmed(): boolean {
+    switch (this.tool) {
+      case "sticky":
+      case "text":
+      case "shapes":
+        return true;
+      case "stamp":
+        return this.currentStamp !== null;
+      default:
+        return false;
+    }
+  }
+  /** Place an uploaded image on the board: scaled to fit comfortably in the viewport (aspect-correct,
+   *  never upscaled past natural), centred on `atClient` (a drop/paste point) or the viewport centre.
+   *  Adds it to the doc and selects it. The host should switch to the select tool first so the new
+   *  image's transform chrome shows. Returns the new object id. */
+  placeImage(
+    upload: { key: string; width: number; height: number },
+    atClient?: { clientX: number; clientY: number },
+  ): string {
+    const scale = this.stage.scaleX() || 1;
+    const rect = this.stage.container().getBoundingClientRect();
+    // Fit within ~60% of the viewport (converted to world units); preserve aspect; don't upscale.
+    const maxW = Math.max(64, (rect.width * 0.6) / scale);
+    const maxH = Math.max(64, (rect.height * 0.6) / scale);
+    const fit = Math.min(1, maxW / upload.width, maxH / upload.height);
+    const w = Math.max(1, Math.round(upload.width * fit));
+    const h = Math.max(1, Math.round(upload.height * fit));
+    const centre = atClient
+      ? this.clientToWorld(atClient.clientX, atClient.clientY)
+      : this.clientToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    const id = randomId("img");
+    addImage(this.opts.doc, {
+      id,
+      type: "image",
+      x: centre.x - w / 2,
+      y: centre.y - h / 2,
+      width: w,
+      height: h,
+      src: upload.key,
+      authorId: String(this.opts.awareness.clientID),
+    });
+    this.clearSelection();
+    this.textLayer.selectText(id); // select the fresh image so it's ready to move/resize
+    return id;
   }
   setColor(color: string): void {
     this.color = color;
@@ -1551,6 +1614,7 @@ export class BoardCanvas {
           !shift &&
           !this.textLayer.isStampId(tid) && // a stamp isn't text-editable → no two-click-to-edit
           !this.textLayer.isInkId(tid) && // nor is a stroke (ADR-0009 P3)
+          !this.textLayer.isImageId(tid) && // nor an uploaded image
           this.textLayer.isSelected(tid) &&
           this.textLayer.selectedIds().length === 1;
         const recent =

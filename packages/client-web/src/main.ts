@@ -30,6 +30,7 @@ import "./shape-menu";
 import "./stamp-wheel";
 import "./emoji-picker";
 import { pushStampRecent } from "./stamp-wheel";
+import { uploadImage, UploadError } from "./uploads";
 import type { PenChange } from "./draw-bar";
 import "./zoombar";
 import type { ZoomDetail } from "./zoombar";
@@ -43,6 +44,7 @@ import { createConnectionBanner } from "./ui/connection-banner";
 import { createRefusedDialog } from "./ui/refused-dialog";
 import { createJoinToasts } from "./ui/join-toast";
 import { createSelectionBar } from "./ui/selection-bar";
+import { createInsertSheet } from "./ui/insert-sheet";
 import { createShareDialog } from "./ui/share";
 import { paintProfile } from "./util";
 import { SWATCHES } from "./palette";
@@ -243,6 +245,42 @@ const CONNECTOR_KINDS = new Set(["line", "arrow", "elbow", "block"]);
 const mobileMql = window.matchMedia(TOUCH_MEDIA);
 let currentTool: ToolId = "select";
 
+// Mobile "Insert" (+) launcher. On phones the five insert tools collapse behind the dock's + button
+// (CSS hides them); tapping + opens this sheet to pick one. On tablet/desktop the + is hidden and the
+// five tools show inline, so this sheet never appears there.
+const dockInsertBtn = dock?.querySelector<HTMLElement>('[data-tool="insert"]') ?? null;
+const isInsertTool = (t: ToolId): boolean =>
+  t === "sticky" || t === "text" || t === "shapes" || t === "stamp" || t === "image";
+const insertSheet = createInsertSheet((kind) => {
+  if (kind === "image") {
+    openImagePicker();
+    insertSheet.close();
+    app?.classList.remove("sheet-open");
+  } else {
+    selectTool(kind); // applyTool activates the tool, opens its option sheet, and hides this launcher
+  }
+  refreshInsertActive();
+});
+const INSERT_LABELS: Record<string, string> = {
+  sticky: "Sticky note",
+  text: "Text",
+  shapes: "Shapes and lines",
+  stamp: "Stamp",
+  image: "Image",
+};
+function refreshInsertActive(): void {
+  if (!dockInsertBtn) return;
+  // "armed" = an insert tool is active AND a tap would actually place its node (so the Stamp tool with
+  // nothing picked, or a cancelled pick, reads as not-armed → the + reverts rather than showing a stamp).
+  const armed = isInsertTool(currentTool) && canvas.insertArmed();
+  // The + reads as active while its launcher is open OR an armed insert tool stands behind it…
+  dockInsertBtn.classList.toggle("active", insertSheet.isOpen || armed);
+  // …and it morphs into that tool's glyph so you can see WHICH insert tool is selected once its sheet
+  // collapses (the tool's own dock button is hidden on phones). Falls back to the + otherwise.
+  dockInsertBtn.innerHTML = icon(armed ? currentTool : "plus");
+  dockInsertBtn.dataset.tip = armed ? (INSERT_LABELS[currentTool] ?? "Insert") : "Insert";
+}
+
 // Mobile selection action bar — fills the bottom tool-sheet slot when an object is selected on the
 // touch layout (desktop hides it via CSS, having the keyboard + transform chrome). Gated on select
 // mode so it never collides with a drawing tool's option sheet. Group/Ungroup show by context.
@@ -286,7 +324,7 @@ const sheetForTool = (tool: ToolId): Element | null =>
         : tool === "stamp"
           ? stampWheelEl
           : null;
-const ALL_SHEETS = [drawBarEl, stickyBarEl, shapeMenuEl, stampWheelEl];
+const ALL_SHEETS = [drawBarEl, stickyBarEl, shapeMenuEl, stampWheelEl, insertSheet.el];
 // Apply a tool to the canvas + sheet visibility (does NOT touch the dock highlight).
 function applyTool(tool: ToolId): void {
   currentTool = tool;
@@ -310,6 +348,7 @@ function applyTool(tool: ToolId): void {
     w.classList.add("sw-intro");
     window.setTimeout(() => w.classList.remove("sw-intro"), 900);
   }
+  refreshInsertActive(); // applying any tool may close the insert launcher / light the + for inserts
 }
 // Re-clicking the active tool toggles its sheet (the tool stays selected).
 function toggleSheet(el: Element | null): void {
@@ -337,8 +376,132 @@ function selectTool(tool: ToolId): void {
   if (dock) dock.tool = tool;
   applyTool(tool);
 }
+// --------------------------------------------------------------------------
+// Image insert: a place-once dock tool (photo icon → file picker), plus drag-drop and paste. The
+// bytes upload to R2 via the worker; the doc only stores the returned key (see uploads.ts).
+// --------------------------------------------------------------------------
+const imageInput = document.createElement("input");
+imageInput.type = "file";
+imageInput.accept = "image/png,image/jpeg,image/webp,image/gif";
+imageInput.multiple = true;
+imageInput.style.display = "none";
+document.body.appendChild(imageInput);
+
+function openImagePicker(): void {
+  imageInput.value = ""; // reset so re-picking the same file still fires "change"
+  imageInput.click();
+}
+imageInput.addEventListener("change", () => {
+  const files = imageInput.files ? [...imageInput.files] : [];
+  if (files.length) void placeImageFiles(files);
+});
+
+/** Upload + place one or more image files. `atClient` is a drop point (viewport coords); without it
+ *  they land at the viewport centre. Multiple files cascade so they don't stack exactly. */
+async function placeImageFiles(
+  files: File[],
+  atClient?: { clientX: number; clientY: number },
+): Promise<void> {
+  const images = files.filter((f) => f.type.startsWith("image/"));
+  if (!images.length) return;
+  selectTool("select"); // images live in select mode (transform chrome) — switch before placing
+  const rect = boardEl?.getBoundingClientRect();
+  const base =
+    atClient ??
+    (rect
+      ? { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }
+      : undefined);
+  let placed = 0;
+  for (const file of images) {
+    try {
+      const upload = await uploadImage(file);
+      const at = base
+        ? { clientX: base.clientX + placed * 28, clientY: base.clientY + placed * 28 }
+        : undefined;
+      canvas.placeImage(upload, at);
+      placed++;
+    } catch (err) {
+      showToast(err instanceof UploadError ? err.message : "Couldn't add that image.");
+    }
+  }
+}
+
+/** A small, transient bottom toast — used for image-upload errors (bad type / too large / failed). */
+function showToast(message: string): void {
+  let host = document.querySelector<HTMLDivElement>(".komu-toasts");
+  if (!host) {
+    host = document.createElement("div");
+    host.className = "komu-toasts";
+    host.setAttribute("role", "status");
+    host.setAttribute("aria-live", "polite");
+    document.body.appendChild(host);
+  }
+  const el = document.createElement("div");
+  el.className = "komu-toast";
+  el.textContent = message;
+  host.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  window.setTimeout(() => {
+    el.classList.remove("show");
+    window.setTimeout(() => el.remove(), 300);
+  }, 4200);
+}
+
+// Drag an image file onto the board → upload + place where it dropped.
+boardEl?.addEventListener("dragover", (e) => {
+  if (!e.dataTransfer || !e.dataTransfer.types.includes("Files")) return; // ignore internal drags
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+  app?.classList.add("drag-target");
+});
+boardEl?.addEventListener("dragleave", (e) => {
+  if (e.target === boardEl) app?.classList.remove("drag-target");
+});
+boardEl?.addEventListener("drop", (e) => {
+  app?.classList.remove("drag-target");
+  const files = e.dataTransfer?.files ? [...e.dataTransfer.files] : [];
+  if (!files.some((f) => f.type.startsWith("image/"))) return;
+  e.preventDefault();
+  void placeImageFiles(files, { clientX: e.clientX, clientY: e.clientY });
+});
+
+// Paste an image from the system clipboard → place at the viewport centre.
+window.addEventListener("paste", (e) => {
+  if (isTyping(e.target)) return; // a focused field / text editor owns the paste
+  const items = e.clipboardData?.items ? [...e.clipboardData.items] : [];
+  const files = items
+    .filter((it) => it.kind === "file" && it.type.startsWith("image/"))
+    .map((it) => it.getAsFile())
+    .filter((f): f is File => !!f);
+  if (!files.length) return;
+  e.preventDefault();
+  void placeImageFiles(files);
+});
+
 dock?.addEventListener("tool-change", (e) => {
   const tool = (e as CustomEvent<{ tool: ToolId }>).detail.tool;
+  // The photo tool is a momentary action: open the picker, then restore the previous tool's highlight
+  // (the canvas never enters an "image" mode).
+  if (tool === "image") {
+    openImagePicker();
+    if (dock) dock.tool = currentTool;
+    return;
+  }
+  // The mobile + launcher toggles the Insert sheet (a launcher, not a tool — keep the active tool).
+  if (tool === "insert") {
+    if (insertSheet.isOpen) {
+      insertSheet.close();
+      app?.classList.remove("sheet-open");
+    } else {
+      for (const el of ALL_SHEETS) el?.classList.add("hidden"); // mutually exclusive with tool sheets
+      emojiPickerEl?.classList.add("hidden");
+      insertSheet.open();
+      app?.classList.add("sheet-open");
+    }
+    if (dock) dock.tool = currentTool; // a launcher, not a tool — keep the active tool's dock highlight
+    refreshInsertActive(); // …then re-assert the + state (the dock's #sync above clears it)
+    return;
+  }
   // Clicking a sheet tool while it's already active toggles its sheet (the tool stays selected).
   if (tool === currentTool && sheetForTool(tool)) toggleSheet(sheetForTool(tool));
   else applyTool(tool);
@@ -377,6 +540,7 @@ wheel?.setProfile({ name: identity.name, color: identity.color, photo: identity.
 app?.addEventListener("stamp-pick", (e) => {
   canvas.setStamp((e as CustomEvent<{ src: string }>).detail.src);
   stampWheelEl?.classList.add("hidden");
+  refreshInsertActive(); // a stamp is now armed → the mobile + morphs to the stamp glyph
 });
 // The wheel's "+" opens the full emoji picker.
 app?.addEventListener("stamp-picker-open", () => {
@@ -392,6 +556,7 @@ app?.addEventListener("emoji-pick", (e) => {
   if (wheel) wheel.active = `emoji:${cp}`;
   emojiPickerEl?.classList.add("hidden");
   stampWheelEl?.classList.add("hidden"); // armed → close the wheel (re-tap Stamp to reopen)
+  refreshInsertActive(); // a stamp is now armed → the mobile + morphs to the stamp glyph
 });
 // Click anywhere outside the picker (and not on the wheel's "+") dismisses it.
 document.addEventListener("pointerdown", (e) => {
@@ -414,6 +579,7 @@ const shortcutsDialog = createDialog({
     '<div class="kbd-row"><span>Text</span><kbd class="kbd">T</kbd></div>' +
     '<div class="kbd-row"><span>Shapes and lines</span><kbd class="kbd">R</kbd></div>' +
     '<div class="kbd-row"><span>Stamp</span><kbd class="kbd">K</kbd></div>' +
+    '<div class="kbd-row"><span>Image</span><kbd class="kbd">I</kbd></div>' +
     `<div class="kbd-row"><span>Select all</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">A</kbd></span></div>` +
     `<div class="kbd-row"><span>Copy</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">C</kbd></span></div>` +
     `<div class="kbd-row"><span>Paste</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">V</kbd></span></div>` +
@@ -547,6 +713,11 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key.toLowerCase() === "i") {
+    openImagePicker(); // photo tool is a momentary action, not a sustained mode
+    e.preventDefault();
+    return;
+  }
   const tool = KEY_TOOL[e.key.toLowerCase()];
   if (tool) {
     selectTool(tool);

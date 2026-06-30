@@ -29,6 +29,7 @@ import {
   readObject,
   type BoardObject,
   setConnectorEnds,
+  setImageGeom,
   setObjectsPoints,
   setStampGeom,
   setTextGeometry,
@@ -42,6 +43,7 @@ import {
   type ConnectorKind,
   type ConnectorObject,
   type ConnectorSide,
+  type ImageObject,
   type ShapeKind,
   type StampObject,
   type StrokeObject,
@@ -64,6 +66,7 @@ import {
 import { TextBar, type TextBarState } from "./text-bar";
 import { ROTATE_CURSORS } from "./cursors";
 import { cachedEmojiSticker, emojiStickerUrl } from "./emoji-sticker";
+import { imageSrcUrl } from "./uploads";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
@@ -354,6 +357,8 @@ export class TextLayer {
     isStamp: boolean;
     /** A stroke resizes free-aspect on its world AABB; commits by baking the affine into its points. */
     isStroke?: boolean;
+    /** An image resizes free-aspect like a shape box, but commits via setImageGeom (not setTextGeometry). */
+    isImage?: boolean;
     /** Aspect ratio frozen the instant Shift goes down mid-resize (so the lock starts from the
      *  current in-progress shape, not the box's original proportions). Cleared when Shift lifts. */
     lock?: { w: number; h: number };
@@ -442,6 +447,7 @@ export class TextLayer {
       if (
         obj?.type !== "text" &&
         obj?.type !== "stamp" &&
+        obj?.type !== "image" &&
         obj?.type !== "stroke" &&
         obj?.type !== "connector"
       )
@@ -486,6 +492,23 @@ export class TextLayer {
         this.els.set(id, el);
       }
       this.paintStamp(el, obj.src);
+      el.toggleAttribute("data-locked", obj.locked === true);
+      this.root.appendChild(el);
+      const g = this.effectiveGeom(id, obj);
+      this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
+      this.applyRotation(el, g.rotation);
+      return;
+    }
+    // Uploaded images: a `.komu-image` <img> box, sized to width/height (not square like a stamp).
+    if (obj.type === "image") {
+      let el = this.els.get(id);
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "komu-image";
+        el.dataset.id = id;
+        this.els.set(id, el);
+      }
+      this.paintImage(el, obj.src);
       el.toggleAttribute("data-locked", obj.locked === true);
       this.root.appendChild(el);
       const g = this.effectiveGeom(id, obj);
@@ -613,6 +636,7 @@ export class TextLayer {
       if (
         obj?.type !== "text" &&
         obj?.type !== "stamp" &&
+        obj?.type !== "image" &&
         obj?.type !== "stroke" &&
         obj?.type !== "connector"
       )
@@ -705,6 +729,20 @@ export class TextLayer {
     } else {
       image.src = `/stamps/${val}.svg`; // a colour mark — border baked into the svg
     }
+  }
+
+  /** Paint an uploaded image: resolve its R2 key → the worker serve URL into an <img> filling the box. */
+  private paintImage(el: HTMLDivElement, key: string): void {
+    if (el.dataset.src === key) return; // already showing this image
+    el.dataset.src = key;
+    let img = el.querySelector<HTMLImageElement>("img");
+    if (!img) {
+      img = document.createElement("img");
+      img.draggable = false;
+      img.alt = "";
+      el.appendChild(img);
+    }
+    img.src = imageSrcUrl(key);
   }
 
   // ---- ink (strokes + connectors) as SVG, ADR-0009 Phase 3 ----
@@ -1178,8 +1216,14 @@ export class TextLayer {
     //   plain text → no height constraint.
     const isSticky = el.classList.contains("sticky");
     const isShape = el.classList.contains("shape");
+    const isImage = el.classList.contains("komu-image");
     el.style.height = "";
-    if (isShape && height != null) {
+    if (isImage && height != null) {
+      // An image is a fixed box (the <img> fills it via object-fit) — it needs a DEFINITE height,
+      // not a content-growing min-height, or the box collapses and it's invisible + un-hittable.
+      el.style.height = `${height * cam.scale}px`;
+      el.style.minHeight = "";
+    } else if (isShape && height != null) {
       el.style.minHeight = `${height * cam.scale}px`;
     } else if (isSticky && width != null) {
       el.style.minHeight = `${width * cam.scale}px`;
@@ -1214,6 +1258,13 @@ export class TextLayer {
       for (const id of this.selected) {
         const m = this.objects.get(id);
         const obj = m ? readObject(m) : null;
+        if (obj?.type === "image") {
+          setImageGeom(this.opts.doc, id, {
+            rotation: ((((obj.rotation ?? 0) + delta) % 360) + 360) % 360,
+          });
+          any = true;
+          continue;
+        }
         if (obj?.type !== "text") continue;
         setTextGeometry(this.opts.doc, id, {
           rotation: ((((obj.rotation ?? 0) + delta) % 360) + 360) % 360,
@@ -1239,9 +1290,9 @@ export class TextLayer {
     }
     const el = this.els.get(id);
     if (!el) return;
-    if (obj?.type === "stamp") {
-      // A peer's live stamp rotation: effectiveGeom folds in remoteRotate; apply it to the box so the
-      // spin shows in realtime (not just on the release-commit render). Mirrors the text arm below.
+    if (obj?.type === "stamp" || obj?.type === "image") {
+      // A peer's live stamp/image rotation: effectiveGeom folds in remoteRotate; apply it to the box
+      // so the spin shows in realtime (not just on the release-commit render). Mirrors the text arm.
       const g = this.effectiveGeom(id, obj);
       this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
       this.applyRotation(el, g.rotation);
@@ -1358,7 +1409,7 @@ export class TextLayer {
         if (this.pointToPolylineDist(world, poly) <= tol) return id;
         continue;
       }
-      if (obj?.type !== "text" && obj?.type !== "stamp") continue;
+      if (obj?.type !== "text" && obj?.type !== "stamp" && obj?.type !== "image") continue;
       const size = this.sizes.get(id);
       if (!size) continue;
       // Stamps are centre-anchored (obj.x/y = centre); text/shapes are top-left anchored.
@@ -1420,11 +1471,11 @@ export class TextLayer {
     if (this.edit) this.commit();
     const hit = this.hitTest(world);
     if (hit && this.objects.get(hit)?.get("locked") === true) return; // locked → no edit, no create-on-top
-    if (hit && !this.isStampId(hit) && !this.isInkId(hit)) {
+    if (hit && !this.isStampId(hit) && !this.isInkId(hit) && !this.isImageId(hit)) {
       if (this.remoteEditIds.has(hit)) return; // a peer is editing this box — leave it to them
       this.beginEdit(hit, selectAll, caretAt);
     } else {
-      this.beginCreate(world.x, world.y); // empty space (or a non-editable stamp/stroke) → new box
+      this.beginCreate(world.x, world.y); // empty space (or a non-editable stamp/stroke/image) → new box
     }
   }
 
@@ -1440,6 +1491,13 @@ export class TextLayer {
     const m = this.objects.get(id);
     const obj = m ? readObject(m) : null;
     return obj?.type === "stroke" || obj?.type === "connector";
+  }
+
+  /** True if `id` is an uploaded image (renders in this layer, but isn't text-editable). */
+  isImageId(id: string): boolean {
+    const m = this.objects.get(id);
+    const obj = m ? readObject(m) : null;
+    return obj?.type === "image";
   }
 
   private beginCreate(x: number, y: number): void {
@@ -2098,7 +2156,7 @@ export class TextLayer {
       const m = this.objects.get(id);
       const t = m?.get("type");
       if (m?.get("locked") === true) continue; // ⌘A selects the actionable (unlocked) objects
-      if (t === "text" || t === "stamp" || t === "stroke" || t === "connector")
+      if (t === "text" || t === "stamp" || t === "image" || t === "stroke" || t === "connector")
         this.selected.add(id);
     }
     if (this.selected.size !== before) {
@@ -2115,6 +2173,7 @@ export class TextLayer {
       if (
         obj?.type !== "text" &&
         obj?.type !== "stamp" &&
+        obj?.type !== "image" &&
         obj?.type !== "stroke" &&
         obj?.type !== "connector"
       )
@@ -2284,8 +2343,9 @@ export class TextLayer {
       }
       const el = this.els.get(id);
       if (!el) continue;
-      if (obj?.type === "stamp") {
-        // effectiveGeom folds in the live moveState offset + the centre→top-left conversion.
+      if (obj?.type === "stamp" || obj?.type === "image") {
+        // effectiveGeom folds in the live moveState offset (+ a stamp's centre→top-left conversion),
+        // so the dragged stamp/image glides under the cursor instead of jumping on release.
         const g = this.effectiveGeom(id, obj);
         this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
         continue;
@@ -2376,7 +2436,7 @@ export class TextLayer {
    *  `height` is only meaningful for shapes (fixed-height boxes); undefined = auto-height. */
   private effectiveGeom(
     id: string,
-    obj: TextObject | StampObject | StrokeObject | ConnectorObject,
+    obj: TextObject | StampObject | StrokeObject | ConnectorObject | ImageObject,
   ): {
     x: number;
     y: number;
@@ -2524,7 +2584,7 @@ export class TextLayer {
       y: obj.y + off.dy,
       width: obj.width,
       height: obj.height,
-      fontSize: obj.fontSize,
+      fontSize: obj.type === "image" ? 0 : obj.fontSize, // images have no font; layout ignores it
       rotation,
     };
   }
@@ -2562,6 +2622,7 @@ export class TextLayer {
       if (
         obj?.type !== "text" &&
         obj?.type !== "stamp" &&
+        obj?.type !== "image" &&
         obj?.type !== "stroke" &&
         obj?.type !== "connector"
       )
@@ -2583,6 +2644,7 @@ export class TextLayer {
     if (
       obj?.type !== "text" &&
       obj?.type !== "stamp" &&
+      obj?.type !== "image" &&
       obj?.type !== "stroke" &&
       obj?.type !== "connector"
     )
@@ -2612,6 +2674,7 @@ export class TextLayer {
     if (
       obj?.type !== "text" &&
       obj?.type !== "stamp" &&
+      obj?.type !== "image" &&
       obj?.type !== "stroke" &&
       obj?.type !== "connector"
     )
@@ -2644,7 +2707,7 @@ export class TextLayer {
         continue;
       }
       const el = this.els.get(id);
-      if (!el || (obj?.type !== "text" && obj?.type !== "stamp")) continue;
+      if (!el || (obj?.type !== "text" && obj?.type !== "stamp" && obj?.type !== "image")) continue;
       const g = this.effectiveGeom(id, obj);
       const fontFamily = obj.type === "text" ? obj.fontFamily : "";
       const align = obj.type === "text" ? obj.align : "left";
@@ -3063,12 +3126,14 @@ export class TextLayer {
       box.style.top = el.style.top;
       box.style.width = `${el.offsetWidth}px`;
       box.style.height = `${el.offsetHeight}px`;
-      // A shape has free width×height → show the n/s (vertical) handles; text/sticky don't.
+      // A shape has free width×height → show the n/s (vertical) handles; text/sticky/image don't.
       box.classList.toggle("komu-text-resize-shape", el.classList.contains("shape"));
       // A stamp resizes uniformly (square) → corner handles only (hide the w/e side handles too).
       box.classList.toggle("komu-text-resize-stamp", obj?.type === "stamp");
+      // An image resizes aspect-locked → corner handles only too (a side handle would distort it).
+      box.classList.toggle("komu-text-resize-image", obj?.type === "image");
       box.classList.toggle("komu-text-resize-stroke", false);
-      const rotatable = obj?.type === "text" || obj?.type === "stamp";
+      const rotatable = obj?.type === "text" || obj?.type === "stamp" || obj?.type === "image";
       this.applyRotation(box, rotatable ? this.effectiveGeom(id, obj).rotation : 0);
     }
     this.updateGroupChrome(); // the multi-node group's own transform box (2+ selected)
@@ -3210,6 +3275,28 @@ export class TextLayer {
       window.addEventListener("pointerup", this.onResizeUp);
       return;
     }
+    if (obj?.type === "image") {
+      // An image is a top-left box with explicit width/height — resize it free-aspect like a shape.
+      this.resizing = {
+        id,
+        handle,
+        startX: e.clientX,
+        startY: e.clientY,
+        ox: obj.x,
+        oy: obj.y,
+        ow: obj.width,
+        oh: obj.height,
+        ofs: 0,
+        baseW: obj.width,
+        isShape: false,
+        isStamp: false,
+        isImage: true,
+      };
+      this.updateSelectionBar();
+      window.addEventListener("pointermove", this.onResizeMove);
+      window.addEventListener("pointerup", this.onResizeUp);
+      return;
+    }
     if (obj?.type !== "text") return;
     this.resizing = {
       id,
@@ -3306,6 +3393,42 @@ export class TextLayer {
       }
       return;
     }
+    if (rs.isImage) {
+      // Aspect-locked resize: scale the box uniformly, preserving the image's natural ratio, so it
+      // never distorts and object-fit never crops. The corner drag drives the scale (the larger of the
+      // two axes); the opposite corner stays anchored. Side handles are hidden by the chrome.
+      const MIN_IMG = 24;
+      const h = rs.handle;
+      const ow = rs.ow ?? rs.baseW;
+      const oh = rs.oh ?? ow;
+      let fw = ow;
+      let fh = oh;
+      if (h.includes("e")) fw = ow + wdx;
+      if (h.includes("w")) fw = ow - wdx;
+      if (h.includes("s")) fh = oh + wdy;
+      if (h.includes("n")) fh = oh - wdy;
+      const s = Math.max(MIN_IMG / ow, MIN_IMG / oh, fw / ow, fh / oh);
+      const nw = ow * s;
+      const nh = oh * s;
+      const nx = h.includes("w") ? rs.ox + (ow - nw) : rs.ox;
+      const ny = h.includes("n") ? rs.oy + (oh - nh) : rs.oy;
+      this.resizePreview = { id: rs.id, x: nx, y: ny, width: nw, height: nh, fontSize: 0 };
+      this.layout(el, nx, ny, nw, 0, "", "left", nh);
+      this.updateResizeChrome();
+      const now = Date.now();
+      if (now - this.lastResizeSent >= EDIT_BROADCAST_MS) {
+        this.lastResizeSent = now;
+        this.opts.awareness.setLocalStateField("textresize", {
+          id: rs.id,
+          x: nx,
+          y: ny,
+          width: nw,
+          height: nh,
+          fontSize: 0,
+        });
+      }
+      return;
+    }
     if (obj?.type !== "text") return;
 
     let x = rs.ox;
@@ -3380,24 +3503,16 @@ export class TextLayer {
         x = rs.ox + rs.baseW * (1 - ratio); // auto-width left corner: anchor the right edge
       }
     }
+    const boxHeight = rs.isShape ? height : undefined; // free-aspect shape box vs auto-height text
     this.resizePreview = {
       id: rs.id,
       x,
       y,
       width,
-      height: rs.isShape ? height : undefined,
+      height: boxHeight,
       fontSize,
     };
-    this.layout(
-      el,
-      x,
-      y,
-      width,
-      fontSize,
-      obj.fontFamily,
-      obj.align,
-      rs.isShape ? height : undefined,
-    );
+    this.layout(el, x, y, width, fontSize, obj.fontFamily, obj.align, boxHeight);
     this.updateResizeChrome();
     this.opts.onShapesMoved?.(); // re-route connectors bound to the resizing shape (live)
     this.rerouteBoundConnectors(); // …and re-paint the visible DOM connectors so they follow too
@@ -3468,6 +3583,16 @@ export class TextLayer {
             }
             setObjectsPoints(this.opts.doc, [{ id: pv.id, points: pts }]);
           }
+        } else if (rs.isImage) {
+          // An image bakes its full box geometry too, but via setImageGeom (setTextGeometry's guard
+          // rejects the `image` type). Free-aspect: both width and height persist.
+          const geom: { x: number; y: number; width?: number; height?: number } = {
+            x: pv.x,
+            y: pv.y,
+          };
+          if (pv.width != null) geom.width = pv.width;
+          if (pv.height != null) geom.height = pv.height;
+          setImageGeom(this.opts.doc, pv.id, geom);
         } else if (rs.isShape) {
           // A shape bakes its full box geometry (font unchanged).
           const geom: { x: number; y: number; width?: number; height?: number } = {
@@ -3516,7 +3641,14 @@ export class TextLayer {
     const obj = m ? readObject(m) : null;
     const el =
       id && obj?.type === "stroke" ? this.inkEls.get(id) : id ? this.els.get(id) : undefined;
-    if (!id || !el || (obj?.type !== "text" && obj?.type !== "stamp" && obj?.type !== "stroke"))
+    if (
+      !id ||
+      !el ||
+      (obj?.type !== "text" &&
+        obj?.type !== "stamp" &&
+        obj?.type !== "stroke" &&
+        obj?.type !== "image")
+    )
       return;
     // Rotation centre: a stroke uses its world-AABB centre (mapped to screen); a div box uses its
     // rendered rect centre (rotation-invariant under CSS rotate-about-centre).
@@ -3614,7 +3746,22 @@ export class TextLayer {
       }
       setObjectsPoints(this.opts.doc, [{ id: rs.id, points: pts }]);
     } else if (obj?.type === "stamp") setStampGeom(this.opts.doc, rs.id, { rotation: deg });
-    else if (obj?.type === "text") {
+    else if (obj?.type === "image") {
+      // An image spins about its centre like a text box, orbiting any attached stamps with it.
+      const g = this.effectiveGeom(rs.id, obj);
+      const sz = this.sizes.get(rs.id);
+      const w = g.width ?? sz?.w ?? 0;
+      const h = g.height ?? sz?.h ?? 0;
+      const box = { cx: g.x + w / 2, cy: g.y + h / 2, w, h };
+      this.opts.doc.transact(() => {
+        setImageGeom(this.opts.doc, rs.id, { rotation: deg });
+        this.transformAttachedStamps(
+          rs.id,
+          { ...box, rot: rs.startRotation },
+          { ...box, rot: deg },
+        );
+      });
+    } else if (obj?.type === "text") {
       // A text/sticky/shape host: commit its rotation AND orbit any attached stamps about its centre
       // (one transaction → one undo step). The centre is rotation-invariant, so old/new share it.
       const g = this.effectiveGeom(rs.id, obj);
@@ -3771,7 +3918,9 @@ export class TextLayer {
     for (const [id, el] of this.els) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
-      if (obj?.type === "stamp") {
+      if (obj?.type === "stamp" || obj?.type === "image") {
+        // A peer's in-progress move/resize of a stamp or image — effectiveGeom folds in the gliding
+        // remoteDrag/remoteResize offset, so it tracks live on this screen too (not just on commit).
         const g = this.effectiveGeom(id, obj);
         this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
         continue;
@@ -3858,7 +4007,7 @@ export class TextLayer {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
       const isInk = obj?.type === "stroke" || obj?.type === "connector";
-      if (obj?.type !== "text" && obj?.type !== "stamp" && !isInk) {
+      if (obj?.type !== "text" && obj?.type !== "stamp" && obj?.type !== "image" && !isInk) {
         this.remoteResizeCurrent.delete(id);
         continue;
       }
@@ -3882,7 +4031,13 @@ export class TextLayer {
                 height: inkBB?.height ?? 1,
                 fontSize: 0,
               }
-            : { x: obj.x, y: obj.y, width: obj.width, height: obj.height, fontSize: obj.fontSize };
+            : {
+                x: obj.x,
+                y: obj.y,
+                width: obj.width,
+                height: obj.height,
+                fontSize: obj.type === "text" ? obj.fontSize : 0, // images carry no font
+              };
       const cur = this.remoteResizeCurrent.get(id) ?? startGeom;
       const nx = cur.x + (target.x - cur.x) * LERP;
       const nfs = cur.fontSize + (target.fontSize - cur.fontSize) * LERP;

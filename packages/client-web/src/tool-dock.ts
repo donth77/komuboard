@@ -14,11 +14,18 @@ const TOOLS: ReadonlyArray<readonly [string, string, string, ToolId | null]> = [
   ["hand", "h", "Hand", "hand"],
   ["pen", "p", "Draw", "pen"],
   ["eraser", "e", "Eraser", "eraser"],
+  // Phone-only "Insert" launcher: on small screens it replaces the five insert tools below (which CSS
+  // hides), opening a sheet to pick one. On tablet/desktop it's hidden and all five show inline.
+  ["plus", "", "Insert", "insert"],
   ["sticky", "s", "Sticky note", "sticky"],
   ["text", "t", "Text", "text"],
   ["shapes", "r", "Shapes and lines", "shapes"],
   ["stamp", "k", "Stamp", "stamp"],
+  ["image", "i", "Image", "image"],
 ];
+
+// The "drop an object" tools that collapse behind the Insert (+) launcher on phones.
+const INSERT_TOOLS = new Set<ToolId>(["sticky", "text", "shapes", "stamp", "image"]);
 
 export class CoToolDock extends HTMLElement {
   #active: ToolId = "select";
@@ -33,8 +40,9 @@ export class CoToolDock extends HTMLElement {
     this.innerHTML = TOOLS.map(([name, key, label, tool]) => {
       // Tooltip uses the body-level singleton (always top-most — never hidden under a submenu;
       // see tooltip.ts): beside the vertical dock, with the shortcut key as a chip for wired tools.
-      const keyAttr = tool ? ` data-tip-key="${key.toUpperCase()}"` : "";
-      return `<button class="tool${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" data-tip="${label}" data-tip-pos="right"${keyAttr} aria-label="${label}">${icon(name)}</button>`;
+      const keyAttr = tool && key ? ` data-tip-key="${key.toUpperCase()}"` : "";
+      const groupAttr = tool && INSERT_TOOLS.has(tool) ? ` data-group="insert"` : "";
+      return `<button class="tool${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" data-tip="${label}" data-tip-pos="right"${keyAttr}${groupAttr} aria-label="${label}">${icon(name)}</button>`;
     }).join("");
     this.#sync();
     this.addEventListener("click", (e) => {

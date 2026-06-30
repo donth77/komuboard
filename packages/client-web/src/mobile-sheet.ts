@@ -5,8 +5,8 @@
 // finger and snaps to the nearest state) — the one piece of behaviour all three share.
 
 /** Collapsed peek height (px) — only the grab handle stays visible. Matches the `.mini-sheet.collapsed`
- *  translate in styles.css. */
-const TAB = 26;
+ *  translate (and the `.sheet-handle` height) in styles.css. */
+const TAB = 30;
 
 /**
  * Wire a grab handle to expand/collapse its sheet between fully open and a peek tab.
@@ -62,6 +62,10 @@ export function ensureSheetHandle(host: HTMLElement): HTMLElement {
     handle = document.createElement("div");
     handle.className = "sheet-handle";
     handle.setAttribute("aria-hidden", "true");
+    // Focusable (mouse only, not in tab order) so a TAP on it becomes the editor's blur relatedTarget.
+    // That keeps the commit's keepTool path (it's inside the tool-picker element) — otherwise tapping a
+    // collapsed shape/sticky sheet's handle to expand it would instead revert to select and hide it.
+    handle.tabIndex = -1;
     host.prepend(handle);
   }
   return handle;

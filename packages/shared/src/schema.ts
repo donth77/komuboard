@@ -188,7 +188,28 @@ export interface StampObject {
  *  FigJam's default sticker footprint without being oversized. */
 export const DEFAULT_STAMP_SIZE = 48;
 
-export type BoardObject = StrokeObject | TextObject | ConnectorObject | StampObject;
+/** An uploaded image. `x,y` is its top-left (like text/shapes), with `width`/`height` in canvas units.
+ *  `src` is a stable reference to the bytes in R2 (the client resolves it to a URL) — never the bytes
+ *  themselves, which would bloat the doc. Selectable / movable / resizable like any box. */
+export interface ImageObject {
+  id: string;
+  type: "image";
+  /** Group membership — see {@link StrokeObject.groupId}. */
+  groupId?: string;
+  /** Locked — see {@link StrokeObject.locked}. */
+  locked?: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** R2 object key (resolved to a serve URL by the client). */
+  src: string;
+  /** Rotation in degrees (clockwise) about the centre. Absent/0 = upright. */
+  rotation?: number;
+  authorId: string;
+}
+
+export type BoardObject = StrokeObject | TextObject | ConnectorObject | StampObject | ImageObject;
 
 /** Defaults for a freshly-created text box (shared so the renderer + schema can't drift).
  *  Size 24 = the "Medium" preset in the text toolbar. */
@@ -343,6 +364,7 @@ export function addObject(doc: Y.Doc, obj: BoardObject): void {
   if (obj.type === "stroke") addStroke(doc, obj);
   else if (obj.type === "text") addText(doc, obj);
   else if (obj.type === "stamp") addStamp(doc, obj);
+  else if (obj.type === "image") addImage(doc, obj);
   else addConnector(doc, obj);
 }
 
@@ -378,7 +400,7 @@ export function cloneObject(
       runs: obj.runs.map((r) => ({ ...r })),
     };
   }
-  if (obj.type === "stamp") {
+  if (obj.type === "stamp" || obj.type === "image") {
     return { ...obj, id, authorId, x: obj.x + dx, y: obj.y + dy };
   }
   const remap = (e: ConnectorEnd): ConnectorEnd => {
@@ -690,6 +712,24 @@ export function addStamp(doc: Y.Doc, s: StampObject): void {
   });
 }
 
+/** Add an uploaded image object (the bytes already live in R2; `src` references them). */
+export function addImage(doc: Y.Doc, img: ImageObject): void {
+  doc.transact(() => {
+    const m = new Y.Map<unknown>();
+    m.set("id", img.id);
+    m.set("type", "image");
+    m.set("x", img.x);
+    m.set("y", img.y);
+    m.set("width", img.width);
+    m.set("height", img.height);
+    m.set("src", img.src);
+    if (img.rotation != null) m.set("rotation", img.rotation);
+    m.set("authorId", img.authorId);
+    objectsMap(doc).set(img.id, m);
+    orderArray(doc).push([img.id]);
+  });
+}
+
 /** Update a stamp's geometry (centre / size / rotation). Used by drag + resize + rotate. */
 export function setStampGeom(
   doc: Y.Doc,
@@ -702,6 +742,24 @@ export function setStampGeom(
     if (geom.x != null) m.set("x", geom.x);
     if (geom.y != null) m.set("y", geom.y);
     if (geom.size != null) m.set("size", geom.size);
+    if (geom.rotation != null) m.set("rotation", geom.rotation);
+  });
+}
+
+/** Update an image's box geometry (top-left x/y, width/height, rotation). Used by resize + rotate.
+ *  Mirrors setTextGeometry, but for the `image` type (which setTextGeometry's guard rejects). */
+export function setImageGeom(
+  doc: Y.Doc,
+  id: string,
+  geom: { x?: number; y?: number; width?: number; height?: number; rotation?: number },
+): void {
+  doc.transact(() => {
+    const m = objectsMap(doc).get(id);
+    if (!m || m.get("type") !== "image" || m.get("locked") === true) return; // lock guard
+    if (geom.x != null) m.set("x", geom.x);
+    if (geom.y != null) m.set("y", geom.y);
+    if (geom.width != null) m.set("width", geom.width);
+    if (geom.height != null) m.set("height", geom.height);
     if (geom.rotation != null) m.set("rotation", geom.rotation);
   });
 }
@@ -731,6 +789,32 @@ function readStamp(m: Y.Map<unknown>): StampObject | null {
   return stamp;
 }
 
+function readImage(m: Y.Map<unknown>): ImageObject | null {
+  const x = m.get("x");
+  const y = m.get("y");
+  const width = m.get("width");
+  const height = m.get("height");
+  const src = m.get("src");
+  if (typeof x !== "number" || !Number.isFinite(x)) return null;
+  if (typeof y !== "number" || !Number.isFinite(y)) return null;
+  if (typeof width !== "number" || !Number.isFinite(width) || width <= 0) return null;
+  if (typeof height !== "number" || !Number.isFinite(height) || height <= 0) return null;
+  if (typeof src !== "string" || !src) return null;
+  const img: ImageObject = {
+    id: String(m.get("id")),
+    type: "image",
+    x,
+    y,
+    width,
+    height,
+    src,
+    authorId: String(m.get("authorId") ?? ""),
+  };
+  const rotation = m.get("rotation");
+  if (typeof rotation === "number" && Number.isFinite(rotation)) img.rotation = rotation;
+  return img;
+}
+
 /** Read a typed object out of its Y.Map — returns null for unknown types or malformed data. */
 export function readObject(m: Y.Map<unknown>): BoardObject | null {
   const obj = readObjectByType(m);
@@ -747,6 +831,7 @@ function readObjectByType(m: Y.Map<unknown>): BoardObject | null {
   if (type === "text") return readText(m);
   if (type === "connector") return readConnector(m);
   if (type === "stamp") return readStamp(m);
+  if (type === "image") return readImage(m);
   if (type !== "stroke") return null;
   // CRDT/peer data is untrusted: points must be a flat [x0,y0,x1,y1,…] array of finite
   // numbers. Reject anything malformed rather than fabricating a default (which would

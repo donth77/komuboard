@@ -19,5 +19,11 @@ class_name = "Board"
 tag = "v1"
 new_sqlite_classes = ["Board"]
 
+# R2 bucket for uploaded images — bytes only; the Yjs doc holds the content-hash key. Local dev uses
+# miniflare's simulated R2; production needs `wrangler r2 bucket create komuboard-uploads`. Zero egress.
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "komuboard-uploads"
+
 [observability]
 enabled = true

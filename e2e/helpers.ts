@@ -215,6 +215,32 @@ export async function injectShape(
   }, o);
 }
 
+/** Inject an image object directly into the doc (the exact shape addImage writes). */
+export async function injectImage(
+  page: Page,
+  o: { id: string; x: number; y: number; width: number; height: number; src: string },
+): Promise<void> {
+  await page.evaluate((opts) => {
+    const doc = (window as unknown as { __komuboard: { doc: InjectDoc } }).__komuboard.doc;
+    const objects = doc.getMap("objects");
+    const order = doc.getArray("order");
+    const YMap = objects.constructor;
+    doc.transact(() => {
+      const m = new YMap();
+      m.set("id", opts.id);
+      m.set("type", "image");
+      m.set("x", opts.x);
+      m.set("y", opts.y);
+      m.set("width", opts.width);
+      m.set("height", opts.height);
+      m.set("src", opts.src);
+      m.set("authorId", "e2e");
+      objects.set(opts.id, m);
+      order.push([opts.id]);
+    });
+  }, o);
+}
+
 /** Inject a sticky note (a text box with a `bg`, no `shape`) directly into the doc. */
 export async function injectSticky(
   page: Page,

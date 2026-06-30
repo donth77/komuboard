@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import {
   addConnector,
+  addImage,
   addStamp,
   addStroke,
   addText,
@@ -17,6 +18,7 @@ import {
   objectsMap,
   orderArray,
   readObject,
+  setImageGeom,
   setLocked,
   ungroupObjects,
   setConnectorEnds,
@@ -149,6 +151,65 @@ describe("delete / translate / setObjectsPoints", () => {
     addStroke(doc, stroke("s1", [0, 0]));
     setObjectsPoints(doc, [{ id: "s1", points: [9, 9, 8, 8] }]);
     expect(asStroke(readObject(objectsMap(doc).get("s1")!)).points).toEqual([9, 9, 8, 8]);
+  });
+});
+
+describe("addImage + readImage", () => {
+  const img = (over: Record<string, unknown> = {}) => ({
+    id: "i1",
+    type: "image" as const,
+    x: 10,
+    y: 20,
+    width: 200,
+    height: 150,
+    src: "abc.png",
+    authorId: "u1",
+    ...over,
+  });
+
+  it("adds an image object + z-order entry and reads it back", () => {
+    const doc = new Y.Doc();
+    addImage(doc, img());
+    expect(orderArray(doc).toArray()).toEqual(["i1"]);
+    expect(readObject(objectsMap(doc).get("i1")!)).toMatchObject({
+      id: "i1",
+      type: "image",
+      x: 10,
+      y: 20,
+      width: 200,
+      height: 150,
+      src: "abc.png",
+    });
+  });
+
+  it("rejects malformed geometry / empty src", () => {
+    const doc = new Y.Doc();
+    rawObject(doc, "a", { type: "image", x: 0, y: 0, width: 0, height: 100, src: "x.png" });
+    rawObject(doc, "b", { type: "image", x: 0, y: 0, width: 100, height: 100, src: "" });
+    expect(readObject(objectsMap(doc).get("a")!)).toBeNull();
+    expect(readObject(objectsMap(doc).get("b")!)).toBeNull();
+  });
+
+  it("cloneObject offsets an image's position (for Duplicate)", () => {
+    const clone = cloneObject(img(), "i2", "u2", 5, -3);
+    expect(clone).toMatchObject({ id: "i2", type: "image", x: 15, y: 17, authorId: "u2" });
+  });
+
+  it("setImageGeom bakes a resize/rotate and honours the lock guard", () => {
+    const doc = new Y.Doc();
+    addImage(doc, img());
+    setImageGeom(doc, "i1", { x: 5, y: 6, width: 300, height: 200, rotation: 10 });
+    expect(readObject(objectsMap(doc).get("i1")!)).toMatchObject({
+      x: 5,
+      y: 6,
+      width: 300,
+      height: 200,
+      rotation: 10,
+    });
+    // A locked image ignores geometry writes.
+    objectsMap(doc).get("i1")!.set("locked", true);
+    setImageGeom(doc, "i1", { width: 999 });
+    expect(objectsMap(doc).get("i1")!.get("width")).toBe(300);
   });
 });
 
