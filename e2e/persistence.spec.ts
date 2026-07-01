@@ -60,3 +60,23 @@ test("persistence: a board survives every client leaving and a fresh peer joinin
 
   await b.close();
 });
+
+test("persistence: the board is flushed on the last disconnect (no debounce wait)", async ({
+  browser,
+}) => {
+  // The Board DO persists immediately when its last connection leaves (board.ts onClose), so a board
+  // survives eviction even without waiting for the 2s autosave debounce. Here we populate, close the
+  // sole client WITHOUT the 3s wait the tests above use, then rejoin and expect the board back.
+  // (Like those tests, the cold SQLite path is only hit if the idle DO actually evicts under
+  // `wrangler dev`; the flush wiring + encode/decode core are covered directly by the worker unit
+  // tests. This guards the user-visible promise that leaving quickly doesn't drop the last edits.)
+  const room = uniqueRoom("persist-flush");
+  const a = await connectPeer(browser, room);
+  await POPULATE(a.page);
+  await a.close(); // no debounce wait — the last-disconnect flush must have persisted the board
+  await new Promise((r) => setTimeout(r, 1000));
+
+  const b = await connectPeer(browser, room);
+  await expect.poll(() => objectIds(b.page)).toEqual(expect.arrayContaining(["p1", "p2", "p3"]));
+  await b.close();
+});
