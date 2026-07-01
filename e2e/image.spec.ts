@@ -277,3 +277,107 @@ test("a peer sees an image RESIZE live (streamed before release), then committed
   await a.close();
   await b.close();
 });
+
+// Playwright can't attach a real File to a drag or the system clipboard, so build a DataTransfer in the
+// page and dispatch the exact event each handler listens for. (Verified to drive placeImageFiles.)
+async function dropPng(
+  page: import("@playwright/test").Page,
+  at: { x: number; y: number },
+): Promise<void> {
+  await page.evaluate(
+    ({ b64, x, y }) => {
+      const bin = atob(b64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const dt = new DataTransfer();
+      dt.items.add(new File([arr], "drop.png", { type: "image/png" }));
+      const board = document.getElementById("board")!;
+      const init = {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        dataTransfer: dt,
+      } as DragEventInit;
+      board.dispatchEvent(new DragEvent("dragover", init));
+      board.dispatchEvent(new DragEvent("drop", init));
+    },
+    { b64: PNG_1x1, x: at.x, y: at.y },
+  );
+}
+
+async function pastePng(page: import("@playwright/test").Page): Promise<void> {
+  await page.evaluate((b64) => {
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const dt = new DataTransfer();
+    dt.items.add(new File([arr], "paste.png", { type: "image/png" }));
+    window.dispatchEvent(
+      new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }),
+    );
+  }, PNG_1x1);
+}
+
+test("drag-drop: dropping an image file uploads + places it at the drop point, selected", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("imgdrop"));
+  const before = await objectIds(a.page);
+
+  const box = (await a.page.locator("#board").boundingBox())!;
+  const dropAt = { x: box.x + box.width * 0.32, y: box.y + box.height * 0.3 }; // off the viewport centre
+  await dropPng(a.page, dropAt);
+
+  await expect.poll(async () => (await objectIds(a.page)).length).toBe(before.length + 1);
+  const id = (await objectIds(a.page)).find((i) => !before.includes(i))!;
+  const obj = (await objJSON(a.page, id))!;
+  expect(obj.type).toBe("image");
+  expect(obj.src as string).toMatch(/^[a-f0-9]{64}\.png$/); // really uploaded → real R2 key
+  await expect.poll(() => hasSelection(a.page)).toBe(true);
+
+  // …and it landed at the drop point (centre), not the viewport centre.
+  const cal = await calibrate(a.page);
+  const wantWorldX = (dropAt.x - cal.ox) / cal.scale;
+  const gotCentreX = (obj.x as number) + (obj.width as number) / 2;
+  expect(Math.abs(gotCentreX - wantWorldX)).toBeLessThan(20);
+
+  await a.close();
+});
+
+test("paste: pasting an image uploads + places it on the board, selected", async ({ browser }) => {
+  const a = await connectPeer(browser, uniqueRoom("imgpaste"));
+  const before = await objectIds(a.page);
+
+  await pastePng(a.page);
+
+  await expect.poll(async () => (await objectIds(a.page)).length).toBe(before.length + 1);
+  const id = (await objectIds(a.page)).find((i) => !before.includes(i))!;
+  const obj = (await objJSON(a.page, id))!;
+  expect(obj.type).toBe("image");
+  expect(obj.src as string).toMatch(/^[a-f0-9]{64}\.png$/);
+  await expect.poll(() => hasSelection(a.page)).toBe(true);
+  await a.close();
+});
+
+test("a missing image shows the broken-state placeholder (not a blank box)", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("imgbroken"));
+  // An image whose R2 key doesn't exist → the worker serves 404 → the <img> errors → broken state.
+  const box = (await a.page.locator("#board").boundingBox())!;
+  const cal = await calibrate(a.page);
+  const cx = (box.x + box.width / 2 - cal.ox) / cal.scale;
+  const cy = (box.y + box.height / 2 - cal.oy) / cal.scale;
+  await injectImage(a.page, {
+    id: "i1",
+    x: cx - 100,
+    y: cy - 75,
+    width: 200,
+    height: 150,
+    src: "deadbeef-not-a-real-key.png",
+  });
+  await expect(a.page.locator(".komu-image")).toBeVisible();
+  await expect(a.page.locator(".komu-image")).toHaveClass(/\bbroken\b/);
+  await a.close();
+});

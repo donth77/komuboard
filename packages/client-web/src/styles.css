@@ -2792,6 +2792,19 @@ input[type="range"] {
   -webkit-user-drag: none;
   user-select: none;
 }
+/* Faint placeholder while the bytes decode (avoids a blank flash on first paint / slow network). */
+.komu-image.loading {
+  background: var(--surface-2);
+}
+/* Bytes unavailable (deleted R2 object / offline): a muted box with an image-off glyph, instead of the
+   browser's torn-picture icon. The fixed gray reads on both themes' surface-2. */
+.komu-image.broken {
+  background: var(--surface-2) center / 30px no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%239aa3ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 3 18 18'/%3E%3Cpath d='M21 15V5a2 2 0 0 0-2-2H9'/%3E%3Cpath d='M3 7v12a2 2 0 0 0 2 2h12'/%3E%3Ccircle cx='9' cy='9' r='2'/%3E%3C/svg%3E");
+}
+.komu-image.broken img {
+  display: none;
+}
 .komu-image.selected {
   box-shadow: 0 0 0 1.5px #4a9eff;
 }

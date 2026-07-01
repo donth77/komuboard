@@ -54,7 +54,13 @@ pnpm typecheck && pnpm lint && pnpm test   # vitest unit tests
 pnpm test:e2e                              # boots worker + web, asserts realtime sync
 
 # Deploy the realtime backend (requires a Cloudflare account)
-pnpm --filter @komuboard/worker deploy
+# One-time: create the R2 bucket that holds uploaded images (binding "UPLOADS" in worker/wrangler.toml)
+pnpm --filter @komuboard/worker exec wrangler r2 bucket create komuboard-uploads
+pnpm --filter @komuboard/worker run deploy   # `run` — bare `pnpm deploy` hits pnpm's own deploy cmd
+
+# Build the web client pointed at the deployed worker — VITE_WORKER_HOST (host only, no scheme) drives
+# BOTH the realtime WebSocket and image upload/serve. Defaults to 127.0.0.1:8787 for local dev.
+VITE_WORKER_HOST=komuboard-worker.<your-subdomain>.workers.dev pnpm --filter @komuboard/client-web build
 ```
 
 Welcome aboard — `pnpm install && pnpm dev`, then open two tabs on the same room and draw.

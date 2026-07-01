@@ -17,7 +17,7 @@
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present test",
     "test:e2e": "playwright test",
-    "deploy": "pnpm --filter @komuboard/worker deploy"
+    "deploy": "pnpm --filter @komuboard/worker run deploy"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

@@ -550,12 +550,16 @@ export class BoardCanvas {
   ): string {
     const scale = this.stage.scaleX() || 1;
     const rect = this.stage.container().getBoundingClientRect();
-    // Fit within ~60% of the viewport (converted to world units); preserve aspect; don't upscale.
+    // Fit within ~60% of the viewport (converted to world units), preserving aspect; never larger than
+    // that. Clamp the result to a sane band so a tiny icon is still grabbable and a huge image can't
+    // dominate the board: at least 48px, at most 4000px on the longer side.
     const maxW = Math.max(64, (rect.width * 0.6) / scale);
     const maxH = Math.max(64, (rect.height * 0.6) / scale);
-    const fit = Math.min(1, maxW / upload.width, maxH / upload.height);
-    const w = Math.max(1, Math.round(upload.width * fit));
-    const h = Math.max(1, Math.round(upload.height * fit));
+    const longer = Math.max(upload.width, upload.height) || 1;
+    const fit = Math.min(1, maxW / upload.width, maxH / upload.height, 4000 / longer);
+    const f = Math.max(fit, 48 / longer); // upscale a too-tiny image so it's at least 48px / visible
+    const w = Math.max(1, Math.round(upload.width * f));
+    const h = Math.max(1, Math.round(upload.height * f));
     const centre = atClient
       ? this.clientToWorld(atClient.clientX, atClient.clientY)
       : this.clientToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);

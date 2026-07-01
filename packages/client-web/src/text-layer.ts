@@ -742,6 +742,16 @@ export class TextLayer {
       img.alt = "";
       el.appendChild(img);
     }
+    // A faint placeholder until the bytes decode, and a clear "unavailable" state if they're gone (a
+    // deleted R2 object / offline) — better than a blank box or the browser's broken-image glyph. The
+    // handlers are attached BEFORE src so a cached (immutable) image still clears the loading state.
+    el.classList.add("loading");
+    el.classList.remove("broken");
+    img.onload = () => el.classList.remove("loading");
+    img.onerror = () => {
+      el.classList.remove("loading");
+      el.classList.add("broken");
+    };
     img.src = imageSrcUrl(key);
   }
 
@@ -3398,6 +3408,7 @@ export class TextLayer {
       // never distorts and object-fit never crops. The corner drag drives the scale (the larger of the
       // two axes); the opposite corner stays anchored. Side handles are hidden by the chrome.
       const MIN_IMG = 24;
+      const MAX_IMG = 8000; // guard: an image can't be scaled to an absurd, board-dominating size
       const h = rs.handle;
       const ow = rs.ow ?? rs.baseW;
       const oh = rs.oh ?? ow;
@@ -3407,7 +3418,8 @@ export class TextLayer {
       if (h.includes("w")) fw = ow - wdx;
       if (h.includes("s")) fh = oh + wdy;
       if (h.includes("n")) fh = oh - wdy;
-      const s = Math.max(MIN_IMG / ow, MIN_IMG / oh, fw / ow, fh / oh);
+      const sMin = Math.max(MIN_IMG / ow, MIN_IMG / oh, fw / ow, fh / oh);
+      const s = Math.min(sMin, MAX_IMG / ow, MAX_IMG / oh); // floor at MIN_IMG, cap the longer side at MAX_IMG
       const nw = ow * s;
       const nh = oh * s;
       const nx = h.includes("w") ? rs.ox + (ow - nw) : rs.ox;
