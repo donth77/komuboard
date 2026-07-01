@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@komuboard/shared": "workspace:*",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "konva": "^10.3.0",
     "motion": "^12.40.0",
     "partysocket": "^1.1.4",

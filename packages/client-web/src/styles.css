@@ -2829,6 +2829,168 @@ input[type="range"] {
 }
 /* Transient bottom toast — image-upload errors (bad type / too large / failed). Neutral dark so it
    reads on either theme; mirrors the join-toast motion. See showToast() in main.ts. */
+/* Transient overlay during an export — it must be OPAQUE so the brief camera fit/restore the capture
+   needs is fully hidden (a translucent scrim let the board visibly zoom underneath). Self-removes. */
+.export-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  color: var(--muted);
+  font:
+    600 14px Inter,
+    system-ui,
+    sans-serif;
+}
+/* ── Export dialog — file type + background picker (see ui/export-dialog.ts) ─────────────────────── */
+.export-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 14px 0;
+}
+.export-label {
+  flex: 0 0 132px;
+  padding-top: 3px;
+  font:
+    500 15px Inter,
+    system-ui,
+    sans-serif;
+  color: var(--ink);
+}
+.export-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.export-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--ink);
+  font:
+    15px Inter,
+    system-ui,
+    sans-serif;
+}
+.export-radio input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.export-bg {
+  position: relative;
+}
+.export-bg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 132px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font:
+    15px Inter,
+    system-ui,
+    sans-serif;
+}
+.export-bg-caret {
+  margin-left: auto;
+  color: var(--muted);
+}
+/* The background dropdown is a popover that overlays the dialog — it must NOT grow the dialog's height.
+   Three things make that work:
+   1. The <dialog> UA style is `overflow: auto`, which clips the popover at the dialog edge — override it
+      to visible for this (short, non-scrolling) dialog so the menu can escape downward.
+   2. overflow:visible on the body so the menu isn't clipped there either.
+   3. position/z-index lift the body (and its popover) ABOVE the footer — without the stacking context
+      the footer, a later flex item painted atomically in document order, covers the menu's lower half
+      regardless of the menu's own z-index (that's what made the third option look clipped). */
+.export-dialog .dialog {
+  overflow: visible;
+}
+.export-dialog .dialog-body {
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+.export-bg-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 190px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  z-index: 5;
+}
+.export-bg-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font:
+    15px Inter,
+    system-ui,
+    sans-serif;
+}
+.export-bg-opt:hover {
+  background: var(--surface-2);
+}
+.bg-check {
+  width: 14px;
+  flex: none;
+  color: var(--ink);
+  opacity: 0;
+}
+.export-bg-opt.selected .bg-check {
+  opacity: 1;
+}
+.bg-swatch {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.bg-grid {
+  background-color: var(--surface);
+  background-image: radial-gradient(var(--muted) 1.3px, transparent 1.3px);
+  background-size: 6px 6px;
+}
+.bg-transparent {
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #bbb 25%, transparent 25%),
+    linear-gradient(-45deg, #bbb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #bbb 75%),
+    linear-gradient(-45deg, transparent 75%, #bbb 75%);
+  background-size: 8px 8px;
+  background-position:
+    0 0,
+    0 4px,
+    4px -4px,
+    -4px 0;
+}
+.bg-solid {
+  background: var(--surface);
+}
 .komu-toasts {
   position: fixed;
   left: 50%;

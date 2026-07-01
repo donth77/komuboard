@@ -67,6 +67,9 @@ async function handleServe(key: string, env: Env): Promise<Response> {
   obj.writeHttpMetadata(headers);
   headers.set("Cache-Control", IMMUTABLE);
   headers.set("ETag", obj.httpEtag);
+  // Allow cross-origin reads so a board export can rasterize these images without tainting the canvas
+  // (the deployed client is a different origin than the worker). The images are public anyway.
+  headers.set("Access-Control-Allow-Origin", "*");
   return new Response(obj.body, { headers });
 }
 

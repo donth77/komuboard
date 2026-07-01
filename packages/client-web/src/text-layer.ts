@@ -237,6 +237,18 @@ function sameNumMap(a: Map<string, number>, b: Map<string, number>): boolean {
 
 export class TextLayer {
   private readonly root: HTMLDivElement;
+  /** Export mode: culling is suspended so EVERY object mounts — a whole-board export must include the
+   *  off-screen ones the viewport would normally leave unrendered. */
+  private exportMode = false;
+  /** The overlay node holding all rendered objects (boxes + ink SVGs) — the export capture target. */
+  get node(): HTMLDivElement {
+    return this.root;
+  }
+  /** Suspend/restore viewport culling (mount all objects / cull again) and re-render. */
+  setExportMode(on: boolean): void {
+    this.exportMode = on;
+    this.render();
+  }
   /** id → rendered display element (kept in sync with the doc). */
   private readonly els = new Map<string, HTMLDivElement>();
   /** Strokes + connectors rendered as SVG (ADR-0009 Phase 3), keyed by id — z-order siblings of the
@@ -557,6 +569,7 @@ export class TextLayer {
   /** Visible world rect (viewport AABB) inflated by `CULL_MARGIN` per side, or null when culling can't
    *  run yet (container has no measured size → mount everything). */
   private cullRect(): { x0: number; y0: number; x1: number; y1: number } | null {
+    if (this.exportMode) return null; // export: mount everything, cull nothing
     const cam = this.opts.camera();
     const W = this.opts.container.clientWidth;
     const H = this.opts.container.clientHeight;

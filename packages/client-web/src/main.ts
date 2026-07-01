@@ -45,6 +45,7 @@ import { createRefusedDialog } from "./ui/refused-dialog";
 import { createJoinToasts } from "./ui/join-toast";
 import { createSelectionBar } from "./ui/selection-bar";
 import { createInsertSheet } from "./ui/insert-sheet";
+import { createExportDialog, type ExportBackground, type ExportFormat } from "./ui/export-dialog";
 import { createShareDialog } from "./ui/share";
 import { paintProfile } from "./util";
 import { SWATCHES } from "./palette";
@@ -208,6 +209,12 @@ const canvas = new BoardCanvas({
 if (window.__komuboard) window.__komuboard.canvas = canvas; // e2e hook: introspect remote presence
 canvas.setColor(penColor);
 canvas.setWidth(8);
+
+// Export dialog (PNG/PDF + background). Opened from the drawer/app-menu item and ⇧⌘E; its Export
+// button runs the capture (runExport, defined below — hoisted).
+const exportDialog = createExportDialog(
+  ({ format, background }) => void runExport(format, background),
+);
 provider.awareness.setLocalStateField("id", identity.id);
 
 // Publish my profile into the shared doc (synced once + persisted, never in
@@ -592,6 +599,7 @@ const shortcutsDialog = createDialog({
     `<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     '<div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
     `<div class="kbd-row"><span>Zoom in / out</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">+</kbd> / <kbd class="kbd">−</kbd></span></div>` +
+    `<div class="kbd-row"><span>Export (PNG / PDF)</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">E</kbd></span></div>` +
     '<div class="kbd-row"><span>Toggle this menu</span><kbd class="kbd">?</kbd></div>',
 });
 
@@ -697,6 +705,12 @@ window.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l") {
     if (e.shiftKey) canvas.setSelectionLocked(false);
     else canvas.toggleSelectionLock();
+    e.preventDefault();
+    return;
+  }
+  // ⇧⌘E opens the Export dialog (file type + background).
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "e") {
+    exportDialog.open();
     e.preventDefault();
     return;
   }
@@ -806,6 +820,8 @@ function toggleAppMenu(): void {
     `<button class="app-menu-item" type="button" data-act="profile"><span>Edit profile</span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
     '<div class="app-menu-sep"></div>' +
     settingsControlsHTML() +
+    '<div class="app-menu-sep"></div>' +
+    `<button class="app-menu-item" type="button" data-act="export"><span>Export…</span><span class="drawer-item-ic">${icon("download")}</span></button>` +
     "</div>";
   document.body.appendChild(menu);
   appMenu = menu;
@@ -833,6 +849,67 @@ mobileMql.addEventListener("change", closeAppMenu); // breakpoint flip → drop 
 // Help → keyboard-shortcuts dialog: a floating "?" button on desktop, a drawer item on mobile.
 document.getElementById("help-btn")?.addEventListener("click", () => shortcutsDialog.open());
 drawer?.addEventListener("help", () => shortcutsDialog.open());
+
+// Export → the whole board as PNG or PDF with the chosen background. An opaque overlay masks the brief
+// camera fit/restore the capture needs. Called by the export dialog's Export button.
+let exporting = false;
+function downloadBlob(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+async function runExport(format: ExportFormat, background: ExportBackground): Promise<void> {
+  if (exporting) return; // ignore re-entrancy while a capture is in flight
+  exporting = true;
+  const scrim = document.createElement("div");
+  scrim.className = "export-scrim";
+  scrim.textContent = "Exporting…";
+  document.body.appendChild(scrim);
+  try {
+    const cv = await canvas.exportCanvas({ background });
+    if (!cv) {
+      showToast("Nothing to export yet — add something to the board first.");
+      return;
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (format === "pdf") {
+      const { jsPDF } = await import("jspdf"); // lazy — keep the PDF lib out of the main bundle
+      const w = cv.width;
+      const h = cv.height;
+      const pdf = new jsPDF({
+        orientation: w >= h ? "landscape" : "portrait",
+        unit: "px",
+        format: [w, h],
+      });
+      pdf.addImage(cv.toDataURL("image/png"), "PNG", 0, 0, w, h);
+      pdf.save(`komuboard-${stamp}.pdf`);
+    } else {
+      const blob = await new Promise<Blob | null>((res) => cv.toBlob(res, "image/png"));
+      if (!blob) {
+        showToast("Export failed — please try again.");
+        return;
+      }
+      downloadBlob(blob, `komuboard-${stamp}.png`);
+    }
+  } catch {
+    showToast("Export failed — please try again.");
+  } finally {
+    scrim.remove();
+    exporting = false;
+  }
+}
+// The export item lives in both the drawer (mobile) and the app menu (desktop) as [data-act="export"];
+// one delegated handler opens the dialog from either (each menu closes itself).
+document.addEventListener("click", (e) => {
+  if (!(e.target as HTMLElement | null)?.closest('[data-act="export"]')) return;
+  closeAppMenu();
+  exportDialog.open();
+});
 
 // Share → "Share this board" dialog (room link + QR + Copy). Built lazily on first open; the room is
 // fixed per page load, so the dialog is reused thereafter.

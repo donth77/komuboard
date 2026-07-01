@@ -39,6 +39,7 @@ import {
   type StrokeObject,
   type StrokeStyle,
 } from "@komuboard/shared";
+import { toCanvas } from "html-to-image";
 import { ViewportController } from "./viewport";
 import { TextLayer } from "./text-layer";
 import { ConnectorBar } from "./connector-bar";
@@ -614,9 +615,9 @@ export class BoardCanvas {
     this.viewport.zoomTo(scale);
   }
   /** Frame all content in view (or reset when the board is empty). */
-  zoomToFit(): void {
-    // Strokes/connectors/text all live in the text-layer now (ADR-0009 P3) — frame the union of
-    // every object's world rect instead of the (now-empty) Konva content layer.
+  /** World AABB spanning every object on the board — strokes/connectors/text/stamps/images all live in
+   *  the text-layer now (ADR-0009 P3). null when the board is empty. */
+  private contentBounds(): Rect | null {
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -629,10 +630,86 @@ export class BoardCanvas {
       maxX = Math.max(maxX, r.x + r.width);
       maxY = Math.max(maxY, r.y + r.height);
     }
-    if (minX > maxX) return;
+    if (minX > maxX) return null;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  zoomToFit(): void {
+    const box = this.contentBounds();
+    if (!box) return;
     // maxScale 1: never zoom IN past 100% when auto-framing — a small/sparse board lands centred at
     // natural size rather than slamming to the 500% cap (it still zooms OUT to fit a large board).
-    this.viewport.zoomToFitBox({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, 1);
+    this.viewport.zoomToFitBox(box, 1);
+  }
+
+  /** Rasterize the board to a canvas — the whole board, or just the current selection. Temporarily
+   *  frames the target region + suspends culling so off-screen objects render, captures via
+   *  html-to-image, crops to the region, then restores the live camera. `background`: "solid" (surface
+   *  fill), "transparent", or "grid" (captures #board so its dot-grid shows through). Returns null when
+   *  there's nothing to export. The caller masks the brief camera move with an opaque overlay. */
+  async exportCanvas(
+    opts: { selectionOnly?: boolean; background?: "solid" | "transparent" | "grid" } = {},
+  ): Promise<HTMLCanvasElement | null> {
+    const region = opts.selectionOnly ? this.selectionUnionRect() : this.contentBounds();
+    if (!region || region.width <= 0 || region.height <= 0) return null;
+    // Breathing room around the content — ~5% of the longer side (min 32px world), so the margin looks
+    // consistent whether it's one sticky or a whole board (a flat pad is huge for the former, nil for
+    // the latter).
+    const PAD = Math.max(32, Math.round(Math.max(region.width, region.height) * 0.05));
+    const box = {
+      x: region.x - PAD,
+      y: region.y - PAD,
+      width: region.width + 2 * PAD,
+      height: region.height + 2 * PAD,
+    };
+    const sw = this.stage.width();
+    const sh = this.stage.height();
+    if (!sw || !sh) return null;
+
+    // Frame `box` in the viewport + mount every object. Cap the scale at 2× so small content exports
+    // content-proportional (not upscaled to fill the viewport); larger content still scales DOWN to
+    // fit. Either way scale ≤ the fit scale, so the content fits the viewport and nothing is clipped.
+    const cam = { scale: this.stage.scaleX(), x: this.stage.x(), y: this.stage.y() };
+    const scale = Math.min(sw / box.width, sh / box.height, 2);
+    const pos = {
+      x: (sw - box.width * scale) / 2 - box.x * scale,
+      y: (sh - box.height * scale) / 2 - box.y * scale,
+    };
+    this.viewport.applyTransform(scale, pos);
+    this.textLayer.setExportMode(true);
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    try {
+      const bg = opts.background ?? "solid";
+      const surface =
+        getComputedStyle(document.documentElement).getPropertyValue("--surface").trim() ||
+        "#ffffff";
+      // "grid" captures #board (its CSS dot-grid renders over the surface); the others capture the
+      // transparent object overlay, optionally filled with the surface colour.
+      const node = bg === "grid" ? this.opts.container : this.textLayer.node;
+      const backgroundColor = bg === "transparent" ? undefined : surface;
+      const PIXEL = 2; // crisp on hi-dpi + when zoomed in on the exported file
+      const full = await toCanvas(node, { pixelRatio: PIXEL, backgroundColor });
+      // Crop to the framed box's on-screen rect (scaled by the pixel ratio).
+      const sx = Math.round((box.x * scale + pos.x) * PIXEL);
+      const sy = Math.round((box.y * scale + pos.y) * PIXEL);
+      const cw = Math.max(1, Math.round(box.width * scale * PIXEL));
+      const ch = Math.max(1, Math.round(box.height * scale * PIXEL));
+      const crop = document.createElement("canvas");
+      crop.width = cw;
+      crop.height = ch;
+      crop.getContext("2d")?.drawImage(full, sx, sy, cw, ch, 0, 0, cw, ch);
+      return crop;
+    } finally {
+      this.textLayer.setExportMode(false);
+      this.viewport.applyTransform(cam.scale, { x: cam.x, y: cam.y });
+    }
+  }
+
+  /** Convenience: export the board (or selection) as a PNG blob. */
+  async exportImage(selectionOnly = false): Promise<Blob | null> {
+    const canvas = await this.exportCanvas({ selectionOnly });
+    if (!canvas) return null;
+    return await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
   }
 
   private point(): { x: number; y: number } {
