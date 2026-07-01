@@ -263,7 +263,21 @@ export class TextLayer {
   private readonly sizes = new Map<string, { w: number; h: number }>();
   private edit: EditSession | null = null;
   private readonly objects: Y.Map<Y.Map<unknown>>;
-  private readonly observer: () => void;
+  private readonly observer: (events: Y.YEvent<Y.Map<unknown>>[]) => void;
+  private readonly orderObserver: () => void;
+  /** id → materialized object. readObject() walks every Y.Map field and allocates — far too hot to
+   *  run per object per frame (recull + camera sync walk the whole board). Entries are invalidated
+   *  from the doc observer's events, so cached reads always match the doc. */
+  private readonly objCache = new Map<string, BoardObject | null>();
+  /** How layout() records an element's world size (see layout()):
+   *  - "inline": measure immediately (single-object paths — one reflow is fine).
+   *  - "defer":  bulk passes (render/recull) queue elements and measure once after ALL style writes —
+   *              interleaving writes with offsetWidth reads forces a reflow PER ELEMENT (thousands of
+   *              reflows per pass on a dense board).
+   *  - "skip":   camera-only relayouts (syncTransform) — the recorded sizes are WORLD-space, which a
+   *              camera change cannot alter, so measuring is pure reflow waste. */
+  private measureMode: "inline" | "defer" | "skip" = "inline";
+  private readonly measureQueue: { el: HTMLElement; width: number | undefined }[] = [];
 
   // --- live peer edits (ephemeral; off the awareness channel) ---
   private lastEditSent = 0;
@@ -418,11 +432,15 @@ export class TextLayer {
     // Links are pointer-events:none (a click must reach the canvas to select/drag the box), so link
     // hover is detected by hit-testing pointer moves over the board rather than mouseover on the link.
     opts.container.addEventListener("pointermove", this.onHoverMove, true);
-    this.observer = (): void => this.render();
+    this.observer = (events): void => {
+      this.invalidate(events);
+      this.render();
+    };
     this.objects.observeDeep(this.observer);
     // Z-order lives in the `order` array, which can change WITHOUT touching the objects map (a
     // bring-to-front / send-to-back, local or from a peer). Observe it too so the restack renders.
-    orderArray(this.opts.doc).observe(this.observer);
+    this.orderObserver = (): void => this.render();
+    orderArray(this.opts.doc).observe(this.orderObserver);
     this.opts.awareness.on("change", this.onAwareness);
     this.bar = new TextBar({
       setFontFamily: (css) => this.applyBlock({ fontFamily: css }),
@@ -448,28 +466,50 @@ export class TextLayer {
 
   // ---- rendering ----
 
+  /** Drop cached materializations for every object an incoming transaction touched. Nested events
+   *  (field / points edits) carry the object id as path[0]; top-level events on the objects map
+   *  (object add / remove) list the touched ids in changes.keys. */
+  private invalidate(events: Y.YEvent<Y.Map<unknown>>[]): void {
+    for (const e of events) {
+      if (e.path.length > 0) this.objCache.delete(String(e.path[0]));
+      else for (const k of e.changes.keys.keys()) this.objCache.delete(k);
+    }
+  }
+
+  /** Materialize object `id` through the cache (see objCache). */
+  private readObj(id: string): BoardObject | null {
+    let obj = this.objCache.get(id);
+    if (obj === undefined) {
+      const m = this.objects.get(id);
+      obj = m ? readObject(m) : null;
+      this.objCache.set(id, obj);
+    }
+    return obj;
+  }
+
   /** Reconcile display elements with the doc's text objects (z-ordered), then lay them out. */
   private render(): void {
     const order = orderArray(this.opts.doc).toArray();
     const cull = this.cullRect();
     const seen = new Set<string>();
-    for (const id of order) {
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
-      if (
-        obj?.type !== "text" &&
-        obj?.type !== "stamp" &&
-        obj?.type !== "image" &&
-        obj?.type !== "stroke" &&
-        obj?.type !== "connector"
-      )
-        continue;
-      // Viewport culling (ADR-0009 Phase 4): an off-screen object is left unmounted (the sweep below
-      // removes it if it was mounted), so on-screen DOM-node count tracks visible, not total, board size.
-      if (!this.shouldMount(id, obj, cull)) continue;
-      seen.add(id);
-      this.mountObject(id, obj); // create (if needed) + paint + layout + (re)append in z-order
-    }
+    this.withDeferredMeasures(() => {
+      for (const id of order) {
+        const obj = this.readObj(id);
+        if (
+          obj?.type !== "text" &&
+          obj?.type !== "stamp" &&
+          obj?.type !== "image" &&
+          obj?.type !== "stroke" &&
+          obj?.type !== "connector"
+        )
+          continue;
+        // Viewport culling (ADR-0009 Phase 4): an off-screen object is left unmounted (the sweep below
+        // removes it if it was mounted), so on-screen DOM-node count tracks visible, not total, board size.
+        if (!this.shouldMount(id, obj, cull)) continue;
+        seen.add(id);
+        this.mountObject(id, obj); // create (if needed) + paint + layout + (re)append in z-order
+      }
+    });
     for (const [id, el] of this.els) {
       if (seen.has(id)) continue;
       el.remove();
@@ -643,24 +683,25 @@ export class TextLayer {
     if (!cull) return;
     const want = new Set<string>();
     let changed = false;
-    for (const id of orderArray(this.opts.doc).toArray()) {
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
-      if (
-        obj?.type !== "text" &&
-        obj?.type !== "stamp" &&
-        obj?.type !== "image" &&
-        obj?.type !== "stroke" &&
-        obj?.type !== "connector"
-      )
-        continue;
-      if (!this.shouldMount(id, obj, cull)) continue;
-      want.add(id);
-      if (!this.els.has(id) && !this.inkEls.has(id)) {
-        this.mountObject(id, obj);
-        changed = true;
+    this.withDeferredMeasures(() => {
+      for (const id of orderArray(this.opts.doc).toArray()) {
+        const obj = this.readObj(id);
+        if (
+          obj?.type !== "text" &&
+          obj?.type !== "stamp" &&
+          obj?.type !== "image" &&
+          obj?.type !== "stroke" &&
+          obj?.type !== "connector"
+        )
+          continue;
+        if (!this.shouldMount(id, obj, cull)) continue;
+        want.add(id);
+        if (!this.els.has(id) && !this.inkEls.has(id)) {
+          this.mountObject(id, obj);
+          changed = true;
+        }
       }
-    }
+    });
     for (const [id, el] of this.els) {
       if (want.has(id)) continue;
       el.remove();
@@ -1253,15 +1294,43 @@ export class TextLayer {
     } else {
       el.style.minHeight = "";
     }
-    // Record world-space size for hit-testing (offset* are screen px → divide by scale).
+    // Record world-space size for hit-testing (offset* are screen px → divide by scale). Bulk callers
+    // defer this into one post-write pass, and camera-only relayouts skip it — see measureMode.
+    if (this.measureMode === "skip") return;
+    if (this.measureMode === "defer") {
+      this.measureQueue.push({ el, width });
+      return;
+    }
+    this.recordSize(el, width, cam.scale);
+  }
+
+  /** Measure one element's world size into `sizes` (offset* are screen px → divide by scale). */
+  private recordSize(el: HTMLElement, width: number | undefined, scale: number): void {
     const id = el.dataset.id;
+    if (!id) return;
     const ow = el.offsetWidth;
     const oh = el.offsetHeight;
     // A display:none box (a peer is mid-edit on it → its copy is hidden) measures 0×0; skip the
     // write so its last good size survives. Caching a zero makes it un-hittable (unselectable) once
     // un-hidden — setRemoteEditIds re-measures it for accuracy when the peer's edit ends.
-    if (id && (ow > 0 || oh > 0)) {
-      this.sizes.set(id, { w: width ?? ow / cam.scale, h: oh / cam.scale });
+    if (ow > 0 || oh > 0) {
+      this.sizes.set(id, { w: width ?? ow / scale, h: oh / scale });
+    }
+  }
+
+  /** Run a bulk layout pass with all measurements deferred, then take them in ONE read phase. */
+  private withDeferredMeasures(pass: () => void): void {
+    const prev = this.measureMode;
+    this.measureMode = "defer";
+    try {
+      pass();
+    } finally {
+      this.measureMode = prev;
+      if (this.measureQueue.length) {
+        const scale = this.opts.camera().scale;
+        for (const q of this.measureQueue) this.recordSize(q.el, q.width, scale);
+        this.measureQueue.length = 0;
+      }
     }
   }
 
@@ -1355,35 +1424,42 @@ export class TextLayer {
   /** Re-run layout for every box + the editor + peers' live edits after a camera change. */
   syncTransform(): void {
     this.recull(); // the camera moved → mount what scrolled in, unmount what left, before repositioning
-    for (const [id, el] of this.els) {
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
-      if (obj?.type === "stamp") {
+    // Camera-only relayout: recorded sizes are WORLD-space, which a camera change can't alter, so
+    // skip layout()'s measurement — interleaved offset reads would force a reflow per element, and
+    // this loop covers every mounted box every frame of a pan/zoom.
+    const prevMode = this.measureMode;
+    this.measureMode = "skip";
+    try {
+      for (const [id, el] of this.els) {
+        const obj = this.readObj(id);
+        if (obj?.type === "stamp") {
+          const g = this.effectiveGeom(id, obj);
+          this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
+          continue;
+        }
+        if (obj?.type !== "text") continue;
         const g = this.effectiveGeom(id, obj);
-        this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
-        continue;
+        this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
       }
-      if (obj?.type !== "text") continue;
-      const g = this.effectiveGeom(id, obj);
-      this.layout(el, g.x, g.y, g.width, g.fontSize, obj.fontFamily, obj.align, g.height);
-    }
-    // Re-position ink on a camera change. paintStroke's signature guard skips the `d` rebuild, so a
-    // pan/zoom is just a left/top + scale() write per stroke; connectors rebuild (scale-dependent).
-    for (const [id, el] of this.inkEls) {
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
-      if (obj?.type === "stroke") this.paintStroke(el, obj);
-      else if (obj?.type === "connector") this.paintConnector(el, obj);
-    }
-    if (this.edit) {
-      const e = this.edit;
-      this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align, e.height);
+      // Re-position ink on a camera change. paintStroke's signature guard skips the `d` rebuild, so a
+      // pan/zoom is just a left/top + scale() write per stroke; connectors rebuild (scale-dependent).
+      for (const [id, el] of this.inkEls) {
+        const obj = this.readObj(id);
+        if (obj?.type === "stroke") this.paintStroke(el, obj);
+        else if (obj?.type === "connector") this.paintConnector(el, obj);
+      }
+      if (this.edit) {
+        const e = this.edit;
+        this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align, e.height);
+      }
+      for (const [cid, el] of this.remoteEdits) {
+        const g = this.remoteGeom.get(cid);
+        if (g) this.layout(el, g.x, g.y, g.width, g.fontSize, g.fontFamily, g.align, g.height);
+      }
+    } finally {
+      this.measureMode = prevMode;
     }
     this.positionBar(); // follows the editor OR the selection-mode box as the camera moves
-    for (const [cid, el] of this.remoteEdits) {
-      const g = this.remoteGeom.get(cid);
-      if (g) this.layout(el, g.x, g.y, g.width, g.fontSize, g.fontFamily, g.align, g.height);
-    }
     this.updateResizeChrome();
   }
 
@@ -1395,8 +1471,7 @@ export class TextLayer {
     for (let i = order.length - 1; i >= 0; i--) {
       const id = order[i];
       if (!id) continue;
-      const m = this.objects.get(id);
-      const obj = m ? readObject(m) : null;
+      const obj = this.readObj(id);
       // Strokes hit-test precisely (their AABB is mostly empty): broad-phase the padded AABB, then
       // the true distance to the polyline ≤ half the stroke width (matches Konva's hitStrokeWidth).
       if (obj?.type === "stroke") {
@@ -4288,6 +4363,8 @@ export class TextLayer {
     if (this.edit) this.commit();
     this.opts.awareness.off("change", this.onAwareness);
     this.objects.unobserveDeep(this.observer);
+    orderArray(this.opts.doc).unobserve(this.orderObserver);
+    this.objCache.clear();
     window.removeEventListener("pointermove", this.onResizeMove);
     window.removeEventListener("pointerup", this.onResizeUp);
     if (this.glideRaf) cancelAnimationFrame(this.glideRaf);

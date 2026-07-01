@@ -447,9 +447,10 @@ export class BoardCanvas {
     this.objects.observeDeep(() => this.onDocChanged());
 
     this.bindPointer();
-    // Hand-pan moves the viewport without a zoom transform, so re-cull + re-sync text on drag too.
+    // Hand-pan moves the viewport without a zoom transform, so re-cull + re-sync text on drag too
+    // (frame-coalesced — dragmove fires per pointer event, far faster than frames).
     this.stage.on("dragmove", () => {
-      this.textLayer.syncTransform();
+      this.viewport.scheduleSync();
     });
     this.bindSelection();
     this.bindTouch();

@@ -29,6 +29,13 @@ export class ViewportController {
   // In-flight smooth zoom-step animation: rAF handle + destination scale.
   private zoomAnim: number | null = null;
   private zoomTarget: number | null = null;
+  // Coalesces the downstream camera sync (chrome + text relayout + grid + Konva draw) to once per
+  // animation frame. Wheel/pointer events fire far faster than frames (hundreds/s on a trackpad),
+  // and the sync work is O(mounted objects) — running it per EVENT multiplied frame cost by the
+  // event rate and froze dense boards. The stage transform itself stays synchronous per event (so
+  // gesture math always reads fresh values); only the visual re-sync is deferred, and everything
+  // it drives (Konva draw, CSS grid, DOM boxes) updates atomically in the same frame.
+  private syncScheduled = false;
 
   // Debounced persistence of the camera (pan/zoom), keyed by storageKey, so a reload restores
   // exactly where the user was instead of resetting + auto-fitting.
@@ -44,10 +51,23 @@ export class ViewportController {
   ) {
     this.bindWheel();
     this.stage.on("dragmove", () => {
-      this.syncGrid(); // hand-pan: keep the grid under the camera
+      this.scheduleSync(); // hand-pan: keep the grid + chrome + text under the camera (per frame)
       this.scheduleSave();
     });
     this.syncGrid();
+  }
+
+  /** Run the full downstream camera sync at most once per animation frame (see syncScheduled). */
+  scheduleSync(): void {
+    if (this.syncScheduled) return;
+    this.syncScheduled = true;
+    requestAnimationFrame(() => {
+      this.syncScheduled = false;
+      this.onTransform(); // BoardCanvas re-syncs cursors / transform box / selection outlines
+      this.syncGrid();
+      this.stage.batchDraw();
+      this.notifyZoom();
+    });
   }
 
   /** Current uniform zoom (1 = 100%). */
@@ -225,10 +245,7 @@ export class ViewportController {
   }
 
   private afterTransform(): void {
-    this.onTransform(); // BoardCanvas re-syncs cursors / transform box / selection outlines
-    this.syncGrid();
-    this.stage.batchDraw();
-    this.notifyZoom();
+    this.scheduleSync();
     this.scheduleSave();
   }
 
