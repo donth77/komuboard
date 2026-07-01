@@ -28,6 +28,7 @@ import {
   setConnectorStyle,
   setLocked,
   sideMidpoint,
+  translateObjects,
   ungroupObjects,
   type BoardObject,
   type ConnectorCap,
@@ -1802,6 +1803,36 @@ export class BoardCanvas {
     if (!ids.length) return;
     const allLocked = ids.every((id) => this.objects.get(id)?.get("locked") === true);
     this.setSelectionLocked(!allLocked);
+  }
+  /** Whether pasteSelection() has anything to paste (the context menu greys Paste out). */
+  hasClipboard(): boolean {
+    return this.clipboard.length > 0;
+  }
+  /** Right-click target resolution: hit-test the point and make sure the object under it is selected
+   *  (an existing multi-selection is KEPT when the point lands inside it, so the menu can act on the
+   *  whole selection — matching every canvas app). Returns which context menu applies. */
+  contextTargetAt(clientX: number, clientY: number): "object" | "canvas" {
+    const rect = this.stage.container().getBoundingClientRect();
+    const scale = this.stage.scaleX() || 1;
+    const world = {
+      x: (clientX - rect.left - this.stage.x()) / scale,
+      y: (clientY - rect.top - this.stage.y()) / scale,
+    };
+    const tid = this.textLayer.hitTest(world); // the unified hit-test (boxes, stamps, ink, images)
+    if (!tid) return "canvas";
+    if (!this.textLayer.isSelected(tid)) {
+      this.clearSelection();
+      this.textLayer.selectText(tid); // its onSelectionChange re-syncs the selection chrome
+    }
+    return "object";
+  }
+  /** Nudge the selection by a world-unit delta (arrow keys: 1, ⇧ 10). translateObjects carries
+   *  attached stamps, skips locked objects, and offsets strokes/connectors correctly. */
+  nudgeSelection(dx: number, dy: number): void {
+    const ids = this.selectionIds();
+    if (!ids.length) return;
+    translateObjects(this.opts.doc, ids, dx, dy);
+    this.reattachTransformer(); // keep the selection chrome glued to the moved objects
   }
   /** Bring the selection to the front of the z-order (mobile action bar + ⌘]). */
   bringSelectionToFront(): void {

@@ -2991,6 +2991,52 @@ input[type="range"] {
 .bg-solid {
   background: var(--surface);
 }
+/* ── Right-click context menu (see ui/context-menu.ts) ───────────────────────────────────────────── */
+.ctx-menu {
+  position: fixed;
+  z-index: 90;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font:
+    13.5px Inter,
+    system-ui,
+    sans-serif;
+}
+.ctx-item:hover:not([disabled]) {
+  background: var(--surface-2);
+}
+.ctx-item[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+.ctx-kbd {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.ctx-sep {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--border);
+}
 .komu-toasts {
   position: fixed;
   left: 50%;

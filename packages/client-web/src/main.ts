@@ -46,6 +46,7 @@ import { createJoinToasts } from "./ui/join-toast";
 import { createSelectionBar } from "./ui/selection-bar";
 import { createInsertSheet } from "./ui/insert-sheet";
 import { createExportDialog, type ExportBackground, type ExportFormat } from "./ui/export-dialog";
+import { createContextMenu } from "./ui/context-menu";
 import { createShareDialog } from "./ui/share";
 import { paintProfile } from "./util";
 import { SWATCHES } from "./palette";
@@ -215,6 +216,36 @@ canvas.setWidth(8);
 const exportDialog = createExportDialog(
   ({ format, background }) => void runExport(format, background),
 );
+
+// Right-click context menus — object (acts on the selection) + canvas (paste / select all / zoom).
+// The board suppresses the native menu (except inside a text editor, where paste etc. is wanted).
+const contextMenu = createContextMenu({
+  cut: () => {
+    canvas.copySelection();
+    canvas.deleteSelection();
+  },
+  copy: () => canvas.copySelection(),
+  paste: () => canvas.pasteSelection(),
+  duplicate: () => {
+    canvas.copySelection();
+    canvas.pasteSelection();
+  },
+  remove: () => canvas.deleteSelection(),
+  bringToFront: () => canvas.bringSelectionToFront(),
+  sendToBack: () => canvas.sendSelectionToBack(),
+  group: () => canvas.groupSelection(),
+  ungroup: () => canvas.ungroupSelection(),
+  toggleLock: () => canvas.toggleSelectionLock(),
+  selectAll: () => canvas.selectAll(),
+  zoomToFit: () => canvas.zoomToFit(),
+  canPaste: () => canvas.hasClipboard(),
+});
+boardEl.addEventListener("contextmenu", (e) => {
+  if ((e.target as HTMLElement).closest?.(".komu-text-editor")) return; // native edit menu applies there
+  e.preventDefault();
+  const kind = canvas.contextTargetAt(e.clientX, e.clientY);
+  contextMenu.openAt(e.clientX, e.clientY, kind, canvas.selectionMeta());
+});
 provider.awareness.setLocalStateField("id", identity.id);
 
 // Publish my profile into the shared doc (synced once + persisted, never in
@@ -589,11 +620,13 @@ const shortcutsDialog = createDialog({
     '<div class="kbd-row"><span>Image</span><kbd class="kbd">I</kbd></div>' +
     `<div class="kbd-row"><span>Select all</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">A</kbd></span></div>` +
     `<div class="kbd-row"><span>Copy</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">C</kbd></span></div>` +
+    `<div class="kbd-row"><span>Cut</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">X</kbd></span></div>` +
     `<div class="kbd-row"><span>Paste</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">V</kbd></span></div>` +
     '<div class="kbd-row"><span>Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">Backspace</kbd></span></div>' +
     `<div class="kbd-row"><span>Group / ungroup</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">G</kbd> / <kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">G</kbd></span></div>` +
     `<div class="kbd-row"><span>Lock / unlock (toggle)</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">L</kbd></span></div>` +
     '<div class="kbd-row"><span>Rotate (±15° / ±90° with Shift)</span><span><kbd class="kbd">[</kbd> / <kbd class="kbd">]</kbd></span></div>' +
+    '<div class="kbd-row"><span>Nudge selection (1px / 10px with Shift)</span><span><kbd class="kbd">←</kbd> <kbd class="kbd">↑</kbd> <kbd class="kbd">↓</kbd> <kbd class="kbd">→</kbd></span></div>' +
     `<div class="kbd-row"><span>Bring to front / send to back</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">]</kbd> / <kbd class="kbd">[</kbd></span></div>` +
     `<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
     `<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
@@ -677,6 +710,26 @@ window.addEventListener("keydown", (e) => {
     }
     return;
   }
+  // Arrow keys nudge the selection 1 world px (⇧ 10). Only with a selection — otherwise the arrows
+  // stay free for future canvas panning / a11y focus traversal.
+  if (
+    (e.key === "ArrowLeft" ||
+      e.key === "ArrowRight" ||
+      e.key === "ArrowUp" ||
+      e.key === "ArrowDown") &&
+    !e.metaKey &&
+    !e.ctrlKey &&
+    !e.altKey
+  ) {
+    if (canvas.hasSelection()) {
+      const step = e.shiftKey ? 10 : 1;
+      const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+      const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+      canvas.nudgeSelection(dx, dy);
+      e.preventDefault();
+    }
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
     if (e.shiftKey) canvas.redo();
     else canvas.undo();
@@ -720,6 +773,15 @@ window.addEventListener("keydown", (e) => {
       e.preventDefault(); // copying selected objects, not the page → suppress native copy
     }
     return; // nothing selected → let the browser handle ⌘/Ctrl+C (e.g. copy selected UI text)
+  }
+  // ⌘X cut = copy + delete (also in the right-click menu).
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "x") {
+    if (canvas.hasSelection()) {
+      canvas.copySelection();
+      canvas.deleteSelection();
+      e.preventDefault();
+    }
+    return;
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
     canvas.pasteSelection();
