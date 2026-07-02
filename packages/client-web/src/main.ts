@@ -681,6 +681,23 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Escape") {
+    // An open modal <dialog> handles its own Esc (don't also touch the canvas); an open popover
+    // consumes the press. Otherwise ONE Esc does the rest together: cancel the active tool (revert
+    // to Select, hiding its sheet) AND clear the selection.
+    if (document.querySelector("dialog[open]")) return;
+    if (appMenu) {
+      closeAppMenu();
+      return;
+    }
+    if (insertSheet.isOpen) {
+      insertSheet.close();
+      return;
+    }
+    if (emojiPickerEl && !emojiPickerEl.classList.contains("hidden")) {
+      emojiPickerEl.classList.add("hidden");
+      return;
+    }
+    if (currentTool !== "select") selectTool("select");
     canvas.clearSelection();
     return;
   }

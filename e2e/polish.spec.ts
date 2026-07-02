@@ -51,6 +51,54 @@ test("nudge: arrows move the selection 1px, Shift+arrows 10px", async ({ browser
   await a.close();
 });
 
+test("esc: reverts a non-select tool to Select, then a second Esc clears the selection", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("esc"));
+  await injectSticky(a.page, { id: "e1", x: 300, y: 200 });
+  await expect(a.page.locator(".komu-text")).toBeVisible();
+
+  // Non-select tool active → Esc reverts to Select.
+  await a.page.keyboard.press("p");
+  await expect(a.page.locator('komu-tool-dock [data-tool="pen"]')).toHaveClass(/active/);
+  await a.page.keyboard.press("Escape");
+  await expect(a.page.locator('komu-tool-dock [data-tool="select"]')).toHaveClass(/active/);
+
+  // With Select already active: Esc clears the selection.
+  await selectStickyAt(a.page, 300, 200);
+  await a.page.keyboard.press("Escape");
+  await expect.poll(() => hasSelection(a.page)).toBe(false);
+  await a.close();
+});
+
+test("alt-drag: duplicates the selection — the original stays, the copy moves", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("altdrag"));
+  await injectSticky(a.page, { id: "d1", x: 300, y: 200 });
+  await expect(a.page.locator(".komu-text")).toBeVisible();
+
+  const cal = await calibrate(a.page);
+  const c = worldToScreen(cal, 390, 290); // sticky centre
+  await a.page.keyboard.down("Alt");
+  await a.page.mouse.move(c.x, c.y);
+  await a.page.mouse.down();
+  await a.page.mouse.move(c.x + 120, c.y + 60, { steps: 8 });
+  await a.page.mouse.up();
+  await a.page.keyboard.up("Alt");
+
+  await expect.poll(async () => (await objectIds(a.page)).length).toBe(2);
+  // The original never moved; the copy carried the drag.
+  expect(await objJSON(a.page, "d1")).toMatchObject({ x: 300, y: 200 });
+  const ids = await objectIds(a.page);
+  const copyId = ids.find((i) => i !== "d1");
+  expect(copyId).toBeTruthy();
+  const copy = (await objJSON(a.page, copyId as string)) as { x: number; y: number };
+  expect(copy.x).toBeGreaterThan(360); // dragged ~120 screen px right at 100% zoom
+  expect(copy.y).toBeGreaterThan(230);
+  await a.close();
+});
+
 test("context menu: right-click an object → Delete removes it", async ({ browser }) => {
   const a = await connectPeer(browser, uniqueRoom("ctxdel"));
   await injectSticky(a.page, { id: "c1", x: 300, y: 200 });

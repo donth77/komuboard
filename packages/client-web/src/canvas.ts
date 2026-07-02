@@ -1683,6 +1683,8 @@ export class BoardCanvas {
         const inEmptySpace =
           hitId == null && !!u && pointInRect(this.point(), u, this.viewport.screenPx(6));
         if (onSelected || inEmptySpace) {
+          // Alt-drag: duplicate the selection in place; the group move then carries the copies.
+          if ((e.evt as PointerEvent).altKey) this.duplicateSelectionInPlace();
           this.beginGroupMove();
           return;
         }
@@ -1706,6 +1708,13 @@ export class BoardCanvas {
           Date.now() - this.textSelectAt.t < TWO_CLICK_MS;
         if (!shift) this.clearSelection(); // drop stroke selection (clearSelection also clears text)
         if (shift || !this.textLayer.isSelected(tid)) this.textLayer.selectText(tid, shift);
+        // Alt-drag: duplicate in place and let the move carry the fresh copy (the original stays).
+        if (!shift && (e.evt as PointerEvent).altKey && this.duplicateSelectionInPlace()) {
+          this.textLayer.beginMove(this.point());
+          this.textTapEdit = null;
+          this.textSelectAt = null;
+          return;
+        }
         this.textLayer.beginMove(this.point());
         const edit = alreadySole && recent;
         this.textTapEdit = edit ? { id: tid, x: p.x, y: p.y } : null;
@@ -1890,35 +1899,36 @@ export class BoardCanvas {
   }
 
   /** Copy the current selection (strokes + connectors + text/shapes) into the in-app clipboard. */
-  copySelection(): void {
+  /** Materialize the current selection as plain objects (copy source / alt-drag duplicate source). */
+  private snapshotSelection(): BoardObject[] {
     const ids = [...this.selectedConnectors, ...this.textLayer.selectedIds()];
-    if (!ids.length) return; // nothing selected → keep whatever's already on the clipboard
     const objs: BoardObject[] = [];
     for (const id of ids) {
       const m = this.objects.get(id);
       const obj = m ? readObject(m) : null;
       if (obj) objs.push(obj);
     }
-    if (!objs.length) return;
+    return objs;
+  }
+
+  copySelection(): void {
+    const objs = this.snapshotSelection();
+    if (!objs.length) return; // nothing selected → keep whatever's already on the clipboard
     this.clipboard = objs;
     this.pasteCount = 0;
   }
 
-  /** Paste the clipboard: clone each object with a fresh id + a cascading offset (a copied connector
-   *  rebinds to its copied shapes), commit in one transaction, then select the new copies. No-op when
-   *  the clipboard is empty. */
-  pasteSelection(): void {
-    if (!this.clipboard.length) return;
-    this.pasteCount += 1;
-    const off = 24 * this.pasteCount; // cascade offset (canvas units) so repeated paste doesn't stack
+  /** Clone `source` objects with fresh ids + an offset (a copied connector rebinds to its copied
+   *  shapes via the id map), commit in one transaction, then select the new copies. */
+  private pasteObjects(source: BoardObject[], off: number): void {
     const author = String(this.opts.awareness.clientID);
     // Map every copied id → its new id FIRST, so a connector copied with its shapes rebinds to the copies.
     const idMap = new Map<string, string>();
-    for (const o of this.clipboard) {
+    for (const o of source) {
       const prefix = o.type === "stroke" ? "st" : o.type === "connector" ? "cn" : "tx";
       idMap.set(o.id, randomId(prefix));
     }
-    const clones = this.clipboard.map((o) =>
+    const clones = source.map((o) =>
       cloneObject(o, idMap.get(o.id) ?? randomId("o"), author, off, off, idMap),
     );
     this.opts.doc.transact(() => {
@@ -1928,10 +1938,27 @@ export class BoardCanvas {
     this.selectPasted(clones);
   }
 
-  /** Select freshly-pasted objects across all three selection subsystems (strokes / text / connectors). */
+  /** Paste the clipboard with a cascading offset so repeated paste doesn't stack. No-op when empty. */
+  pasteSelection(): void {
+    if (!this.clipboard.length) return;
+    this.pasteCount += 1;
+    this.pasteObjects(this.clipboard, 24 * this.pasteCount);
+  }
+
+  /** Alt-drag support: duplicate the selection IN PLACE (zero offset, clipboard untouched) and select
+   *  the copies — the caller then begins the move so the drag carries the fresh copies away. */
+  private duplicateSelectionInPlace(): boolean {
+    const objs = this.snapshotSelection();
+    if (!objs.length) return false;
+    this.pasteObjects(objs, 0);
+    return true;
+  }
+
+  /** Select freshly-pasted objects. Everything except connectors selects through the text layer
+   *  (text/shape boxes, stamps, images, strokes — the unified selection since ADR-0009 P3). */
   private selectPasted(clones: BoardObject[]): void {
     this.clearSelection();
-    const textIds = clones.filter((o) => o.type === "text").map((o) => o.id);
+    const textIds = clones.filter((o) => o.type !== "connector").map((o) => o.id);
     const connIds = clones.filter((o) => o.type === "connector").map((o) => o.id);
     for (const id of textIds) this.textLayer.selectText(id, true); // additive
     for (const id of connIds) if (this.connectorIds.has(id)) this.selectedConnectors.add(id);
