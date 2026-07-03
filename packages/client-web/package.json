@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@komuboard/shared": "workspace:*",
+    "aframe": "^1.8.0",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
     "konva": "^10.3.0",

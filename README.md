@@ -64,3 +64,10 @@ VITE_WORKER_HOST=komuboard-worker.<your-subdomain>.workers.dev pnpm --filter @ko
 ```
 
 Welcome aboard — `pnpm install && pnpm dev`, then open two tabs on the same room and draw.
+
+## Asset credits
+
+- VR whiteboard: ["Low Poly Whiteboard"](https://sketchfab.com/3d-models/low-poly-whiteboard-1cbf089ec4b741ad9d092d15db6d55ba) via Sketchfab (`public/models/low_poly_whiteboard.glb`).
+- VR marker: whiteboard marker model via Sketchfab (`public/models/whiteboard_marker.glb`).
+
+See each model page for the author + license; most Sketchfab downloads are CC Attribution — keep this section in sync with the exact credit line from the download.

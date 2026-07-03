@@ -1817,6 +1817,10 @@ export class BoardCanvas {
   hasClipboard(): boolean {
     return this.clipboard.length > 0;
   }
+  /** The camera's visible world rect (VR seeds its panel viewport window from this). */
+  worldViewport(): { x: number; y: number; width: number; height: number } {
+    return this.viewport.worldViewport();
+  }
   /** Right-click target resolution: hit-test the point and make sure the object under it is selected
    *  (an existing multi-selection is KEPT when the point lands inside it, so the menu can act on the
    *  whole selection — matching every canvas app). Returns which context menu applies. */

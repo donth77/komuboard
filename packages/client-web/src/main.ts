@@ -246,6 +246,38 @@ boardEl.addEventListener("contextmenu", (e) => {
   const kind = canvas.contextTargetAt(e.clientX, e.clientY);
   contextMenu.openAt(e.clientX, e.clientY, kind, canvas.selectionMeta());
 });
+
+// Enter VR (drawer item) — lazy-load the A-Frame scene; the same doc renders on the panel. Enters an
+// immersive session where supported, else a mouse-look 3D preview (the magic-window fallback).
+let vrActive = false;
+document.addEventListener("click", (e) => {
+  if (!(e.target as HTMLElement | null)?.closest('[data-act="vr"]')) return;
+  closeAppMenu(); // the desktop app-menu variant closes itself like Export does
+  if (vrActive) return;
+  vrActive = true;
+  const scrim = document.createElement("div");
+  scrim.className = "export-scrim";
+  scrim.textContent = "Preparing VR…";
+  document.body.appendChild(scrim);
+  void (async () => {
+    try {
+      const { enterVR } = await import("./vr/vr-mode");
+      await enterVR({
+        doc: ydoc,
+        viewport: canvas.worldViewport(),
+        onExit: () => {
+          vrActive = false;
+        },
+      });
+    } catch (err) {
+      console.error("[vr] failed to start:", err);
+      showToast("Couldn't start VR on this device.");
+      vrActive = false;
+    } finally {
+      scrim.remove();
+    }
+  })();
+});
 provider.awareness.setLocalStateField("id", identity.id);
 
 // Publish my profile into the shared doc (synced once + persisted, never in
@@ -899,6 +931,8 @@ function toggleAppMenu(): void {
     `<button class="app-menu-item" type="button" data-act="profile"><span>Edit profile</span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
     '<div class="app-menu-sep"></div>' +
     settingsControlsHTML() +
+    '<div class="app-menu-sep"></div>' +
+    `<button class="app-menu-item" type="button" data-act="vr"><span>Enter VR</span><span class="drawer-item-ic">${icon("headset")}</span></button>` +
     '<div class="app-menu-sep"></div>' +
     `<button class="app-menu-item" type="button" data-act="export"><span>Export…</span><span class="drawer-item-ic">${icon("download")}</span></button>` +
     "</div>";
