@@ -264,6 +264,7 @@ document.addEventListener("click", (e) => {
       const { enterVR } = await import("./vr/vr-mode");
       await enterVR({
         doc: ydoc,
+        awareness: provider.awareness,
         viewport: canvas.worldViewport(),
         onExit: () => {
           vrActive = false;
@@ -420,6 +421,19 @@ function applyTool(tool: ToolId): void {
   }
   refreshInsertActive(); // applying any tool may close the insert launcher / light the + for inserts
 }
+// Dismiss the mobile Insert launcher and hand the bottom sheet back to the active tool — so backing
+// out of "+" (tap it again / Esc) returns you to what you were doing (e.g. drawing, with the pen
+// options showing) instead of leaving the tool active with no sheet. Picking an insert tool goes
+// through applyTool instead, which shows that tool's own sheet.
+function closeInsertSheet(): void {
+  if (!insertSheet.isOpen) return;
+  insertSheet.close();
+  const active = sheetForTool(currentTool);
+  for (const el of ALL_SHEETS) el?.classList.toggle("hidden", el !== active);
+  active?.classList.remove("collapsed");
+  app?.classList.toggle("sheet-open", !!active && currentTool !== "stamp");
+  refreshInsertActive();
+}
 // Re-clicking the active tool toggles its sheet (the tool stays selected).
 function toggleSheet(el: Element | null): void {
   if (!el) return;
@@ -560,8 +574,7 @@ dock?.addEventListener("tool-change", (e) => {
   // The mobile + launcher toggles the Insert sheet (a launcher, not a tool — keep the active tool).
   if (tool === "insert") {
     if (insertSheet.isOpen) {
-      insertSheet.close();
-      app?.classList.remove("sheet-open");
+      closeInsertSheet();
     } else {
       for (const el of ALL_SHEETS) el?.classList.add("hidden"); // mutually exclusive with tool sheets
       emojiPickerEl?.classList.add("hidden");
@@ -570,6 +583,13 @@ dock?.addEventListener("tool-change", (e) => {
     }
     if (dock) dock.tool = currentTool; // a launcher, not a tool — keep the active tool's dock highlight
     refreshInsertActive(); // …then re-assert the + state (the dock's #sync above clears it)
+    return;
+  }
+  // Tapping a tool while the + launcher is open closes it and (re)activates that tool's sheet — so
+  // tapping the tool you were on (e.g. Draw) brings its options back rather than toggling a hidden sheet.
+  if (insertSheet.isOpen) {
+    insertSheet.close();
+    applyTool(tool);
     return;
   }
   // Clicking a sheet tool while it's already active toggles its sheet (the tool stays selected).
@@ -722,7 +742,7 @@ window.addEventListener("keydown", (e) => {
       return;
     }
     if (insertSheet.isOpen) {
-      insertSheet.close();
+      closeInsertSheet();
       return;
     }
     if (emojiPickerEl && !emojiPickerEl.classList.contains("hidden")) {
@@ -926,7 +946,7 @@ function toggleAppMenu(): void {
   menu.className = "app-menu";
   menu.setAttribute("role", "menu");
   menu.innerHTML =
-    '<div class="app-menu-head"><span class="logo">◳</span> <strong>Komuboard</strong></div>' +
+    '<div class="app-menu-head"><img class="brand-logo" src="/logo.webp" alt="" width="40" height="40" /> <strong>Komuboard</strong></div>' +
     '<div class="app-menu-body">' +
     `<button class="app-menu-item" type="button" data-act="profile"><span>Edit profile</span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
     '<div class="app-menu-sep"></div>' +

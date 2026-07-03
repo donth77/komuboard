@@ -82,8 +82,9 @@ const LERP = 0.3;
 const SELECT_BLUE = "#4a9eff";
 // Konva attr that tags a rendered node with its object id (the select tool's hit→id contract).
 // arrow pointer (Lucide mouse-pointer-2): used for the local CSS cursor
-// (black fill, white edge) AND remote presence cursors (filled in each user's colour).
-const CURSOR_PATH =
+// (black fill, white edge), remote presence cursors (filled in each user's colour),
+// and the VR peer cursors (vr/presence-3d.ts renders the same path as a texture).
+export const CURSOR_PATH =
   "M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z";
 const CURSOR_URL = `url("data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#1e1e1e" stroke="#ffffff" stroke-width="1.75" stroke-linejoin="round"><path d="${CURSOR_PATH}"/></svg>`,
@@ -1689,6 +1690,17 @@ export class BoardCanvas {
           return;
         }
       }
+      // Drag anywhere in the selection box (single selection too): pressing in the EMPTY space inside a
+      // selected node's box — a thin stroke's box especially — moves it, instead of starting a marquee.
+      // Group selections are handled above; presses ON a node fall through to the tid branch below.
+      if (!shift && tid == null && this.hasSelection()) {
+        const u = this.selectionUnionRect();
+        if (u && pointInRect(this.point(), u, this.viewport.screenPx(6))) {
+          if ((e.evt as PointerEvent).altKey) this.duplicateSelectionInPlace();
+          this.beginGroupMove();
+          return;
+        }
+      }
       if (tid) {
         // Two-click: a QUICK second tap on the already-sole-selected box edits it (fired on release
         // if it stayed a tap — a drag instead moves the box). A slow click just re-selects, so you
@@ -1720,6 +1732,20 @@ export class BoardCanvas {
         this.textTapEdit = edit ? { id: tid, x: p.x, y: p.y } : null;
         this.textSelectAt = edit ? null : { id: tid, t: Date.now() }; // record/restart the window
         return;
+      }
+      // A locked stroke is only precisely hittable on its thin line (and marquee/⌘A skip locked), so
+      // let a tap anywhere inside a locked stroke's box select it — you can then unlock it. Safe: it's
+      // locked, so no move follows.
+      if (!shift) {
+        const lockedId = this.textLayer.hitLockedInk(this.point());
+        if (lockedId) {
+          this.textLayer.clearSelection();
+          this.clearConnectorSelection();
+          this.textLayer.selectText(lockedId);
+          this.textTapEdit = null;
+          this.textSelectAt = null;
+          return;
+        }
       }
       this.textTapEdit = null;
       this.textSelectAt = null;

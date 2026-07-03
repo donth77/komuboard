@@ -60,12 +60,27 @@ function stampUrl(src: string): string | null {
   return null;
 }
 
+/** A peer's ephemeral state, projected onto the texture (cursor + live gestures + selection). */
+export interface PeerPresence {
+  name: string;
+  color: string;
+  cursor?: { x: number; y: number } | null;
+  /** Live pen stroke mid-draw (the "draw" awareness field). */
+  draw?: { points: number[]; color: string; width: number; style: string } | null;
+  /** Live move offsets (the "drag" awareness field) — dragged objects render displaced. */
+  drag?: { ids: string[]; dx: number; dy: number } | null;
+  /** Selected object ids (the "selection" awareness field) — outlined in the peer's colour. */
+  selection?: string[] | null;
+}
+
 export interface RasterOptions {
   background?: string;
   /** Draw the board's dot/line grid under the objects (the VR panel mirrors the 2D theme). */
   grid?: { mode: "dots" | "lines"; color: string };
   /** Called (once per asset) when an image/stamp bitmap finishes loading — redraw to show it. */
   onAssetLoad?: () => void;
+  /** Remote peers: labelled cursors on top, live strokes, and in-flight drag offsets. */
+  presence?: PeerPresence[];
 }
 
 /** Draw every object intersecting `rect` onto `ctx`, mapping the rect to the canvas's full pixel
@@ -96,15 +111,182 @@ export function drawBoardRegion(
     all.push(o);
     if (o.type === "text") geomById.set(o.id, o);
   }
+  // Live drag offsets: an object a peer is mid-move renders displaced by their broadcast delta.
+  const dragOffset = new Map<string, { dx: number; dy: number }>();
+  for (const p of opts.presence ?? []) {
+    if (!p.drag) continue;
+    for (const id of p.drag.ids) dragOffset.set(id, { dx: p.drag.dx, dy: p.drag.dy });
+  }
   for (const o of all) {
+    const off = dragOffset.get(o.id);
+    if (off) {
+      ctx.save();
+      ctx.translate(off.dx, off.dy);
+    }
     if (o.type === "text") drawBox(ctx, o);
     else if (o.type === "stroke") drawStroke(ctx, o);
     else if (o.type === "connector") drawConnector(ctx, o, geomById);
     else if (o.type === "stamp") drawStamp(ctx, o.x, o.y, o.size, o.src, o.rotation);
     else if (o.type === "image")
       drawUploadedImage(ctx, o.x, o.y, o.width, o.height, o.src, o.rotation);
+    if (off) ctx.restore();
+  }
+
+  // Locked objects carry the same 🔒 badge as the 2D renderer (top-right corner, subtle).
+  ctx.textBaseline = "top";
+  for (const o of all) {
+    if (o.locked !== true) continue;
+    const bb = objectAABB(o, geomById);
+    if (!bb) continue;
+    const off = dragOffset.get(o.id);
+    ctx.save();
+    if (off) ctx.translate(off.dx, off.dy);
+    ctx.font = `${26 / scale}px system-ui, sans-serif`;
+    ctx.globalAlpha = 0.8;
+    ctx.textAlign = "right";
+    ctx.fillText("🔒", bb.x + bb.w - 3 / scale, bb.y + 3 / scale);
+    ctx.restore();
+  }
+  ctx.textAlign = "left";
+  ctx.globalAlpha = 1;
+
+  // Peers' selections: identity-coloured dashed outlines per object (displaced when mid-drag),
+  // plus the UNION box around a multi-selection — the "outer" group box the 2D renderer shows.
+  for (const p of opts.presence ?? []) {
+    if (!p.selection?.length) continue;
+    let ux0 = Infinity;
+    let uy0 = Infinity;
+    let ux1 = -Infinity;
+    let uy1 = -Infinity;
+    let selected = 0;
+    for (const id of p.selection) {
+      const o = all.find((x) => x.id === id);
+      if (!o) continue;
+      const bb = objectAABB(o, geomById);
+      if (!bb) continue;
+      const off = dragOffset.get(id) ?? { dx: 0, dy: 0 };
+      selected++;
+      ux0 = Math.min(ux0, bb.x + off.dx);
+      uy0 = Math.min(uy0, bb.y + off.dy);
+      ux1 = Math.max(ux1, bb.x + bb.w + off.dx);
+      uy1 = Math.max(uy1, bb.y + bb.h + off.dy);
+      const pad = 4 / scale;
+      ctx.save();
+      ctx.translate(off.dx, off.dy);
+      ctx.beginPath();
+      ctx.roundRect(bb.x - pad, bb.y - pad, bb.w + 2 * pad, bb.h + 2 * pad, 6 / scale);
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 3.5 / scale;
+      ctx.setLineDash([8 / scale, 5 / scale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+    if (selected >= 2) {
+      const pad = 12 / scale;
+      ctx.beginPath();
+      ctx.roundRect(ux0 - pad, uy0 - pad, ux1 - ux0 + 2 * pad, uy1 - uy0 + 2 * pad, 8 / scale);
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 2.5 / scale;
+      ctx.stroke();
+    }
+  }
+
+  // Peers' live pen strokes (mid-draw, not yet committed), then their cursors on top of everything.
+  for (const p of opts.presence ?? []) {
+    if (p.draw && p.draw.points.length >= 4) {
+      drawStroke(ctx, {
+        id: "live",
+        type: "stroke",
+        points: p.draw.points,
+        color: p.draw.color,
+        width: p.draw.width,
+        style: (p.draw.style as StrokeObject["style"]) || "solid",
+        opacity: 1,
+        authorId: "",
+      });
+    }
+  }
+  for (const p of opts.presence ?? []) {
+    if (p.cursor) drawCursor(ctx, scale, p.cursor, p.name, p.color);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/** Quick world AABB for the selection outline (defaults mirror drawBox's fallbacks). */
+function objectAABB(
+  o: BoardObject,
+  geom: Map<string, TextObject>,
+): { x: number; y: number; w: number; h: number } | null {
+  if (o.type === "text") {
+    const w = o.width ?? 160;
+    return { x: o.x, y: o.y, w, h: o.height ?? (o.bg ? w : 40) };
+  }
+  if (o.type === "image") return { x: o.x, y: o.y, w: o.width, h: o.height };
+  if (o.type === "stamp") return { x: o.x - o.size / 2, y: o.y - o.size / 2, w: o.size, h: o.size };
+  if (o.type === "stroke" || o.type === "connector") {
+    const pts =
+      o.type === "stroke"
+        ? o.points
+        : (() => {
+            const a = endPoint(o.from, geom);
+            const b = endPoint(o.to, geom);
+            return [a.x, a.y, b.x, b.y];
+          })();
+    if (pts.length < 4) return null;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (let i = 0; i + 1 < pts.length; i += 2) {
+      x0 = Math.min(x0, pts[i] as number);
+      x1 = Math.max(x1, pts[i] as number);
+      y0 = Math.min(y0, pts[i + 1] as number);
+      y1 = Math.max(y1, pts[i + 1] as number);
+    }
+    const pad = o.width / 2;
+    return { x: x0 - pad, y: y0 - pad, w: x1 - x0 + o.width, h: y1 - y0 + o.width };
+  }
+  return null;
+}
+
+/** A labelled peer cursor: the pointer triangle + a name pill, sized in screen-ish units so it reads
+ *  the same at any panel zoom. */
+function drawCursor(
+  ctx: CanvasRenderingContext2D,
+  scale: number,
+  c: { x: number; y: number },
+  name: string,
+  color: string,
+): void {
+  const s = 18 / scale;
+  ctx.beginPath();
+  ctx.moveTo(c.x, c.y);
+  ctx.lineTo(c.x + 0.38 * s, c.y + 1.05 * s);
+  ctx.lineTo(c.x + 0.55 * s, c.y + 0.62 * s);
+  ctx.lineTo(c.x + 1.05 * s, c.y + 0.4 * s);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 1.5 / scale;
+  ctx.stroke();
+  const label = name || "Guest";
+  const fs = 12 / scale;
+  ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+  const tw = ctx.measureText(label).width;
+  const px = c.x + s * 0.9;
+  const py = c.y + s * 1.15;
+  const padX = 6 / scale;
+  const ph = fs * 1.7;
+  ctx.beginPath();
+  ctx.roundRect(px, py, tw + padX * 2, ph, ph / 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, px + padX, py + ph / 2);
+  ctx.textBaseline = "top";
 }
 
 /** The 2D board's grid, in world space: 24-unit spacing at 100%, doubled (LOD) while a spacing
