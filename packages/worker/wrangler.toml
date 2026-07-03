@@ -8,6 +8,13 @@ compatibility_flags = ["nodejs_compat"]
 # Skip Wrangler's first-run telemetry prompt so `pnpm dev` starts non-interactively.
 send_metrics = false
 
+# Public custom domain for the realtime backend (WebSocket sync + image upload/serve). On deploy,
+# Cloudflare provisions the DNS record + TLS cert for this hostname; the worker also stays reachable
+# at its *.workers.dev URL. The web client is built with VITE_WORKER_HOST=api.komuboard.app.
+routes = [{ pattern = "api.komuboard.app", custom_domain = true }]
+# Keep the *.workers.dev URL live too (fallback + debug origin); adding routes disables it otherwise.
+workers_dev = true
+
 # One Durable Object per room. Bound as "Main" so PartyServer routes it at
 # /parties/main/:roomId (see packages/shared PARTY).
 [[durable_objects.bindings]]
