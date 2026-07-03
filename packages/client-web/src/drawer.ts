@@ -26,7 +26,7 @@ export class CoDrawer extends HTMLElement {
     this.innerHTML =
       '<div class="drawer-scrim" id="drawer-scrim" data-act="close"></div>' +
       '<aside class="drawer" id="drawer" aria-label="Menu">' +
-      '<div class="drawer-head"><span class="logo">◳</span> <strong>Komuboard</strong></div>' +
+      '<div class="drawer-head"><img class="brand-logo" src="/logo.webp" alt="" width="40" height="40" /> <strong>Komuboard</strong></div>' +
       `<div class="drawer-room">Room · <strong>${room}</strong></div>` +
       `<button class="drawer-item" data-act="profile" type="button"><span>Edit profile</span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
       settingsControlsHTML() +

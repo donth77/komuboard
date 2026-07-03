@@ -86,6 +86,19 @@ body {
   color: var(--accent-ink);
   font-size: 13px;
 }
+/* Brand mark image (the hamburger-menu heads) — the Komuboard logo, sized to sit beside the wordmark. */
+.brand-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex: none;
+}
+/* Dark mode: the logo has its own dark elements that blend into the dark menu surface — sit it on a
+   light rounded chip (app-icon style) so the whole mark always reads. */
+:root[data-theme="dark"] .brand-logo {
+  background: #fff;
+  border-radius: 10px;
+}
 .room {
   color: var(--muted);
   font-size: 14px;
@@ -2823,6 +2836,18 @@ input[type="range"] {
   pointer-events: none;
   filter: drop-shadow(0 1px 1px rgba(16, 17, 22, 0.35));
 }
+/* Lock badge for strokes — ink is an <svg> so it can't use the ::after badge above; JS
+   (syncInkLockBadge) pins this real element to the stroke box's top-right corner. */
+.komu-ink-lock {
+  position: absolute;
+  transform: translate(calc(-100% - 2px), 1px); /* sit just inside the top-right, matching ::after */
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.75;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(16, 17, 22, 0.35));
+  z-index: 2;
+}
 /* While an image file is dragged over the board, ring the canvas to signal a drop target. */
 #app.drag-target #board {
   box-shadow: inset 0 0 0 2.5px #4a9eff;
@@ -3195,6 +3220,16 @@ input[type="range"] {
   position: absolute;
   z-index: 2;
   pointer-events: none;
+}
+/* A LOCKED stroke can't be resized/rotated, so its selection box shows the outline ONLY (no handles /
+   rotate zones), alongside the 🔒 badge — ink is <svg>, so unlike text it has no per-element ring. */
+.komu-text-resize-locked {
+  box-shadow: 0 0 0 1.5px #4a9eff;
+  border-radius: 2px;
+}
+.komu-text-resize-locked .komu-text-handle,
+.komu-text-resize-locked .komu-text-rotate {
+  display: none !important; /* unconditional — beats the shape rule's higher-specificity n/s handles */
 }
 /* ADR-0009 Phase 3 Step 4: the multi-node group transform box (DOM — replaces the Konva proxy +
    Konva.Transformer). An outline + 8 resize handles over the union of every selected object. */

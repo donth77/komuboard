@@ -259,6 +259,8 @@ export class TextLayer {
     string,
     { x: number; y: number; width: number; height: number }
   >();
+  /** id → the 🔒 badge element over a LOCKED stroke's box (ink is <svg>, so CSS ::after can't draw it). */
+  private readonly inkLockBadges = new Map<string, HTMLElement>();
   /** id → measured world-space size, for hit-testing (refreshed on every layout). */
   private readonly sizes = new Map<string, { w: number; h: number }>();
   private edit: EditSession | null = null;
@@ -522,6 +524,8 @@ export class TextLayer {
       this.inkEls.delete(id);
       this.sizes.delete(id);
       this.inkBBox.delete(id);
+      this.inkLockBadges.get(id)?.remove(); // drop its lock badge, if any
+      this.inkLockBadges.delete(id);
     }
     if (this.linkCardFor && !this.linkCardFor.isConnected) this.removeLinkCard(); // repaint detached it
     this.updateDisplayVisibility();
@@ -859,6 +863,7 @@ export class TextLayer {
     const bbox = this.strokeWorldBBox(obj);
     this.sizes.set(obj.id, { w: bbox.width, h: bbox.height }); // AABB for hit-test + selection box
     this.inkBBox.set(obj.id, bbox);
+    el.toggleAttribute("data-locked", obj.locked === true); // drives the lock badge (synced in layoutInk)
     this.drawStrokePath(el, obj, bbox);
   }
 
@@ -1133,6 +1138,35 @@ export class TextLayer {
     el.style.left = `${bbox.x * cam.scale + cam.x}px`;
     el.style.top = `${bbox.y * cam.scale + cam.y}px`;
     el.style.transform = `scale(${cam.scale})`;
+    this.syncInkLockBadge(el, bbox, cam);
+  }
+
+  /** Keep a 🔒 badge glued to the top-right of a LOCKED stroke's box (ink is an <svg>, where the CSS
+   *  ::after badge used by text/stamp/image can't render). Created/removed with the lock state; re-runs
+   *  here on every ink layout (paint + camera move) so it stays put and screen-constant. */
+  private syncInkLockBadge(
+    el: SVGSVGElement,
+    bbox: { x: number; y: number; width: number; height: number },
+    cam: { scale: number; x: number; y: number },
+  ): void {
+    const id = el.dataset.id;
+    if (!id) return;
+    if (!el.hasAttribute("data-locked")) {
+      this.inkLockBadges.get(id)?.remove();
+      this.inkLockBadges.delete(id);
+      return;
+    }
+    let badge = this.inkLockBadges.get(id);
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "komu-ink-lock";
+      badge.textContent = "🔒";
+      badge.setAttribute("aria-hidden", "true");
+      this.root.appendChild(badge);
+      this.inkLockBadges.set(id, badge);
+    }
+    badge.style.left = `${(bbox.x + bbox.width) * cam.scale + cam.x}px`;
+    badge.style.top = `${bbox.y * cam.scale + cam.y}px`;
   }
 
   /** Live resize preview for a stroke svg: map its local box [0,ow]×[0,oh] (the committed `d`) onto
@@ -1357,6 +1391,26 @@ export class TextLayer {
           any = true;
           continue;
         }
+        if (obj?.type === "stroke") {
+          // Ink carries no `rotation` field — bake the spin into the points, rotating each about the
+          // stroke's bbox centre (same maths as commitGroupTransform, with scale = 1).
+          const box = this.strokeWorldBBox(obj);
+          const cx = box.x + box.width / 2;
+          const cy = box.y + box.height / 2;
+          const rad = (delta * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          const pts = obj.points.slice();
+          for (let i = 0; i + 1 < pts.length; i += 2) {
+            const dx = (pts[i] as number) - cx;
+            const dy = (pts[i + 1] as number) - cy;
+            pts[i] = cx + cos * dx - sin * dy;
+            pts[i + 1] = cy + sin * dx + cos * dy;
+          }
+          setObjectsPoints(this.opts.doc, [{ id, points: pts }]);
+          any = true;
+          continue;
+        }
         if (obj?.type !== "text") continue;
         setTextGeometry(this.opts.doc, id, {
           rotation: ((((obj.rotation ?? 0) + delta) % 360) + 360) % 360,
@@ -1464,6 +1518,29 @@ export class TextLayer {
   }
 
   // ---- hit-testing ----
+
+  /** Topmost LOCKED stroke whose padded AABB contains the point. A locked stroke's thin line is
+   *  nearly impossible to tap (and marquee/⌘A skip locked), so the canvas lets a tap anywhere in its
+   *  box select it — so you can unlock it. Bbox (not polyline) on purpose. Strokes only for now. */
+  hitLockedInk(world: { x: number; y: number }): string | null {
+    const order = orderArray(this.opts.doc).toArray();
+    for (let i = order.length - 1; i >= 0; i--) {
+      const id = order[i];
+      if (!id) continue;
+      const obj = this.readObj(id);
+      if (obj?.type !== "stroke" || !obj.locked) continue;
+      const bb = this.inkBBox.get(id);
+      if (
+        bb &&
+        world.x >= bb.x &&
+        world.x <= bb.x + bb.width &&
+        world.y >= bb.y &&
+        world.y <= bb.y + bb.height
+      )
+        return id;
+    }
+    return null;
+  }
 
   /** The topmost text object whose world bbox contains the point, or null. */
   hitTest(world: { x: number; y: number }): string | null {
@@ -3189,15 +3266,17 @@ export class TextLayer {
     const obj = m ? readObject(m) : null;
     const el = id ? this.els.get(id) : undefined;
     const inkEl = id && obj?.type === "stroke" ? this.inkEls.get(id) : undefined;
-    // Hidden for 0 / many / editing, a locked box (can't resize/rotate it), AND when this box is one
-    // node inside a multi-node group — the group's own transform box owns resize/rotate there.
+    // Hidden for 0 / many / editing, or a locked box (can't resize/rotate it), AND when this box is one
+    // node inside a multi-node group — the group's own transform box owns resize/rotate there. EXCEPT a
+    // locked STROKE still shows its box (outline only, no handles) so you can see it's selected → unlock.
+    const lockedStroke = !!inkEl && obj?.type === "stroke" && obj?.locked === true;
     if (
       !id ||
       (!el && !inkEl) ||
       this.edit ||
       this.remoteEditIds.has(id) ||
       this.groupSelected ||
-      obj?.locked
+      (obj?.locked && !lockedStroke)
     ) {
       if (this.resizeEl) this.resizeEl.style.display = "none";
     } else if (inkEl && obj?.type === "stroke") {
@@ -3215,6 +3294,7 @@ export class TextLayer {
       box.classList.toggle("komu-text-resize-shape", true); // free-aspect 8-handle chrome + rotate
       box.classList.toggle("komu-text-resize-stamp", false);
       box.classList.toggle("komu-text-resize-stroke", false);
+      box.classList.toggle("komu-text-resize-locked", obj?.locked === true); // locked → outline, no handles
       this.applyRotation(box, g.rotation);
     } else if (el) {
       const box = this.ensureResizeEl();
@@ -3231,6 +3311,7 @@ export class TextLayer {
       // An image resizes aspect-locked → corner handles only too (a side handle would distort it).
       box.classList.toggle("komu-text-resize-image", obj?.type === "image");
       box.classList.toggle("komu-text-resize-stroke", false);
+      box.classList.toggle("komu-text-resize-locked", false);
       const rotatable = obj?.type === "text" || obj?.type === "stamp" || obj?.type === "image";
       this.applyRotation(box, rotatable ? this.effectiveGeom(id, obj).rotation : 0);
     }
