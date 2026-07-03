@@ -89,19 +89,26 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
     });
     tex.upload();
   };
-  // Content redraws are throttled to ~10 Hz — doc edits, live strokes/drags, selections. Cursor
-  // motion deliberately does NOT repaint (presence-3d moves cursor entities at 60 fps instead).
+  // Content redraws are throttled ADAPTIVELY: ~30 Hz while a peer is mid-gesture (drag / resize /
+  // rotate / live stroke / typing — worth the extra texture uploads for smoothness), ~10 Hz for
+  // ordinary doc edits. Cursor motion never repaints (presence-3d moves entities at 60 fps).
   let pending = false;
   const onUpdate = (): void => {
     if (pending) return;
     pending = true;
-    window.setTimeout(() => {
-      pending = false;
-      draw();
-    }, 100);
+    // presenceRef is late-bound: createPresence3D invokes onContentChange synchronously during its
+    // own construction, before `presence` finishes initializing.
+    window.setTimeout(
+      () => {
+        pending = false;
+        draw();
+      },
+      presenceRef?.gestureActive() ? 33 : 100,
+    );
   };
   opts.doc.on("update", onUpdate);
 
+  let presenceRef: ReturnType<typeof createPresence3D> | null = null;
   const presence = createPresence3D({
     awareness: opts.awareness,
     scene,
@@ -109,6 +116,7 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
     worldRect: () => rect,
     onContentChange: onUpdate,
   });
+  presenceRef = presence;
 
   // First draw once the scene is ready; the panel's mesh may (re)appear asynchronously too.
   const onLoaded = (): void => draw();

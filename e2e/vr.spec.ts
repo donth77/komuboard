@@ -107,6 +107,46 @@ test("VR presence: a peer's cursor and live stroke appear on the panel texture",
       { timeout: 10_000 },
     )
     .toBe(true);
+
+  // Live TYPING: A's in-progress text edit (ephemeral snapshot, still nothing in the doc) renders
+  // too — poll for its distinctive box colour.
+  await a.page.evaluate(() => {
+    const aw = (
+      window as unknown as {
+        __komuboard: { awareness: { setLocalStateField(k: string, v: unknown): void } };
+      }
+    ).__komuboard.awareness;
+    aw.setLocalStateField("textedit", {
+      id: "live-edit",
+      x: 200,
+      y: 100,
+      fontSize: 16,
+      fontFamily: "Inter",
+      align: "left",
+      runs: [{ text: "typing…" }],
+      width: 180,
+      height: 180,
+      bg: "#12b886",
+    });
+  });
+  await expect
+    .poll(
+      () =>
+        b.page.evaluate(() => {
+          const cv = document.getElementById("vr-board-canvas") as HTMLCanvasElement | null;
+          const d = cv?.getContext("2d")?.getImageData(0, 0, cv.width, cv.height).data;
+          if (!d) return false;
+          for (let i = 0; i < d.length; i += 4) {
+            const r = d[i] as number;
+            const g = d[i + 1] as number;
+            const bl = d[i + 2] as number;
+            if (g > 140 && r < 80 && bl > 90 && bl < 160) return true; // #12b886
+          }
+          return false;
+        }),
+      { timeout: 10_000 },
+    )
+    .toBe(true);
   await a.close();
   await b.close();
 });

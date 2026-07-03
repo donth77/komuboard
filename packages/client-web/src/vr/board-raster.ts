@@ -71,6 +71,46 @@ export interface PeerPresence {
   drag?: { ids: string[]; dx: number; dy: number } | null;
   /** Selected object ids (the "selection" awareness field) — outlined in the peer's colour. */
   selection?: string[] | null;
+  /** Live text edit (the "textedit" field): a full snapshot of the box being typed — rendered in
+   *  place of the committed copy so keystrokes appear live. */
+  textedit?: {
+    id: string;
+    x: number;
+    y: number;
+    fontSize: number;
+    fontFamily: string;
+    align: TextObject["align"];
+    runs: TextObject["runs"];
+    width?: number;
+    height?: number;
+    bg?: string;
+    shape?: TextObject["shape"];
+    borderColor?: string;
+    borderStyle?: TextObject["borderStyle"];
+  } | null;
+  /** Live resize (the "textresize" field) — absolute geometry override (fontSize 0 = unchanged). */
+  resize?: {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fontSize: number;
+  } | null;
+  /** Live rotate (the "textrotate" field). */
+  rotate?: { id: string; rotation: number } | null;
+  /** Live group transform (the "groupresize" field) — absolute per-node preview geometry. */
+  groupResize?: {
+    nodes: {
+      id: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      fontSize: number;
+      rotation: number;
+    }[];
+  } | null;
 }
 
 export interface RasterOptions {
@@ -101,13 +141,56 @@ export function drawBoardRegion(
   ctx.setTransform(scale, 0, 0, scale, -rect.x * scale, -rect.y * scale);
   if (opts.grid) drawGrid(ctx, rect, scale, opts.grid);
 
+  // Live-gesture overrides: peers' in-flight resize/rotate/group transforms replace the committed
+  // geometry, and a box being TYPED IN renders from its ephemeral snapshot instead of the doc copy.
+  const override = new Map<
+    string,
+    Partial<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      fontSize: number;
+      rotation: number;
+    }>
+  >();
+  const edits: TextObject[] = [];
+  const editedIds = new Set<string>();
+  for (const p of opts.presence ?? []) {
+    if (p.resize)
+      override.set(p.resize.id, { ...p.resize, fontSize: p.resize.fontSize || undefined });
+    if (p.rotate)
+      override.set(p.rotate.id, {
+        ...(override.get(p.rotate.id) ?? {}),
+        rotation: p.rotate.rotation,
+      });
+    for (const n of p.groupResize?.nodes ?? [])
+      override.set(n.id, { ...n, fontSize: n.fontSize || undefined });
+    if (p.textedit) {
+      editedIds.add(p.textedit.id);
+      edits.push({ type: "text", authorId: "", ...p.textedit });
+    }
+  }
+
   const objs = objectsMap(doc);
   const geomById = new Map<string, TextObject>();
   const all: BoardObject[] = [];
   for (const id of orderArray(doc).toArray()) {
     const m = objs.get(id);
-    const o = m ? readObject(m) : null;
+    let o = m ? readObject(m) : null;
     if (!o) continue;
+    const ov = override.get(id);
+    if (ov) {
+      if (o.type === "text") o = { ...o, ...ov } as BoardObject;
+      else if (o.type === "stamp")
+        o = {
+          ...o,
+          x: ov.x ?? o.x,
+          y: ov.y ?? o.y,
+          size: ov.width ?? o.size,
+          rotation: ov.rotation ?? o.rotation,
+        } as BoardObject;
+    }
     all.push(o);
     if (o.type === "text") geomById.set(o.id, o);
   }
@@ -118,6 +201,7 @@ export function drawBoardRegion(
     for (const id of p.drag.ids) dragOffset.set(id, { dx: p.drag.dx, dy: p.drag.dy });
   }
   for (const o of all) {
+    if (editedIds.has(o.id)) continue; // a peer is typing in it — the ephemeral snapshot renders below
     const off = dragOffset.get(o.id);
     if (off) {
       ctx.save();
@@ -131,6 +215,9 @@ export function drawBoardRegion(
       drawUploadedImage(ctx, o.x, o.y, o.width, o.height, o.src, o.rotation);
     if (off) ctx.restore();
   }
+
+  // Peers' in-progress text edits (live keystrokes; replaces the committed copy hidden above).
+  for (const e of edits) drawBox(ctx, e);
 
   // Locked objects carry the same 🔒 badge as the 2D renderer (top-right corner, subtle).
   ctx.textBaseline = "top";
@@ -189,6 +276,39 @@ export function drawBoardRegion(
       ctx.strokeStyle = p.color;
       ctx.lineWidth = 2.5 / scale;
       ctx.stroke();
+      // The "Group" pill (2D parity): shown when the peer's selection is one persistent group —
+      // every selected object sharing the same groupId. Blue pill + two-squares glyph above the
+      // union box's top-left corner, like .komu-group-ungroup.
+      const gids = new Set(p.selection.map((id) => all.find((x) => x.id === id)?.groupId ?? null));
+      const gid = gids.size === 1 ? [...gids][0] : null;
+      if (gid) {
+        const fs = 11 / scale;
+        const ph = 22 / scale;
+        ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+        const label = "Group";
+        const iconW = 11 / scale;
+        const gapW = 4 / scale;
+        const padX = 8 / scale;
+        const pw = padX * 2 + iconW + gapW + ctx.measureText(label).width;
+        const px = ux0 - pad;
+        const py = uy0 - pad - 5 / scale - ph;
+        ctx.beginPath();
+        ctx.roundRect(px, py, pw, ph, ph / 2);
+        ctx.fillStyle = "#4a9eff";
+        ctx.fill();
+        // two overlapping squares glyph
+        const ix = px + padX;
+        const iy = py + (ph - iconW) / 2;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.2 / scale;
+        const sq = iconW * 0.55;
+        ctx.strokeRect(ix, iy, sq, sq);
+        ctx.strokeRect(ix + iconW - sq, iy + iconW - sq, sq, sq);
+        ctx.fillStyle = "#ffffff";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, ix + iconW + gapW, py + ph / 2 + 0.5 / scale);
+        ctx.textBaseline = "top";
+      }
     }
   }
 
