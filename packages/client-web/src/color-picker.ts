@@ -102,7 +102,7 @@ export class CoColorPicker extends HTMLElement {
       "</div>" +
       '<div class="cp-hue" data-hue tabindex="0" role="slider" aria-label="Hue" aria-valuemin="0" aria-valuemax="360">' +
       '<div class="cp-thumb" data-hue-thumb></div></div>' +
-      '<div class="cp-sv" data-sv tabindex="0" role="slider" aria-label="Saturation and brightness">' +
+      '<div class="cp-sv" data-sv tabindex="0" role="slider" aria-label="Saturation and brightness" aria-valuemin="0" aria-valuemax="100">' +
       '<div class="cp-thumb cp-sv-thumb" data-sv-thumb></div></div>';
 
     const sv = this.querySelector<HTMLElement>("[data-sv]");
@@ -201,6 +201,9 @@ export class CoColorPicker extends HTMLElement {
     const hex = this.querySelector<HTMLInputElement>(".cp-hex");
     if (sv) {
       sv.style.setProperty("--cp-hue", hue);
+      // valuetext (the hex) is what AT announces; valuenow (saturation) just completes the slider so
+      // it isn't reported as empty — a 2-D control can't express both axes in one aria-valuenow.
+      sv.setAttribute("aria-valuenow", String(Math.round(this.#s * 100)));
       sv.setAttribute("aria-valuetext", this.value); // current colour, announced to screen readers
     }
     if (hueEl) hueEl.setAttribute("aria-valuenow", String(Math.round(this.#h)));

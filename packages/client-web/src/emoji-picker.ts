@@ -9,7 +9,7 @@ const groups = GROUPS as Group[];
 
 function tile(e: Emoji): string {
   return (
-    `<button class="ep-emoji" type="button" data-cp="${e.u}" title="${e.n}" aria-label="${e.n}">` +
+    `<button class="ep-emoji" type="button" data-cp="${e.u}" title="${e.n}" aria-label="${e.n}" tabindex="-1">` +
     `<img src="/emoji/${e.u}.svg" alt="" loading="lazy" draggable="false"></button>`
   );
 }
@@ -32,7 +32,7 @@ export class CoEmojiPicker extends HTMLElement {
     this.innerHTML =
       `<div class="ep-tabs">${tabs}</div>` +
       `<div class="ep-search"><input type="search" placeholder="Search" aria-label="Search emoji"></div>` +
-      `<div class="ep-grid" role="listbox"></div>`;
+      `<div class="ep-grid"></div>`;
     this.renderGrid();
 
     this.querySelector(".ep-tabs")?.addEventListener("click", (e) => {
@@ -52,10 +52,33 @@ export class CoEmojiPicker extends HTMLElement {
     this.querySelector<HTMLInputElement>(".ep-search input")?.addEventListener("input", (e) => {
       this.renderGrid((e.target as HTMLInputElement).value.trim().toLowerCase());
     });
-    this.querySelector(".ep-grid")?.addEventListener("click", (e) => {
+    const grid = this.querySelector<HTMLElement>(".ep-grid");
+    grid?.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-cp]");
       const cp = b?.getAttribute("data-cp");
       if (cp) this.dispatchEvent(new CustomEvent("emoji-pick", { detail: { cp }, bubbles: true }));
+    });
+    // Arrow-key grid navigation (roving tabindex) so the hundreds of tiles are ONE tab stop, not
+    // hundreds. Enter/Space activate natively (they're buttons); column count is measured from the row.
+    grid?.addEventListener("keydown", (e) => {
+      const tiles = [...grid.querySelectorAll<HTMLElement>(".ep-emoji")];
+      const cur = tiles.indexOf(document.activeElement as HTMLElement);
+      if (cur < 0) return;
+      const top0 = tiles[0]?.offsetTop ?? 0;
+      let cols = 1;
+      while (cols < tiles.length && tiles[cols]?.offsetTop === top0) cols++;
+      let next = cur;
+      if (e.key === "ArrowRight") next = Math.min(cur + 1, tiles.length - 1);
+      else if (e.key === "ArrowLeft") next = Math.max(cur - 1, 0);
+      else if (e.key === "ArrowDown") next = Math.min(cur + cols, tiles.length - 1);
+      else if (e.key === "ArrowUp") next = Math.max(cur - cols, 0);
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = tiles.length - 1;
+      else return;
+      e.preventDefault();
+      tiles[cur]!.tabIndex = -1;
+      tiles[next]!.tabIndex = 0;
+      tiles[next]!.focus();
     });
   }
 
@@ -76,6 +99,7 @@ export class CoEmojiPicker extends HTMLElement {
     }
     grid.innerHTML = html;
     grid.scrollTop = 0;
+    grid.querySelector<HTMLElement>(".ep-emoji")?.setAttribute("tabindex", "0"); // roving entry point
   }
 }
 

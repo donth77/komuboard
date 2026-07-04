@@ -822,6 +822,10 @@ window.addEventListener("keydown", (e) => {
       emojiPickerEl.classList.add("hidden");
       return;
     }
+    if (drawBarEl?.popoverOpen) {
+      drawBarEl.closePopover(); // dismiss the style/colour/width popover — don't yank the whole tool
+      return;
+    }
     if (currentTool !== "select") selectTool("select");
     canvas.clearSelection();
     return;
@@ -1005,12 +1009,16 @@ darkMedia.addEventListener("change", () => {
 let appMenu: HTMLElement | null = null;
 let onMenuPointer: ((e: PointerEvent) => void) | null = null;
 function closeAppMenu(): void {
+  const navBtn = topbar?.querySelector<HTMLElement>(".nav-btn");
+  const hadFocus = !!appMenu && appMenu.contains(document.activeElement);
   appMenu?.remove();
   appMenu = null;
   if (onMenuPointer) {
     document.removeEventListener("pointerdown", onMenuPointer, true);
     onMenuPointer = null;
   }
+  navBtn?.setAttribute("aria-expanded", "false");
+  if (hadFocus) navBtn?.focus(); // keyboard close → return focus to the trigger
 }
 function toggleAppMenu(): void {
   if (appMenu) {
@@ -1021,7 +1029,9 @@ function toggleAppMenu(): void {
   if (!navBtn) return;
   const menu = document.createElement("div");
   menu.className = "app-menu";
-  menu.setAttribute("role", "menu");
+  // A labelled popover, NOT role="menu" — it mixes action items with toggle settings controls, so it
+  // has no valid menuitem children. Focus is managed on open/close instead (below).
+  menu.setAttribute("aria-label", "Menu");
   menu.innerHTML =
     '<div class="app-menu-head"><img class="brand-logo" src="/logo.webp" alt="" width="40" height="40" /> <strong>Komuboard</strong></div>' +
     '<div class="app-menu-body">' +
@@ -1046,6 +1056,8 @@ function toggleAppMenu(): void {
     closeAppMenu();
   };
   document.addEventListener("pointerdown", onMenuPointer, true);
+  navBtn.setAttribute("aria-expanded", "true");
+  menu.querySelector<HTMLElement>(".app-menu-item")?.focus(); // land focus in the menu for keyboard users
 }
 topbar?.addEventListener("nav-toggle", () => {
   if (mobileMql.matches) {

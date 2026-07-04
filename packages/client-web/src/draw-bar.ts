@@ -44,6 +44,7 @@ export class CoDrawBar extends HTMLElement {
   #pop: HTMLElement | null = null;
   #picker: CoColorPicker | null = null;
   #onDocPointer: ((e: PointerEvent) => void) | null = null;
+  #anchor: HTMLElement | null = null;
   #wired = false;
 
   connectedCallback(): void {
@@ -147,6 +148,7 @@ export class CoDrawBar extends HTMLElement {
   #openPop(which: string, anchor: HTMLElement): void {
     this.#closePop();
     this.#open = which;
+    this.#anchor = anchor;
     this.classList.add("pop-open"); // a submenu is open → suppress bar tooltips
     const pop = document.createElement("div");
     pop.className = "db-popover";
@@ -172,10 +174,14 @@ export class CoDrawBar extends HTMLElement {
       this.#closePop();
     };
     document.addEventListener("pointerdown", this.#onDocPointer, true);
+    // Move focus into the popover — it's appended to <body> (out of the anchor's tab order), so a
+    // keyboard user would otherwise never reach its controls. :focus-visible keeps mouse-opens ring-free.
+    pop.querySelector<HTMLElement>("button, input, [tabindex]")?.focus();
   }
   #closePop(): void {
     this.#pop?.remove();
     this.#pop = null;
+    this.#anchor = null;
     this.classList.remove("pop-open");
     this.#picker?.classList.add("hidden");
     this.querySelectorAll("[data-pop].active").forEach((b) => b.classList.remove("active"));
@@ -184,6 +190,17 @@ export class CoDrawBar extends HTMLElement {
       this.#onDocPointer = null;
     }
     this.#open = null;
+  }
+  /** Close any open style/colour/width popover and return focus to its trigger. Called by the global
+   *  Escape handler so Esc dismisses the popover instead of falling through and cancelling the tool. */
+  closePopover(): void {
+    const anchor = this.#anchor;
+    this.#closePop();
+    anchor?.focus();
+  }
+  /** True while a style/colour/width popover is open (lets the global Escape handler claim the press). */
+  get popoverOpen(): boolean {
+    return this.#open !== null;
   }
 
   #popContent(which: string): string {
