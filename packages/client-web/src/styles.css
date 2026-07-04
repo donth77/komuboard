@@ -48,7 +48,12 @@ body {
 }
 #app {
   position: relative;
-  height: 100vh;
+  height: 100vh; /* fallback for browsers without dvh */
+  /* DYNAMIC viewport height: 100vh is the LARGE viewport (address bar hidden), so with the URL bar
+     showing (the default on e.g. Pixel 8 Pro) #app overshoots the visible area and its bottom-anchored
+     tool dock lands below the fold behind the bar — overflow:hidden then clips it away entirely. 100dvh
+     tracks the currently-visible height, keeping the bottom dock on-screen at every device height. */
+  height: 100dvh;
   display: grid;
   grid-template-rows: calc(56px + env(safe-area-inset-top, 0px)) 1fr;
   background: var(--paper);
