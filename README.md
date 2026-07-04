@@ -1,8 +1,21 @@
-# Komuboard — README
+<h1 align="center">Komuboard</h1>
 
-> Realtime. Collaborative. Everywhere — desktop, mobile, and VR.
+<p align="center">
+  <a href="https://komuboard.app"><img src="brand/splash.png" alt="Komuboard — realtime collaborative whiteboard for desktop, mobile, and VR" width="360"></a>
+</p>
 
-**Komuboard** is a realtime, online collaborative whiteboard that works on desktop (mouse), mobile/tablet (touch), and VR (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence, no signup. 
+<p align="center">
+  <a href="https://github.com/donth77/komuboard/actions/workflows/ci.yml"><img src="https://github.com/donth77/komuboard/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://komuboard.app"><img src="https://img.shields.io/badge/live-komuboard.app-635BFF?logo=cloudflare&logoColor=white" alt="Live at komuboard.app"></a>
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Cloudflare-Workers%20%2B%20Durable%20Objects-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers + Durable Objects">
+  <img src="https://img.shields.io/badge/CRDT-Yjs-0A0A0A" alt="Yjs CRDT">
+  <img src="https://img.shields.io/badge/VR-WebXR%20%2F%20A--Frame-EF2D5E" alt="WebXR / A-Frame">
+  <img src="https://img.shields.io/badge/node-22%2B-339933?logo=nodedotjs&logoColor=white" alt="Node 22+">
+  <img src="https://img.shields.io/badge/pnpm-workspace-F69220?logo=pnpm&logoColor=white" alt="pnpm workspace">
+</p>
+
+**Komuboard** is a realtime, online collaborative whiteboard that works on desktop (mouse), mobile/tablet (touch), and VR (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence, no signup. **Try it live at [komuboard.app](https://komuboard.app).** 
 
 ## Features
 
