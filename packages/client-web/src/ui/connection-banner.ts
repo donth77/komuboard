@@ -41,7 +41,12 @@ export function createConnectionBanner(): ConnectionBanner {
       mode === "reconnecting"
         ? '<span class="conn-spinner" aria-hidden="true"></span><span>Reconnecting…</span>'
         : '<span class="conn-check" aria-hidden="true">✓</span><span>Back online</span>';
-    requestAnimationFrame(() => node.classList.add("in"));
+    // Trigger the enter transition SYNCHRONOUSLY (forced reflow), not via requestAnimationFrame:
+    // rAF callbacks are paused in a backgrounded tab, so a reconnect while the tab is hidden would
+    // defer adding `in` until the tab is refocused — by which point the auto-hide timeout has
+    // already fired and removed nothing, leaving the "Back online" pill stuck visible forever.
+    void node.offsetWidth; // reflow from the hidden state so opacity/transform animate in
+    node.classList.add("in");
   }
 
   function hide(): void {
