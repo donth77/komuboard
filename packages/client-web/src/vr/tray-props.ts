@@ -54,6 +54,9 @@ interface Prop {
   vel: number; // falling speed (m/s, downward positive)
   spin: number; // flip impulse (rad/s, decays)
   groundedAt: number;
+  /** When the current state was entered — every transient state is wall-clock-bounded so slow
+   *  (CI/software-rendered) frame rates can't stretch the physics past test/UX budgets. */
+  stateSince: number;
   lastFollow: { x: number; y: number; z: number } | null;
   /** Controller entity this prop is palm-attached to (grip-grabbed) — null in pointer mode. */
   palmEl: HTMLElement | null;
@@ -115,6 +118,7 @@ export function createTrayProps(opts: TrayPropsOptions): TrayProps {
       vel: 0,
       spin: 0,
       groundedAt: 0,
+      stateSince: 0,
       lastFollow: null,
       palmEl: null,
     };
@@ -162,6 +166,7 @@ export function createTrayProps(opts: TrayPropsOptions): TrayProps {
 
   const rest = (p: Prop): void => {
     p.state = "resting";
+    p.stateSince = performance.now();
     p.vel = 0;
     p.spin = 0;
     p.lastFollow = null;
@@ -179,6 +184,7 @@ export function createTrayProps(opts: TrayPropsOptions): TrayProps {
 
   const hold = (p: Prop): void => {
     p.state = "held";
+    p.stateSince = performance.now();
     p.vel = 0;
     // A held prop must NOT intercept the pointer ray — it would sit between pointer and board and
     // swallow every draw/erase gesture.
@@ -194,7 +200,7 @@ export function createTrayProps(opts: TrayPropsOptions): TrayProps {
   let lastT = 0;
   const tick = (): void => {
     const now = performance.now();
-    const dt = Math.min(0.05, lastT ? (now - lastT) / 1000 : 0.016);
+    const dt = Math.min(0.12, lastT ? (now - lastT) / 1000 : 0.016);
     lastT = now;
     for (const p of props) {
       const pos = p.holder.object3D?.position;
@@ -227,28 +233,33 @@ export function createTrayProps(opts: TrayPropsOptions): TrayProps {
           r.x += 5 * dt; // tumble
           r.z += 2.4 * dt;
         }
-        if (pos.y <= GROUND_Y) {
+        if (pos.y <= GROUND_Y || now - p.stateSince > 3000) {
           pos.y = GROUND_Y;
           p.state = "grounded";
           p.groundedAt = now;
+          p.stateSince = now;
         }
       } else if (p.state === "grounded") {
-        if (now - p.groundedAt > 450) p.state = "returning";
-      } else if (p.state === "returning" && pos) {
-        // Hop back to the tray: ease toward the rest spot, then settle.
-        pos.x += (p.rest.x - pos.x) * 0.12;
-        pos.y += (p.rest.y - pos.y) * 0.12;
-        pos.z += (p.rest.z - pos.z) * 0.12;
-        if (r) {
-          r.x *= 0.85;
-          r.z *= 0.85;
+        if (now - p.groundedAt > 450) {
+          p.state = "returning";
+          p.stateSince = now;
         }
-        if (
+      } else if (p.state === "returning" && pos) {
+        // Hop back to the tray: TIME-based exponential easing (fps-independent), with a hard
+        // wall-clock snap so a slow renderer can never stretch the trip.
+        const f = 1 - Math.exp(-6 * dt);
+        pos.x += (p.rest.x - pos.x) * f;
+        pos.y += (p.rest.y - pos.y) * f;
+        pos.z += (p.rest.z - pos.z) * f;
+        if (r) {
+          r.x *= 1 - f;
+          r.z *= 1 - f;
+        }
+        const close =
           Math.abs(pos.x - p.rest.x) < 0.005 &&
           Math.abs(pos.y - p.rest.y) < 0.005 &&
-          Math.abs(pos.z - p.rest.z) < 0.005
-        )
-          rest(p);
+          Math.abs(pos.z - p.rest.z) < 0.005;
+        if (close || now - p.stateSince > 2500) rest(p);
       }
     }
   };
@@ -309,6 +320,7 @@ export function createTrayProps(opts: TrayPropsOptions): TrayProps {
     const held = props.find((p) => p.state === "held" && p.palmEl === evt.target);
     if (held) {
       held.state = "falling";
+      held.stateSince = performance.now();
       held.vel = 0;
       held.lastFollow = null;
       held.palmEl = null;
@@ -343,6 +355,7 @@ export function createTrayProps(opts: TrayPropsOptions): TrayProps {
         else if (p.tool !== tool && p.state === "held") {
           // Switched away politely → straight back to the tray (no drama, no drop).
           p.state = "returning";
+          p.stateSince = performance.now();
         }
       }
     },
@@ -363,6 +376,7 @@ export function createTrayProps(opts: TrayPropsOptions): TrayProps {
       const held = props.find((p) => p.state === "held");
       if (!held) return;
       held.state = "falling";
+      held.stateSince = performance.now();
       held.vel = 0;
       held.lastFollow = null;
       held.palmEl = null;

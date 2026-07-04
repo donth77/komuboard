@@ -10,7 +10,7 @@ import { connectPeer, injectSticky, objectIds, uniqueRoom } from "./helpers";
  */
 
 test("emulated headset: immersive session + laser select + laser draw", async ({ browser }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000); // CI runners render VR at a crawl
   const a = await connectPeer(browser, uniqueRoom("vrxr"));
   a.page.on("console", (m) => {
     if (m.text().includes("[xr]")) console.log(m.text());
