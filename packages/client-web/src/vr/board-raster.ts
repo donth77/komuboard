@@ -6,6 +6,7 @@
 // Also reusable for a future minimap.
 
 import {
+  DEFAULT_TEXT_FONT,
   objectsMap,
   orderArray,
   readObject,
@@ -21,6 +22,7 @@ import {
   type StrokeObject,
   type TextEditState,
   type TextObject,
+  type TextRun,
 } from "@komuboard/shared";
 import type * as Y from "yjs";
 
@@ -547,33 +549,95 @@ function drawBox(ctx: CanvasRenderingContext2D, o: TextObject): void {
         ctx.setLineDash([]);
       }
     }
-    // Text: run lines split on \n; no wrapping (fidelity target, not parity). Shape labels centre
-    // vertically like the 2D renderer; sticky/plain text flows from the top.
-    const text = (o.runs ?? [])
-      .map((r) => r.text)
-      .join("")
-      .trim();
-    if (text) {
-      ctx.fillStyle = "#111827";
-      const fs = o.fontSize || 16;
-      ctx.font = `${fs}px Inter, system-ui, sans-serif`;
-      ctx.textBaseline = "top";
-      // Padding parity with 2D: .sticky 1.2em, .shape 0.7em, bare text none.
-      const pad = (o.shape ? 0.7 : o.bg ? 1.2 : 0) * fs;
-      const lh = fs * 1.3;
-      const lines = text.split("\n");
-      const top = o.shape ? Math.max(o.y + pad, o.y + (h - lines.length * lh) / 2) : o.y + pad;
-      lines.forEach((line, i) => {
-        if (top - o.y + (i + 1) * lh > h) return; // clip to the box
-        const tw = ctx.measureText(line).width;
-        const tx =
-          o.align === "center"
-            ? o.x + (w - tw) / 2
-            : o.align === "right"
-              ? o.x + w - pad - tw
-              : o.x + pad;
-        ctx.fillText(line, tx, top + i * lh);
-      });
+    drawObjectText(ctx, o, w, h);
+  });
+}
+
+const DEFAULT_INK = "#0e1116"; // matches the 2D renderer's INK (text-layer.ts)
+
+/**
+ * Draw a text / sticky / shape's rich text with full parity to the 2D DOM renderer: the object's
+ * font FAMILY (incl. the handwriting webfont) + size, per-run bold / italic / underline / strike /
+ * colour / highlight, alignment, and word-wrapping to the box's inner width. Bullets are literal
+ * "• " text in the runs, so lists render for free. Shapes centre vertically; sticky/plain text
+ * flows from the top. (The VR panel used to hardcode Inter with no wrapping — this brings it in
+ * line with web.)
+ */
+function drawObjectText(ctx: CanvasRenderingContext2D, o: TextObject, w: number, h: number): void {
+  const runs = o.runs ?? [];
+  if (!runs.some((r) => r.text)) return;
+  const fs = o.fontSize || 16;
+  const family = o.fontFamily || DEFAULT_TEXT_FONT;
+  const lh = fs * 1.3;
+  // Padding parity with 2D: .sticky 1.2em, .shape 0.7em, bare text none.
+  const pad = (o.shape ? 0.7 : o.bg ? 1.2 : 0) * fs;
+  const innerW = Math.max(1, w - 2 * pad);
+  const fontFor = (r: TextRun): string =>
+    `${r.italic ? "italic " : ""}${r.bold ? "700" : "400"} ${fs}px ${family}`;
+
+  // Tokenize the runs into styled words (whitespace preserved), splitting on \n (hard breaks), then
+  // word-wrap into visual lines that fit innerW — each carrying its originating run's style.
+  type Word = { text: string; run: TextRun; width: number };
+  const lines: Word[][] = [[]];
+  for (const run of runs) {
+    ctx.font = fontFor(run);
+    run.text.split("\n").forEach((part, pi) => {
+      if (pi > 0) lines.push([]);
+      for (const tok of part.match(/\s+|\S+/g) ?? []) {
+        const width = ctx.measureText(tok).width;
+        const line = lines[lines.length - 1]!;
+        const lineW = line.reduce((s, x) => s + x.width, 0);
+        if (tok.trim() && line.length > 0 && lineW + width > innerW)
+          lines.push([{ text: tok, run, width }]);
+        else line.push({ text: tok, run, width });
+      }
+    });
+  }
+
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  const totalH = lines.length * lh;
+  const top = o.shape ? Math.max(o.y + pad, o.y + (h - totalH) / 2) : o.y + pad;
+  // Trailing whitespace on a line doesn't count toward centre/right alignment.
+  const displayWidth = (line: Word[]): number => {
+    let end = line.length;
+    while (end > 0 && !line[end - 1]!.text.trim()) end--;
+    let s = 0;
+    for (let i = 0; i < end; i++) s += line[i]!.width;
+    return s;
+  };
+
+  lines.forEach((line, i) => {
+    const y = top + i * lh;
+    if (y + lh > o.y + h + 1) return; // clip to the box
+    const dispW = displayWidth(line);
+    let x =
+      o.align === "center"
+        ? o.x + (w - dispW) / 2
+        : o.align === "right"
+          ? o.x + w - pad - dispW
+          : o.x + pad;
+    for (const word of line) {
+      ctx.font = fontFor(word.run);
+      if (word.run.highlight) {
+        ctx.fillStyle = word.run.highlight;
+        ctx.fillRect(x, y + lh * 0.08, word.width, lh * 0.92);
+      }
+      ctx.fillStyle = word.run.color || DEFAULT_INK;
+      ctx.fillText(word.text, x, y);
+      if (word.run.underline || word.run.strike) {
+        const tw = ctx.measureText(word.text.replace(/\s+$/, "")).width;
+        if (tw > 0) {
+          ctx.strokeStyle = word.run.color || DEFAULT_INK;
+          ctx.lineWidth = Math.max(1, fs / 14);
+          const uy = word.run.underline ? y + fs * 1.02 : y + fs * 0.62;
+          ctx.beginPath();
+          ctx.moveTo(x, uy);
+          ctx.lineTo(x + tw, uy);
+          ctx.stroke();
+        }
+      }
+      x += word.width;
     }
   });
 }

@@ -122,6 +122,10 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
   const onUpdate = (): void => schedule(presenceRef?.gestureActive() ? 33 : 100);
   /** Local gestures (pan/pen/select) redraw promptly. */
   const fastRedraw = (): void => schedule(33);
+  // Webfonts (e.g. the Caveat handwriting face) can still be loading when VR opens; canvas 2D silently
+  // falls back to a default until they're ready, so repaint once they settle to pick up the real font.
+  const fontApi = (document as Document & { fonts?: { ready?: Promise<unknown> } }).fonts;
+  if (fontApi?.ready) void fontApi.ready.then(() => onUpdate());
   opts.doc.on("update", onUpdate);
 
   let presenceRef: ReturnType<typeof createPresence3D> | null = null;
