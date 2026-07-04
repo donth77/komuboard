@@ -2071,6 +2071,13 @@ input[type="range"] {
   border: 2px solid var(--surface);
   box-shadow: 0 2px 5px rgba(16, 17, 22, 0.3);
 }
+/* Keyboard focus ring for the roving-tabindex slots. The marks/avatar are pointer-events:none imgs,
+   so they need an explicit indicator; the emoji/"+" buttons share it for one consistent round ring. */
+.komu-stamp-wheel [data-item]:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 50%;
+}
 /* inner recents disc (light-blue, like FigJam) */
 .sw-inner {
   position: absolute;

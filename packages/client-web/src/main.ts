@@ -424,6 +424,10 @@ function applyTool(tool: ToolId): void {
     void w.offsetWidth; // reflow → restart the animation
     w.classList.add("sw-intro");
     window.setTimeout(() => w.classList.remove("sw-intro"), 900);
+    // Land focus on the wheel so keyboard users can arrow through the slots immediately (mouse users
+    // get no visible ring — :focus-visible). Deferred a frame so it wins over the click that opened it.
+    const kb = stampWheelEl as import("./stamp-wheel").CoStampWheel;
+    requestAnimationFrame(() => currentTool === "stamp" && kb.focusFirst());
   }
   refreshInsertActive(); // applying any tool may close the insert launcher / light the + for inserts
 }

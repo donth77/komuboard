@@ -14,15 +14,15 @@ type Profile = { name: string; color: string; photo?: string };
 // avatar slot (9:00) renders the user's photo / initials instead of a masked mark.
 // The colour + white sticker outline is baked into each SVG (scripts/make-mark-stickers), so the
 // wheel and the placed canvas image render the same sticker.
-const SLOTS: ReadonlyArray<{ key: string; file?: string; avatar?: boolean }> = [
-  { key: "mark:thumbs-up", file: "thumbs-up" }, // 12:00
-  { key: "mark:one-plus", file: "one-plus" }, // 1:30
-  { key: "mark:star", file: "star" }, // 3:00
-  { key: "mark:question-mark", file: "question-mark" }, // 4:30
-  { key: "mark:thumbs-down", file: "thumbs-down" }, // 6:00
-  { key: "mark:sparkle", file: "sparkle" }, // 7:30
-  { key: "avatar", avatar: true }, // 9:00
-  { key: "mark:heart", file: "heart" }, // 10:30
+const SLOTS: ReadonlyArray<{ key: string; file?: string; avatar?: boolean; label: string }> = [
+  { key: "mark:thumbs-up", file: "thumbs-up", label: "Thumbs up sticker" }, // 12:00
+  { key: "mark:one-plus", file: "one-plus", label: "Plus one sticker" }, // 1:30
+  { key: "mark:star", file: "star", label: "Star sticker" }, // 3:00
+  { key: "mark:question-mark", file: "question-mark", label: "Question mark sticker" }, // 4:30
+  { key: "mark:thumbs-down", file: "thumbs-down", label: "Thumbs down sticker" }, // 6:00
+  { key: "mark:sparkle", file: "sparkle", label: "Sparkle sticker" }, // 7:30
+  { key: "avatar", avatar: true, label: "Your avatar sticker" }, // 9:00
+  { key: "mark:heart", file: "heart", label: "Heart sticker" }, // 10:30
 ];
 
 // Popular starter set (no heart — the wheel already has a heart mark): 😂 🔥 🎉 🙏 😎
@@ -72,6 +72,8 @@ export class CoStampWheel extends HTMLElement {
     this.classList.add("komu-stamp-wheel");
     if (this.#wired) return;
     this.#wired = true;
+    this.setAttribute("role", "group");
+    this.setAttribute("aria-label", "Stamp picker");
     this.render();
     this.addEventListener("click", (e) => {
       const el = (e.target as HTMLElement).closest<HTMLElement>("[data-src],[data-plus]");
@@ -86,6 +88,27 @@ export class CoStampWheel extends HTMLElement {
       const src = key === "avatar" ? this.avatarStampSrc() : key;
       if (src)
         this.dispatchEvent(new CustomEvent("stamp-pick", { detail: { src }, bubbles: true }));
+    });
+    // Keyboard: the slots form a roving-tabindex ring — arrows move focus around it, Enter/Space
+    // activates via the click path above, Home/End jump to the ends. (Escape is handled globally.)
+    this.addEventListener("keydown", (e) => {
+      const items = this.items();
+      const cur = items.indexOf(document.activeElement as HTMLElement);
+      if (cur < 0) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        items[cur]?.click();
+        return;
+      }
+      let next = cur;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (cur + 1) % items.length;
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp")
+        next = (cur - 1 + items.length) % items.length;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = items.length - 1;
+      else return;
+      e.preventDefault();
+      this.focusItem(items, next);
     });
   }
 
@@ -132,19 +155,30 @@ export class CoStampWheel extends HTMLElement {
     const wedges = SLOTS.map(
       (s, i) => `<path class="sw-wedge" data-src="${s.key}" d="${this.wedgePath(i)}"></path>`,
     ).join("");
+    // The icon overlays (not the aria-hidden SVG wedges) are the KEYBOARD layer: focusable role=button
+    // with a name + `data-item` (a roving-tabindex member). Mouse still clicks the wedges beneath.
     const icons = SLOTS.map((s, i) => {
       const pos = ringStyle(i, SLOTS.length, ICON_R);
+      const a11y = `role="button" aria-label="${s.label}" data-src="${s.key}" data-item tabindex="-1"`;
       return s.avatar
-        ? `<span class="sw-avatar" style="${pos}"></span>`
-        : `<img class="sw-ico" src="/stamps/${s.file}.svg" alt="" draggable="false" style="${pos}">`;
+        ? `<span class="sw-avatar" ${a11y} style="${pos}"></span>`
+        : `<img class="sw-ico" src="/stamps/${s.file}.svg" alt="" draggable="false" ${a11y} style="${pos}">`;
     }).join("");
     const recents = loadStampRecents();
     const emojis = recents
-      .map(
-        (cp, i) =>
-          `<button class="sw-emoji" type="button" data-src="emoji:${cp}" style="${ringStyle(i, recents.length, 14)}">` +
-          `<img src="/emoji/${cp}.svg" alt="" draggable="false"></button>`,
-      )
+      .map((cp, i) => {
+        let char = "";
+        try {
+          char = String.fromCodePoint(parseInt(cp, 16));
+        } catch {
+          /* keep the generic label */
+        }
+        return (
+          `<button class="sw-emoji" type="button" data-src="emoji:${cp}" data-item tabindex="-1" ` +
+          `aria-label="${char ? char + " emoji" : "Emoji"}" style="${ringStyle(i, recents.length, 14)}">` +
+          `<img src="/emoji/${cp}.svg" alt="" draggable="false"></button>`
+        );
+      })
       .join("");
     this.innerHTML =
       `<div class="sw-disc"></div>` +
@@ -152,11 +186,29 @@ export class CoStampWheel extends HTMLElement {
       icons +
       `<div class="sw-inner"></div>` +
       emojis +
-      `<button class="sw-plus" type="button" data-plus aria-label="More emoji">` +
+      `<button class="sw-plus" type="button" data-plus data-item tabindex="-1" aria-label="More emoji">` +
       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`;
     this.paintAvatarSlot();
     this.upgradeEmojiStickers();
     this.applyActive();
+    this.resetRoving();
+  }
+
+  /** The focusable slots, in wheel order (8 outer marks/avatar, then the recent emojis, then "+"). */
+  private items(): HTMLElement[] {
+    return [...this.querySelectorAll<HTMLElement>("[data-item]")];
+  }
+  /** Make exactly one slot tab-reachable (roving tabindex) — the first, after a rebuild. */
+  private resetRoving(): void {
+    this.items().forEach((el, i) => (el.tabIndex = i === 0 ? 0 : -1));
+  }
+  private focusItem(items: HTMLElement[], i: number): void {
+    items.forEach((el, j) => (el.tabIndex = j === i ? 0 : -1));
+    items[i]?.focus();
+  }
+  /** Move focus to the first slot — call when the wheel is revealed (keyboard entry point). */
+  focusFirst(): void {
+    this.items()[0]?.focus();
   }
 
   /** Swap each recent-emoji <img> to its white-outlined sticker (cached → instant, else on generate),
