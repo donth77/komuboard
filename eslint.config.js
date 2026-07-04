@@ -8,7 +8,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/node_modules/**",
       "**/.wrangler/**",
-      "docs/index.html",
+      "docs/**", // gitignored local-only planning artifacts (incl. sync-index.cjs) — not source, not in CI
       "mockups/**",
       "packages/vr/vendor/**",
     ],
