@@ -13,8 +13,12 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- display=block (not swap): show nothing briefly, then the real Caveat — never the sans-serif
+         fallback first. `swap` caused a flash of fallback → handwriting on (re)load. On a warm cache
+         the block period is ~instant. TODO: self-host the Caveat woff2 + preload to drop the CDN dep
+         (docs/07 §4.9) and remove the block period entirely. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&display=block"
       rel="stylesheet"
     />
   </head>
