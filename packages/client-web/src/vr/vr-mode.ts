@@ -25,6 +25,9 @@ export interface VREnterOptions {
   awareness: Awareness;
   /** The 2D camera's visible world rect — seeds the panel's viewport window. */
   viewport: WorldRect;
+  /** Shared-doc history (the 2D UndoManager tracks VR commits too) — drives the dock's buttons. */
+  onUndo(): void;
+  onRedo(): void;
   onExit(): void;
 }
 
@@ -139,6 +142,8 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
     onTool: (t) => interactionRef?.setTool(t),
     onZoom: (dir) => interactionRef?.zoomStep(dir),
     onZoomFit: () => interactionRef?.zoomFit(),
+    onUndo: opts.onUndo,
+    onRedo: opts.onRedo,
   });
   dock.place(panelFit);
   // The marker + eraser props resting on the board's tray — grab one to use its tool like a real

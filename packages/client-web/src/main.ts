@@ -266,6 +266,8 @@ document.addEventListener("click", (e) => {
         doc: ydoc,
         awareness: provider.awareness,
         viewport: canvas.worldViewport(),
+        onUndo: () => canvas.undo(),
+        onRedo: () => canvas.redo(),
         onExit: () => {
           vrActive = false;
         },
@@ -1261,7 +1263,6 @@ zoombar?.addEventListener("zoom", (e) => {
 // Read the real connection state directly (robust to provider event quirks),
 // refreshed on events + a 1 s poll so the readout never sticks.
 let lastConnStatus = "";
-let lastSyncText = "";
 function updateConn(): void {
   const connected = provider.wsconnected;
   const status = connected
@@ -1269,12 +1270,9 @@ function updateConn(): void {
     : provider.wsUnsuccessfulReconnects > 1
       ? "disconnected"
       : "connecting";
-  const synced = provider.synced ? "synced" : connected ? "syncing…" : "—";
-  if (status === lastConnStatus && synced === lastSyncText) return; // skip no-op store/DOM writes
+  if (status === lastConnStatus) return; // skip no-op store/DOM writes
   lastConnStatus = status;
-  lastSyncText = synced;
   store.getState().setStatus(status);
-  topbar?.setSynced(synced);
 }
 provider.on("status", updateConn);
 provider.on("sync", updateConn);
@@ -1316,4 +1314,4 @@ provider.awareness.on("change", () => {
 window.setInterval(updateConn, 1000);
 updateConn();
 
-// Connection + presence readouts now live inside <komu-topbar> (setStatus / setSynced).
+// Connection state drives the room-pill dot inside <komu-topbar> (setStatus).

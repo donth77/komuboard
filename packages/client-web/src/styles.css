@@ -131,14 +131,6 @@ body {
 .dot[data-state="disconnected"] {
   background: var(--bad);
 }
-.devstatus {
-  color: var(--muted);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.devstatus b {
-  color: var(--ink);
-}
 /* ── Share: the topbar "Share" button + the "Share this board" dialog ─────────────────────────── */
 .btn-share {
   display: inline-grid;
@@ -2485,7 +2477,6 @@ input[type="range"] {
     display: none;
   }
   /* hide desktop-only chrome (settings + help live in the drawer on mobile) */
-  .devstatus,
   .settings-btn,
   .zoombar,
   .room-pill,
@@ -2840,7 +2831,10 @@ input[type="range"] {
    (syncInkLockBadge) pins this real element to the stroke box's top-right corner. */
 .komu-ink-lock {
   position: absolute;
-  transform: translate(calc(-100% - 2px), 1px); /* sit just inside the top-right, matching ::after */
+  transform: translate(
+    calc(-100% - 2px),
+    1px
+  ); /* sit just inside the top-right, matching ::after */
   font-size: 11px;
   line-height: 1;
   opacity: 0.75;

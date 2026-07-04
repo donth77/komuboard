@@ -15,6 +15,8 @@ export interface ToolDock3DOptions {
   onTool(tool: VRTool): void;
   onZoom(dir: 1 | -1): void;
   onZoomFit(): void;
+  onUndo(): void;
+  onRedo(): void;
 }
 
 export interface ToolDock3D {
@@ -51,9 +53,15 @@ export function createToolDock3D(opts: ToolDock3DOptions): ToolDock3D {
   ];
   const bgs = new Map<VRTool, AEntity>();
 
-  const makeButton = (ic: Parameters<typeof icon>[0], y: number, onClick: () => void): AEntity => {
+  const makeButton = (
+    ic: Parameters<typeof icon>[0],
+    y: number,
+    onClick: () => void,
+    act?: string,
+  ): AEntity => {
     const bg = document.createElement("a-plane") as AEntity;
     bg.classList.add("vr-interactive");
+    if (act) bg.dataset.act = act;
     bg.setAttribute("width", String(BTN));
     bg.setAttribute("height", String(BTN));
     bg.setAttribute("position", `0 ${y} 0`);
@@ -78,6 +86,10 @@ export function createToolDock3D(opts: ToolDock3DOptions): ToolDock3D {
   makeButton("minus", zy, () => opts.onZoom(-1));
   makeButton("plus", zy - (BTN + GAP), () => opts.onZoom(1));
   makeButton("fit", zy - 2 * (BTN + GAP), () => opts.onZoomFit());
+  // History cluster below (mirrors the mobile topbar's on-screen undo/redo — headsets have no ⌘Z).
+  const hy = zy - 3 * (BTN + GAP) - GAP;
+  makeButton("undo", hy, () => opts.onUndo(), "undo");
+  makeButton("redo", hy - (BTN + GAP), () => opts.onRedo(), "redo");
 
   return {
     setActive(tool) {

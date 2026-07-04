@@ -32,7 +32,7 @@ test("VR tools: select, pan, zoom, pen, eraser all work in the preview", async (
   await a.page.waitForTimeout(2000); // model fit + first draw settle
 
   // The floating dock exists (4 tools + 3 zoom keys).
-  await expect(a.page.locator("#vr-dock a-plane")).toHaveCount(7);
+  await expect(a.page.locator("#vr-dock a-plane")).toHaveCount(9); // 4 tools + zoom −/+/fit + undo/redo
 
   // SELECT: click the panel centre (the sticky) → selection broadcast + hook agrees. The mouse
   // cursor re-raycasts on the frame after a move, so settle briefly between move and press.
@@ -213,6 +213,20 @@ test("VR tools: select, pan, zoom, pen, eraser all work in the preview", async (
   await expect(a.page.locator('komu-tool-dock [data-tool="sticky"]')).not.toHaveClass(/active/);
   const beforeUndo = (await objectIds(a.page)).length;
   await a.page.keyboard.press("Control+z"); // pass-through undo — reverts the eraser's deletion
+  await expect.poll(async () => (await objectIds(a.page)).length).toBeGreaterThan(beforeUndo);
+
+  // DOCK history buttons (mobile-parity): redo re-applies the deletion, undo reverts it again.
+  await a.page.evaluate(() =>
+    document
+      .querySelector('#vr-dock [data-act="redo"]')
+      ?.dispatchEvent(new CustomEvent("click", { detail: {} })),
+  );
+  await expect.poll(async () => (await objectIds(a.page)).length).toBe(beforeUndo);
+  await a.page.evaluate(() =>
+    document
+      .querySelector('#vr-dock [data-act="undo"]')
+      ?.dispatchEvent(new CustomEvent("click", { detail: {} })),
+  );
   await expect.poll(async () => (await objectIds(a.page)).length).toBeGreaterThan(beforeUndo);
   // WASD movement (A-Frame's wasd-controls, deliberately not swallowed): walk forward.
   const camZ0 = await a.page.evaluate(
