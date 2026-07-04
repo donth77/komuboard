@@ -122,6 +122,9 @@ interface EditSession {
   /** Shape border colour + style (solid/dashed/none). */
   borderColor?: string;
   borderStyle?: BorderStyle;
+  /** World rotation (deg) of the box being edited — the editor must render at the SAME angle, or
+   *  opening a rotated sticky visibly flips it upright for the duration of the edit. */
+  rotation?: number;
 }
 
 /** A peer's in-progress edit, streamed over awareness (geometry travels too so a brand-new box —
@@ -140,6 +143,7 @@ interface TextEditState {
   height?: number;
   borderColor?: string;
   borderStyle?: BorderStyle;
+  rotation?: number;
   runs: TextRun[];
 }
 
@@ -155,6 +159,7 @@ type Geom = {
   height?: number;
   borderColor?: string;
   borderStyle?: BorderStyle;
+  rotation?: number;
 };
 
 const INK = "#0e1116"; // default text ink (matches the pen default)
@@ -1790,6 +1795,8 @@ export class TextLayer {
     if (obj.shape != null) session.shape = obj.shape;
     if (obj.borderColor != null) session.borderColor = obj.borderColor;
     if (obj.borderStyle != null) session.borderStyle = obj.borderStyle;
+    const rot = this.effectiveGeom(id, obj).rotation;
+    if (rot) session.rotation = rot;
     this.openEditor(session, runsToHtml(obj.runs), selectAll, caretAt);
   }
 
@@ -1840,6 +1847,7 @@ export class TextLayer {
     const el = document.createElement("div");
     el.className = "komu-text komu-text-editor";
     el.style.color = INK;
+    this.applyRotation(el, session.rotation ?? 0);
     // Shape (outline + fixed height) or sticky (coloured square) styling on the box itself.
     if (session.shape)
       this.applyShape(el, session.shape, session.bg, session.borderColor, session.borderStyle);
@@ -4302,6 +4310,7 @@ export class TextLayer {
     if (e.height != null) state.height = e.height;
     if (e.borderColor != null) state.borderColor = e.borderColor;
     if (e.borderStyle != null) state.borderStyle = e.borderStyle;
+    if (e.rotation != null) state.rotation = e.rotation;
     this.opts.awareness.setLocalStateField("textedit", state);
   }
 
@@ -4336,6 +4345,7 @@ export class TextLayer {
       if (typeof te.height === "number" && isFinite(te.height)) g.height = te.height;
       if (typeof te.bg === "string" && te.bg) g.bg = te.bg;
       if (typeof te.shape === "string") g.shape = te.shape;
+      if (typeof te.rotation === "number" && isFinite(te.rotation)) g.rotation = te.rotation;
       if (typeof te.borderColor === "string" && te.borderColor) g.borderColor = te.borderColor;
       if (te.borderStyle === "solid" || te.borderStyle === "dashed" || te.borderStyle === "none")
         g.borderStyle = te.borderStyle;
@@ -4352,6 +4362,7 @@ export class TextLayer {
       // a peer's live shape/sticky shows its outline + fill (or paper colour + square)
       if (g.shape) this.applyShape(el, g.shape, g.bg, g.borderColor, g.borderStyle);
       else this.applySticky(el, g.bg);
+      this.applyRotation(el, g.rotation ?? 0); // an edited ROTATED box must not flip upright for peers
       this.remoteGeom.set(cid, g);
       this.layout(el, g.x, g.y, g.width, g.fontSize, g.fontFamily, g.align, g.height);
     }

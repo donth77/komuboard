@@ -161,3 +161,59 @@ test("context menu: right-click empty canvas → Select all; Esc closes without 
   expect(await hasSelection(a.page)).toBe(true);
   await a.close();
 });
+
+test("editing a rotated sticky keeps its rotation — locally and for peers", async ({ browser }) => {
+  const room = uniqueRoom("rotedit");
+  const a = await connectPeer(browser, room);
+  const b = await connectPeer(browser, room);
+  await injectSticky(a.page, { id: "r1", x: -90, y: -90, bg: "#ffd43b" });
+  await a.page.evaluate(() => {
+    const doc = (
+      window as unknown as {
+        __komuboard: {
+          doc: {
+            getMap(n: string): { get(k: string): { set(k: string, v: unknown): void } | undefined };
+            transact(f: () => void): void;
+          };
+        };
+      }
+    ).__komuboard.doc;
+    doc.transact(() => doc.getMap("objects").get("r1")?.set("rotation", 30));
+  });
+  await expect(b.page.locator(".komu-text")).toBeVisible();
+
+  // Two-click into the rotated sticky's editor.
+  const cal = await calibrate(a.page);
+  const c = worldToScreen(cal, 0, 0);
+  await a.page.mouse.click(c.x, c.y);
+  await a.page.waitForTimeout(120);
+  await a.page.mouse.click(c.x, c.y);
+  await expect(a.page.locator(".komu-text-editor")).toBeVisible();
+
+  // The local editor renders at the SAME angle (no upright flip while typing)…
+  await expect
+    .poll(() =>
+      a.page.evaluate(
+        () =>
+          (document.querySelector(".komu-text-editor") as HTMLElement | null)?.style.transform ??
+          "",
+      ),
+    )
+    .toContain("rotate(30");
+  await a.page.keyboard.type("still tilted");
+
+  // …and the peer's ephemeral live-edit copy is rotated too.
+  await expect
+    .poll(
+      () =>
+        b.page.evaluate(
+          () =>
+            (document.querySelector(".komu-text-remote") as HTMLElement | null)?.style.transform ??
+            "",
+        ),
+      { timeout: 8000 },
+    )
+    .toContain("rotate(30");
+  await a.close();
+  await b.close();
+});
