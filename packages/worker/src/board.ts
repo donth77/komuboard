@@ -2,6 +2,7 @@ import { YServer } from "y-partyserver";
 import type { Connection, ConnectionContext, WSMessage } from "partyserver";
 import { encodeDocUpdate, loadStoredDoc } from "./persistence";
 import { CLOSE_RATE_LIMIT, CLOSE_ROOM_FULL, ConnectionLimiter, overCapacity } from "./abuse-guard";
+import { REAP_TTL_MS, shouldRearmReap } from "./reap";
 
 /**
  * Board — one Durable Object per room, hosting the room's single Yjs document
@@ -35,12 +36,35 @@ export class Board extends YServer {
 
   // Room-size cap. The newly-accepted socket is already in getConnections(), so a count past the cap
   // means this connection is the overflow — refuse it before the Yjs sync handshake runs.
-  override onConnect(connection: Connection, ctx: ConnectionContext): void | Promise<void> {
+  override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     if (overCapacity([...this.getConnections()].length)) {
       connection.close(CLOSE_ROOM_FULL, "Room is full");
       return;
     }
-    return super.onConnect(connection, ctx);
+    await super.onConnect(connection, ctx);
+    await this.scheduleReap(); // a join counts as activity → push the inactivity TTL out
+  }
+
+  /** (Re)arm the inactivity reap alarm to REAP_TTL from now, unless it's already ~current. Called on
+   *  every activity (join + save) so the clock resets while a room is in use. */
+  private async scheduleReap(): Promise<void> {
+    const now = Date.now();
+    if (shouldRearmReap(await this.ctx.storage.getAlarm(), now)) {
+      await this.ctx.storage.setAlarm(now + REAP_TTL_MS);
+    }
+  }
+
+  // The reap alarm fired (PartyServer's alarm() recovers the DO name first, then delegates here). If
+  // anyone is still connected the room is in use → push the TTL out again; otherwise it's been
+  // inactive for REAP_TTL, so drop its persisted snapshot. deleteAll clears the SQLite doc + the
+  // alarm; a later visit re-initializes the room empty (onLoad recreates the table).
+  override async onAlarm(): Promise<void> {
+    if ([...this.getConnections()].length > 0) {
+      await this.ctx.storage.setAlarm(Date.now() + REAP_TTL_MS);
+      return;
+    }
+    console.log("[board] reaping room after 90d of inactivity");
+    await this.ctx.storage.deleteAll();
   }
 
   // Per-connection rate limit: allow → hand to Yjs; drop → swallow (Yjs resyncs on the next exchange);
@@ -113,5 +137,6 @@ export class Board extends YServer {
       DOC_ROW_ID,
       blob,
     );
+    await this.scheduleReap(); // an edit is activity → reset the inactivity TTL
   }
 }
