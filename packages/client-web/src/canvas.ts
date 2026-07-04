@@ -1941,11 +1941,34 @@ export class BoardCanvas {
     return objs;
   }
 
-  copySelection(): void {
+  /** Copy the selection into the in-app buffer AND return the snapshot so the caller can also write
+   *  it to the SYSTEM clipboard (cross-tab / cross-room paste — see main.ts). */
+  copySelection(): BoardObject[] {
     const objs = this.snapshotSelection();
-    if (!objs.length) return; // nothing selected → keep whatever's already on the clipboard
+    if (!objs.length) return []; // nothing selected → keep whatever's already on the clipboard
     this.clipboard = objs;
     this.pasteCount = 0;
+    return objs;
+  }
+
+  /** Paste objects that came from the SYSTEM clipboard (another tab/room). Validates the untrusted
+   *  payload to known object types, then clones them with fresh ids + a cascading offset. Returns
+   *  true when a valid Komuboard payload was pasted (so the caller skips its in-memory fallback). */
+  pasteExternal(objs: unknown): boolean {
+    if (!Array.isArray(objs) || !objs.length) return false;
+    const KNOWN = new Set(["stroke", "connector", "text", "stamp", "image"]);
+    const valid = objs.filter(
+      (o): o is BoardObject =>
+        !!o &&
+        typeof o === "object" &&
+        typeof (o as { type?: unknown }).type === "string" &&
+        KNOWN.has((o as { type: string }).type) &&
+        typeof (o as { id?: unknown }).id === "string",
+    );
+    if (!valid.length) return false;
+    this.pasteCount += 1;
+    this.pasteObjects(valid, 24 * this.pasteCount);
+    return true;
   }
 
   /** Clone `source` objects with fresh ids + an offset (a copied connector rebinds to its copied

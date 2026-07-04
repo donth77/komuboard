@@ -221,11 +221,11 @@ const exportDialog = createExportDialog(
 // The board suppresses the native menu (except inside a text editor, where paste etc. is wanted).
 const contextMenu = createContextMenu({
   cut: () => {
-    canvas.copySelection();
+    copyToClipboards();
     canvas.deleteSelection();
   },
-  copy: () => canvas.copySelection(),
-  paste: () => canvas.pasteSelection(),
+  copy: () => copyToClipboards(),
+  paste: () => void pasteFromClipboards(),
   duplicate: () => {
     canvas.copySelection();
     canvas.pasteSelection();
@@ -551,17 +551,72 @@ boardEl?.addEventListener("drop", (e) => {
   void placeImageFiles(files, { clientX: e.clientX, clientY: e.clientY });
 });
 
-// Paste an image from the system clipboard → place at the viewport centre.
+// --- Cross-tab copy/paste ---------------------------------------------------------------------
+// Board objects travel through the SYSTEM clipboard as a tagged JSON payload `{n, o}` (n = a nonce
+// stamping OUR most recent copy, o = the objects), so you can copy in one tab/room and paste in
+// another. Same-tab ⌘V is pasted by the KEYBOARD handler (in-app buffer) — reliable in every browser
+// and headless; the paste EVENT (which only fires on ⌘V in real browsers, never on Playwright's
+// synthetic ⌘V) handles CROSS-tab payloads (a different nonce) and images. The nonce is what stops a
+// same-tab ⌘V from being pasted twice (once by the keyboard, once by the event).
+const CLIP_PREFIX = "komuboard/v1:";
+let lastCopyNonce = "";
+interface ClipPayload {
+  n: string;
+  o: unknown[];
+}
+function parseClipboard(text: string | null | undefined): ClipPayload | null {
+  if (!text || !text.startsWith(CLIP_PREFIX)) return null;
+  try {
+    const p = JSON.parse(text.slice(CLIP_PREFIX.length)) as ClipPayload;
+    return p && typeof p.n === "string" && Array.isArray(p.o) ? p : null;
+  } catch {
+    return null;
+  }
+}
+/** Copy the selection to BOTH the in-app buffer and the system clipboard (the write is best-effort;
+ *  it needs the copy user-gesture, which ⌘C/⌘X and the menu click provide). */
+function copyToClipboards(): void {
+  const objs = canvas.copySelection();
+  if (!objs.length) return;
+  lastCopyNonce = crypto.randomUUID();
+  const payload: ClipPayload = { n: lastCopyNonce, o: objs };
+  void navigator.clipboard
+    ?.writeText?.(CLIP_PREFIX + JSON.stringify(payload))
+    .catch(() => undefined);
+}
+/** Paste for click-driven callers (context menu) that have no ClipboardEvent: read the system
+ *  clipboard async (cross-tab), else fall back to the in-app buffer (same-tab). */
+async function pasteFromClipboards(): Promise<void> {
+  try {
+    const payload = parseClipboard(await navigator.clipboard?.readText?.());
+    if (payload && payload.n !== lastCopyNonce && canvas.pasteExternal(payload.o)) return;
+  } catch {
+    /* clipboard read blocked → in-app fallback */
+  }
+  canvas.pasteSelection();
+}
+
+// Paste EVENT (real-browser ⌘V + external app pastes): a CROSS-tab payload (different nonce) or an
+// image. A same-tab payload (matching nonce) is skipped — the keyboard handler already pasted it.
+// External plain text is never hijacked into pasting our objects.
 window.addEventListener("paste", (e) => {
   if (isTyping(e.target)) return; // a focused field / text editor owns the paste
-  const items = e.clipboardData?.items ? [...e.clipboardData.items] : [];
-  const files = items
+  const payload = parseClipboard(e.clipboardData?.getData("text/plain"));
+  if (payload) {
+    if (payload.n !== lastCopyNonce) {
+      e.preventDefault();
+      canvas.pasteExternal(payload.o);
+    }
+    return; // same-tab payload → the keyboard handler owns it
+  }
+  const files = (e.clipboardData?.items ? [...e.clipboardData.items] : [])
     .filter((it) => it.kind === "file" && it.type.startsWith("image/"))
     .map((it) => it.getAsFile())
     .filter((f): f is File => !!f);
-  if (!files.length) return;
-  e.preventDefault();
-  void placeImageFiles(files);
+  if (files.length) {
+    e.preventDefault();
+    void placeImageFiles(files);
+  }
 });
 
 dock?.addEventListener("tool-change", (e) => {
@@ -856,7 +911,7 @@ window.addEventListener("keydown", (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
     if (canvas.hasSelection()) {
-      canvas.copySelection();
+      copyToClipboards();
       e.preventDefault(); // copying selected objects, not the page → suppress native copy
     }
     return; // nothing selected → let the browser handle ⌘/Ctrl+C (e.g. copy selected UI text)
@@ -864,12 +919,15 @@ window.addEventListener("keydown", (e) => {
   // ⌘X cut = copy + delete (also in the right-click menu).
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "x") {
     if (canvas.hasSelection()) {
-      canvas.copySelection();
+      copyToClipboards();
       canvas.deleteSelection();
       e.preventDefault();
     }
     return;
   }
+  // ⌘V pastes the in-app buffer (same-tab) — reliable in every browser and headless. Cross-tab
+  // payloads + images ride the native `paste` event (which fires on a real ⌘V); its nonce check
+  // prevents a same-tab double.
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
     canvas.pasteSelection();
     e.preventDefault();

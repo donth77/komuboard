@@ -70,6 +70,8 @@ export async function connectPeer(
     /** Emulate a coarse-pointer touch device (Chromium mobile emulation) — for the tablet tests,
      *  where the touch chrome is gated on `pointer: coarse`, not width. */
     touch?: boolean;
+    /** Grant clipboard read/write so system-clipboard copy/paste can be exercised. */
+    clipboard?: boolean;
   },
 ): Promise<Peer> {
   // A manually-created context ignores test.use({ viewport }), so pass options through explicitly.
@@ -77,6 +79,8 @@ export async function connectPeer(
     ...(opts?.viewport ? { viewport: opts.viewport } : {}),
     ...(opts?.touch ? { hasTouch: true, isMobile: true } : {}),
   });
+  if (opts?.clipboard)
+    await ctx.grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => undefined);
   await ctx.addInitScript(
     (o) => {
       try {
