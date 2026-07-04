@@ -17,6 +17,23 @@
 
 **Komuboard** is a realtime, online collaborative whiteboard that works on desktop (mouse), mobile/tablet (touch), and VR (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence, no signup. **Try it live at [komuboard.app](https://komuboard.app).** 
 
+## Screenshots
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><a href="brand/desktop.png"><img src="brand/desktop.png" alt="Komuboard on desktop" height="240"></a></td>
+      <td align="center"><a href="brand/mobile.png"><img src="brand/mobile.png" alt="Komuboard on mobile" height="240"></a></td>
+      <td align="center"><a href="brand/vr.png"><img src="brand/vr.png" alt="Komuboard in VR" height="240"></a></td>
+    </tr>
+    <tr>
+      <td align="center"><b>Desktop</b> · mouse</td>
+      <td align="center"><b>Mobile</b> · touch</td>
+      <td align="center"><b>VR</b> · WebXR</td>
+    </tr>
+  </table>
+</div>
+
 ## Features
 
 - **Infinite pan/zoom canvas**: freehand pen + highlighter (color, thickness, solid/dotted), sticky notes, shapes, text, connectors (arrows that bind to objects and re-route), emoji/stamp stickers, and image upload. Eraser, multi-select, grouping, lock, keyboard nudge, and undo/redo.
