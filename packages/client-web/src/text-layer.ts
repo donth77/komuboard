@@ -59,6 +59,7 @@ import {
   runsAreBulleted,
   runsToHtml,
   runsToText,
+  safeColor,
   safeHref,
   setMarkAllRuns,
   toggleBoolMarkAllRuns,
@@ -1125,9 +1126,12 @@ export class TextLayer {
     for (let i = 2; i + 1 < shaft.length; i += 2)
       d += ` L ${lx(shaft[i] as number)} ${ly(shaft[i + 1] as number)}`;
     const dash = obj.style === "dashed" ? ` stroke-dasharray="${w * 2.5} ${w * 2}"` : "";
-    let markup = `<path d="${d}" fill="none" stroke="${obj.color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`;
-    markup += this.capSvg(end, endAngle, obj.endCap, obj.color, w, lx, ly);
-    markup += this.capSvg(start, startAngle, obj.startCap, obj.color, w, lx, ly);
+    // Sanitize the peer-controlled colour before it enters SVG markup we innerHTML — a hostile
+    // connector could otherwise break out of the stroke attribute (same bug class as text runs).
+    const stroke = safeColor(obj.color) || INK;
+    let markup = `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`;
+    markup += this.capSvg(end, endAngle, obj.endCap, stroke, w, lx, ly);
+    markup += this.capSvg(start, startAngle, obj.startCap, stroke, w, lx, ly);
     el.innerHTML = markup;
     el.setAttribute("width", String(Math.max(bbox.width, 1)));
     el.setAttribute("height", String(Math.max(bbox.height, 1)));

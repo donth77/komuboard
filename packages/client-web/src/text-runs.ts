@@ -42,6 +42,16 @@ export function colorToHex(c: string): string {
   return s.toLowerCase(); // a named colour — store as-is (the toolbar only emits hex)
 }
 
+/** A colour safe to interpolate into a `style="…"` attribute we then set via innerHTML: strictly
+ *  `#hex` (3–8 digits — what the toolbar emits). The anchored hex-only charset admits no CSS
+ *  metacharacter (`;`, `:`, `(`, `"`, `>`), so a hostile peer can't smuggle `background:url(evil)` or
+ *  markup through `run.color`/`run.highlight`. Anything else is dropped. (colorToHex is NOT safe here
+ *  — its named-colour branch returns arbitrary strings.) */
+export function safeColor(c: string): string {
+  const s = c.trim();
+  return /^#[0-9a-f]{3,8}$/i.test(s) ? s.toLowerCase() : "";
+}
+
 /** Only allow benign link schemes — drops javascript:/data: etc. from untrusted peer data. */
 export function safeHref(raw: string): string {
   const s = raw.trim();
@@ -59,8 +69,10 @@ function runToHtml(run: TextRun): string {
   if (run.underline) deco.push("underline");
   if (run.strike) deco.push("line-through");
   if (deco.length) styles.push("text-decoration:" + deco.join(" "));
-  if (run.color) styles.push("color:" + run.color);
-  if (run.highlight) styles.push("background-color:" + run.highlight);
+  const color = run.color && safeColor(run.color);
+  if (color) styles.push("color:" + color);
+  const highlight = run.highlight && safeColor(run.highlight);
+  if (highlight) styles.push("background-color:" + highlight);
   if (styles.length) html = `<span style="${styles.join(";")}">${html}</span>`;
   if (run.link) {
     const href = safeHref(run.link);
