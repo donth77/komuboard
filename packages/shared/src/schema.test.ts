@@ -27,6 +27,9 @@ import {
   setTextRuns,
   sideMidpoint,
   translateObjects,
+  DEFAULT_PEER_COLOR,
+  hasLiveGesture,
+  readPresence,
   type BoardObject,
   type ConnectorObject,
   type StrokeObject,
@@ -711,5 +714,50 @@ describe("locking", () => {
     deleteObjects(doc, ["host"]);
     expect(objectsMap(doc).get("host")).toBeUndefined(); // host deleted
     expect(objectsMap(doc).get("st")).toBeDefined(); // locked sticker survived the cascade
+  });
+});
+
+describe("readPresence — typed awareness reader (docs/09 Q1/Q2)", () => {
+  it("normalizes the wire `user` field to `name`, keeps `user` too", () => {
+    const p = readPresence({ user: "Maya", color: "#16a34a" });
+    expect(p.name).toBe("Maya");
+    expect(p.user).toBe("Maya");
+    expect(p.color).toBe("#16a34a");
+  });
+
+  it("falls back to Guest + DEFAULT_PEER_COLOR when identity is missing/mistyped", () => {
+    const p = readPresence({ user: 42, color: null });
+    expect(p.name).toBe("Guest");
+    expect(p.color).toBe(DEFAULT_PEER_COLOR);
+  });
+
+  it("coerces absent gesture fields to null and passes present ones through", () => {
+    const p = readPresence({
+      user: "A",
+      color: "#000",
+      draw: { points: [0, 0, 1, 1], color: "#f00", width: 6, style: "solid" },
+    });
+    expect(p.draw).toEqual({ points: [0, 0, 1, 1], color: "#f00", width: 6, style: "solid" });
+    expect(p.drag).toBeNull();
+    expect(p.textedit).toBeNull();
+    expect(p.groupresize).toBeNull();
+  });
+
+  it("tolerates a null/undefined raw state", () => {
+    expect(readPresence(null).name).toBe("Guest");
+    expect(readPresence(undefined).cursor).toBeNull();
+  });
+
+  it("hasLiveGesture detects any live-gesture field and ignores idle presence", () => {
+    expect(hasLiveGesture(readPresence({ user: "A", color: "#000" }))).toBe(false);
+    expect(hasLiveGesture(readPresence({ user: "A", color: "#000", cursor: { x: 1, y: 2 } }))).toBe(
+      false,
+    );
+    expect(
+      hasLiveGesture(readPresence({ user: "A", color: "#000", textrotate: { id: "x", rotation: 5 } })),
+    ).toBe(true);
+    expect(
+      hasLiveGesture(readPresence({ user: "A", color: "#000", drag: { ids: ["x"], dx: 1, dy: 2 } })),
+    ).toBe(true);
   });
 });

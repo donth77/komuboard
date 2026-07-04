@@ -1121,6 +1121,43 @@ export function pickUserColor(seed: number): string {
   return USER_COLORS[i] ?? "#2563eb";
 }
 
+/** Fallback identity colour for a peer that somehow carries none (essentially never — every client
+ *  sets `color` on join). Single source for the value both realities used to hardcode (docs/09 Q4). */
+export const DEFAULT_PEER_COLOR = USER_COLORS[0] ?? "#2563eb";
+
+/**
+ * Read a raw Yjs awareness state into the typed {@link PresenceState}. This is the ONE place the
+ * untyped awareness payload is cast (docs/09 Q1/Q2): consumers call this instead of reaching into
+ * `state["…"]` with inline casts, so 2D and VR read the presence contract identically and can't
+ * drift. The identity string is normalized from the wire `user` field (Q2). Shallow by design — it
+ * trusts the field shapes (the DO validates message shape at the boundary, docs/07 §4.3).
+ */
+export function readPresence(raw: unknown): PresenceState {
+  const s = (raw ?? {}) as Partial<PresenceState> & { user?: unknown; name?: unknown };
+  const user = typeof s.user === "string" ? s.user : undefined;
+  return {
+    name: user ?? (typeof s.name === "string" ? s.name : "Guest"),
+    user,
+    color: typeof s.color === "string" ? s.color : DEFAULT_PEER_COLOR,
+    cursor: s.cursor ?? null,
+    selection: s.selection ?? null,
+    draw: s.draw ?? null,
+    drag: s.drag ?? null,
+    resize: s.resize ?? null,
+    textresize: s.textresize ?? null,
+    textrotate: s.textrotate ?? null,
+    textedit: s.textedit ?? null,
+    groupresize: s.groupresize ?? null,
+  };
+}
+
+/** Whether a peer is mid-gesture (any live draw/drag/resize/rotate/group/text-edit field is set). */
+export function hasLiveGesture(p: PresenceState): boolean {
+  return Boolean(
+    p.draw || p.drag || p.resize || p.textresize || p.textrotate || p.groupresize || p.textedit,
+  );
+}
+
 export function randomId(prefix = "o"): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }

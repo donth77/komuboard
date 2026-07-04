@@ -4,6 +4,7 @@
 // frame (60 fps, GPU transforms only — the same trick the 2D renderer uses). The texture only
 // repaints when CONTENT changes: doc updates, or a peer's live stroke / drag / selection delta.
 
+import { hasLiveGesture, readPresence } from "@komuboard/shared";
 import type { Awareness } from "y-protocols/awareness";
 
 import { CURSOR_PATH } from "../canvas";
@@ -87,9 +88,9 @@ export function createPresence3D(opts: Presence3DOptions): Presence3D {
     for (const [id, st] of opts.awareness.getStates()) {
       if (id === opts.awareness.clientID || !st) continue;
       seen.add(id);
-      const state = st as Record<string, unknown>;
-      const name = typeof state.user === "string" ? state.user : "Guest";
-      const color = typeof state.color === "string" ? state.color : "#3b82f6";
+      const p = readPresence(st);
+      const name = p.name;
+      const color = p.color;
       let cur = cursors.get(id);
       if (!cur) {
         cur = makeCursor(name, color);
@@ -105,15 +106,15 @@ export function createPresence3D(opts: Presence3DOptions): Presence3D {
         cur.img.setAttribute("src", pointerSvg(color));
         cur.label.setAttribute("color", color);
       }
-      cur.target = (state.cursor as { x: number; y: number } | null | undefined) ?? null;
+      cur.target = p.cursor ?? null;
       const sig = JSON.stringify([
-        state.draw ?? 0,
-        state.drag ?? 0,
-        state.selection ?? 0,
-        state.textedit ?? 0,
-        state.textresize ?? 0,
-        state.textrotate ?? 0,
-        state.groupresize ?? 0,
+        p.draw ?? 0,
+        p.drag ?? 0,
+        p.selection ?? 0,
+        p.textedit ?? 0,
+        p.textresize ?? 0,
+        p.textrotate ?? 0,
+        p.groupresize ?? 0,
       ]);
       if (contentSig.get(id) !== sig) {
         contentSig.set(id, sig);
@@ -164,18 +165,20 @@ export function createPresence3D(opts: Presence3DOptions): Presence3D {
     const out: PeerPresence[] = [];
     for (const [id, st] of opts.awareness.getStates()) {
       if (id === opts.awareness.clientID || !st) continue;
-      const state = st as Record<string, unknown>;
+      // Typed via the shared reader — no inline casts. The VR-normalized names map from the wire
+      // fields: resize ← textresize, rotate ← textrotate, groupResize ← groupresize.
+      const p = readPresence(st);
       out.push({
-        name: typeof state.user === "string" ? state.user : "Guest",
-        color: typeof state.color === "string" ? state.color : "#3b82f6",
+        name: p.name,
+        color: p.color,
         cursor: null, // cursors live as 3D entities, not texture pixels
-        draw: (state.draw as PeerPresence["draw"]) ?? null,
-        drag: (state.drag as PeerPresence["drag"]) ?? null,
-        selection: (state.selection as string[] | null | undefined) ?? null,
-        textedit: (state.textedit as PeerPresence["textedit"]) ?? null,
-        resize: (state.textresize as PeerPresence["resize"]) ?? null,
-        rotate: (state.textrotate as PeerPresence["rotate"]) ?? null,
-        groupResize: (state.groupresize as PeerPresence["groupResize"]) ?? null,
+        draw: p.draw ?? null,
+        drag: p.drag ?? null,
+        selection: p.selection ?? null,
+        textedit: p.textedit ?? null,
+        resize: p.textresize ?? null,
+        rotate: p.textrotate ?? null,
+        groupResize: p.groupresize ?? null,
       });
     }
     return out;
@@ -185,16 +188,7 @@ export function createPresence3D(opts: Presence3DOptions): Presence3D {
   const gestureActive = (): boolean => {
     for (const [id, st] of opts.awareness.getStates()) {
       if (id === opts.awareness.clientID || !st) continue;
-      const state = st as Record<string, unknown>;
-      if (
-        state.draw ||
-        state.drag ||
-        state.textresize ||
-        state.textrotate ||
-        state.groupresize ||
-        state.textedit
-      )
-        return true;
+      if (hasLiveGesture(readPresence(st))) return true;
     }
     return false;
   };
