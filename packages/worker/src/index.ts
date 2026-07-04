@@ -106,7 +106,13 @@ export default {
     // Image upload + serve (before the PartyServer WS routing).
     if (url.pathname === "/upload") return handleUpload(request, env);
     if (url.pathname.startsWith("/img/")) {
-      return handleServe(decodeURIComponent(url.pathname.slice("/img/".length)), env);
+      let key: string;
+      try {
+        key = decodeURIComponent(url.pathname.slice("/img/".length));
+      } catch {
+        return new Response("Bad request", { status: 400 }); // malformed %-escape → 400, not a 500
+      }
+      return handleServe(key, env);
     }
 
     // Per-IP join rate limit before opening a room WS: bounds room-id enumeration (a scanner of the

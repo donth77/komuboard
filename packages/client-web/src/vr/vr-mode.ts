@@ -8,7 +8,12 @@
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
-import { drawBoardRegion, type PeerPresence, type WorldRect } from "./board-raster";
+import {
+  clearAssetLoadNotifier,
+  drawBoardRegion,
+  type PeerPresence,
+  type WorldRect,
+} from "./board-raster";
 import { createPanelTexture } from "./board-texture";
 import { createInteraction } from "./interaction";
 import { createPenMenu3D, type PenMenuState } from "./pen-menu-3d";
@@ -263,6 +268,7 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
     panel.removeEventListener("object3dset", onLoaded);
     void scene.exitVR?.().catch(() => undefined);
     tex.dispose();
+    clearAssetLoadNotifier(); // a late asset load must not re-enter this destroyed session
     root.remove();
     opts.onExit();
   };

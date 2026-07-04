@@ -42,6 +42,12 @@ export interface WorldRect {
 const assetCache = new Map<string, HTMLImageElement | null>();
 let notifyAssetLoaded: (() => void) | null = null;
 
+/** Drop the asset-load callback on VR teardown. Otherwise a still-in-flight image's onload fires
+ *  after exit and re-enters (and keeps alive) the destroyed session's draw closure. */
+export function clearAssetLoadNotifier(): void {
+  notifyAssetLoaded = null;
+}
+
 function assetImage(url: string): HTMLImageElement | null {
   const hit = assetCache.get(url);
   if (hit !== undefined) return hit;
