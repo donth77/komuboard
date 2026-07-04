@@ -38,7 +38,7 @@ export function createExportDialog(
     '<div class="export-bg-menu hidden" role="menu">' +
     BG_ORDER.map(
       (k) =>
-        `<button type="button" class="export-bg-opt" role="menuitemradio" data-bg="${k}"><span class="bg-check" aria-hidden="true">✓</span><span class="bg-swatch bg-${k}" aria-hidden="true"></span><span class="bg-name">${BG_LABELS[k]}</span></button>`,
+        `<button type="button" class="export-bg-opt" role="menuitemradio" data-bg="${k}" aria-checked="false"><span class="bg-check" aria-hidden="true">✓</span><span class="bg-swatch bg-${k}" aria-hidden="true"></span><span class="bg-name">${BG_LABELS[k]}</span></button>`,
     ).join("") +
     "</div>" +
     "</div>";
@@ -60,7 +60,11 @@ export function createExportDialog(
   const setBg = (b: ExportBackground): void => {
     background = b;
     bgCurrent.textContent = BG_LABELS[b];
-    opts.forEach((o) => o.classList.toggle("selected", o.dataset.bg === b));
+    opts.forEach((o) => {
+      const on = o.dataset.bg === b;
+      o.classList.toggle("selected", on);
+      o.setAttribute("aria-checked", String(on));
+    });
   };
   setBg("solid");
 

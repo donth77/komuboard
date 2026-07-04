@@ -42,7 +42,7 @@ export class CoToolDock extends HTMLElement {
       // see tooltip.ts): beside the vertical dock, with the shortcut key as a chip for wired tools.
       const keyAttr = tool && key ? ` data-tip-key="${key.toUpperCase()}"` : "";
       const groupAttr = tool && INSERT_TOOLS.has(tool) ? ` data-group="insert"` : "";
-      return `<button class="tool${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" data-tip="${label}" data-tip-pos="right"${keyAttr}${groupAttr} aria-label="${label}">${icon(name)}</button>`;
+      return `<button class="tool${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" data-tip="${label}" data-tip-pos="right"${keyAttr}${groupAttr} aria-label="${label}" aria-pressed="false">${icon(name)}</button>`;
     }).join("");
     this.#sync();
     this.addEventListener("click", (e) => {
@@ -66,6 +66,7 @@ export class CoToolDock extends HTMLElement {
     for (const b of this.querySelectorAll<HTMLElement>(".tool[data-tool]")) {
       const on = b.getAttribute("data-tool") === this.#active;
       b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", String(on));
       b.classList.toggle("tip-off", on); // the active tool suppresses its own tooltip (you know what it is)
     }
   }

@@ -25,7 +25,7 @@ export class CoEmojiPicker extends HTMLElement {
     const tabs = groups
       .map(
         (g, i) =>
-          `<button class="ep-tab${i === 0 ? " on" : ""}" type="button" data-tab="${i}" title="${g.name}" aria-label="${g.name}">` +
+          `<button class="ep-tab${i === 0 ? " on" : ""}" type="button" data-tab="${i}" title="${g.name}" aria-label="${g.name}" aria-pressed="${i === 0}">` +
           `<img src="/emoji/${g.emojis[0]?.u}.svg" alt="" draggable="false"></button>`,
       )
       .join("");
@@ -39,8 +39,12 @@ export class CoEmojiPicker extends HTMLElement {
       const t = (e.target as HTMLElement).closest<HTMLElement>("[data-tab]");
       if (!t) return;
       this.#active = Number(t.getAttribute("data-tab"));
-      for (const b of this.querySelectorAll(".ep-tab")) b.classList.remove("on");
+      for (const b of this.querySelectorAll(".ep-tab")) {
+        b.classList.remove("on");
+        b.setAttribute("aria-pressed", "false");
+      }
       t.classList.add("on");
+      t.setAttribute("aria-pressed", "true");
       const input = this.querySelector<HTMLInputElement>(".ep-search input");
       if (input) input.value = "";
       this.renderGrid();

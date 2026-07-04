@@ -76,8 +76,8 @@ export class CoDrawBar extends HTMLElement {
     this.innerHTML =
       '<div class="sheet-handle" aria-hidden="true"></div>' +
       '<div class="db-row">' +
-      `<button class="db-btn" type="button" data-brush="pen" aria-label="Pen">${iconFilled("penClip")}<span class="db-tip">Pen</span></button>` +
-      `<button class="db-btn" type="button" data-brush="highlighter" aria-label="Highlighter">${icon("highlighter")}<span class="db-tip">Highlighter</span></button>` +
+      `<button class="db-btn" type="button" data-brush="pen" aria-label="Pen" aria-pressed="false">${iconFilled("penClip")}<span class="db-tip">Pen</span></button>` +
+      `<button class="db-btn" type="button" data-brush="highlighter" aria-label="Highlighter" aria-pressed="false">${icon("highlighter")}<span class="db-tip">Highlighter</span></button>` +
       `<button class="db-btn" type="button" data-pop="style" aria-label="Line style"><span class="db-ico-slot">${icon(this.#styleIconName())}</span><span class="db-tip">Line style</span></button>` +
       `<button class="db-btn db-color" type="button" data-pop="color" aria-label="Colour"><span class="db-dot"></span><span class="db-tip">Color</span></button>` +
       `<button class="db-btn" type="button" data-pop="width" aria-label="Stroke width">${lineWeightIcon()}<span class="db-tip">Stroke width</span></button>` +
@@ -121,9 +121,11 @@ export class CoDrawBar extends HTMLElement {
     this.#emit({ style: this.#style() });
   }
   #syncBrush(): void {
-    this.querySelectorAll<HTMLElement>("[data-brush]").forEach((b) =>
-      b.classList.toggle("active", b.getAttribute("data-brush") === this.#brush),
-    );
+    this.querySelectorAll<HTMLElement>("[data-brush]").forEach((b) => {
+      const on = b.getAttribute("data-brush") === this.#brush;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
   }
   #syncColorDot(): void {
     const dot = this.querySelector<HTMLElement>(".db-dot");
@@ -188,8 +190,8 @@ export class CoDrawBar extends HTMLElement {
     if (which === "style") {
       return (
         '<div class="seg" data-style>' +
-        `<button class="seg-opt${this.#dash === "solid" ? " on" : ""}" type="button" data-dash="solid" title="Solid" aria-label="Solid">${icon("lineSolid")}</button>` +
-        `<button class="seg-opt${this.#dash === "dotted" ? " on" : ""}" type="button" data-dash="dotted" title="Dotted" aria-label="Dotted">${icon("lineDotted")}</button>` +
+        `<button class="seg-opt${this.#dash === "solid" ? " on" : ""}" type="button" data-dash="solid" title="Solid" aria-label="Solid" aria-pressed="${this.#dash === "solid"}">${icon("lineSolid")}</button>` +
+        `<button class="seg-opt${this.#dash === "dotted" ? " on" : ""}" type="button" data-dash="dotted" title="Dotted" aria-label="Dotted" aria-pressed="${this.#dash === "dotted"}">${icon("lineDotted")}</button>` +
         "</div>"
       );
     }
@@ -197,11 +199,11 @@ export class CoDrawBar extends HTMLElement {
       const sw = this.#swatches
         .map((c) => {
           const name = COLOR_NAMES[c.toUpperCase()] ?? c;
-          return `<button class="sw${c === this.#color ? " on" : ""}" type="button" data-color="${c}" data-tip="${name}" style="--sw:${c}" aria-label="${name}"></button>`;
+          return `<button class="sw${c === this.#color ? " on" : ""}" type="button" data-color="${c}" data-tip="${name}" style="--sw:${c}" aria-label="${name}" aria-pressed="${c === this.#color}"></button>`;
         })
         .join("");
       const isCustom = !!this.#color && !this.#swatches.includes(this.#color);
-      return `<div class="swatches" data-swatches>${sw}<button class="sw sw-custom${isCustom ? " on" : ""}" type="button" data-custom data-tip="Custom" aria-label="Custom colour"></button></div>`;
+      return `<div class="swatches" data-swatches>${sw}<button class="sw sw-custom${isCustom ? " on" : ""}" type="button" data-custom data-tip="Custom" aria-label="Custom colour" aria-pressed="${isCustom}"></button></div>`;
     }
     return (
       `<div class="db-pop-label">Stroke width · <b data-w-val>${this.#width}</b> px</div>` +
@@ -215,7 +217,10 @@ export class CoDrawBar extends HTMLElement {
         const t = (e.target as HTMLElement).closest<HTMLElement>("[data-dash]");
         if (!t) return;
         this.#dash = (t.getAttribute("data-dash") as Dash) ?? "solid";
-        pop.querySelectorAll(".seg-opt").forEach((s) => s.classList.toggle("on", s === t));
+        pop.querySelectorAll(".seg-opt").forEach((s) => {
+          s.classList.toggle("on", s === t);
+          s.setAttribute("aria-pressed", String(s === t));
+        });
         this.#renderStyleBtn();
         this.#emit({ style: this.#style() });
       });
@@ -285,6 +290,7 @@ export class CoDrawBar extends HTMLElement {
         ? isCustom
         : s.getAttribute("data-color") === this.#color;
       s.classList.toggle("on", on);
+      s.setAttribute("aria-pressed", String(on));
     });
   }
 
