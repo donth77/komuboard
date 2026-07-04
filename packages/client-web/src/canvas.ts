@@ -38,6 +38,7 @@ import {
   type PresenceState,
   type ShapeKind,
   DEFAULT_PEER_COLOR,
+  readPresence,
   type StrokeObject,
   type StrokeStyle,
 } from "@komuboard/shared";
@@ -131,15 +132,6 @@ function pointInRect(p: { x: number; y: number }, r: Rect, pad = 0): boolean {
 }
 
 /** A *remote* peer's in-progress stroke, streamed over awareness while they draw. */
-interface DrawState {
-  id: string;
-  points: number[];
-  color: string;
-  width: number;
-  style: StrokeStyle;
-  opacity: number;
-}
-
 const MAX_PREVIEW_VERTS = 128; // cap broadcast live-stroke vertices (cost); the committed stroke is full-res
 /** Stride a flat [x,y,…] list down to ≤ maxVerts vertices, always keeping the last (the pen tip). */
 function downsamplePoints(pts: number[], maxVerts: number): number[] {
@@ -321,14 +313,10 @@ export class BoardCanvas {
     let any = false;
     this.opts.awareness.getStates().forEach((state, cid) => {
       if (cid === self || any) return;
-      if (
-        state["drag"] ||
-        state["resize"] ||
-        state["textresize"] ||
-        state["textrotate"] ||
-        state["groupresize"]
-      )
-        any = true;
+      // Per-frame in the glide loop → one typed cast, no readPresence allocation. Geometry gestures
+      // only (drag / resize / rotate / group) — a live stroke or text edit doesn't glide a ring.
+      const s = state as PresenceState;
+      if (s.drag || s.resize || s.textresize || s.textrotate || s.groupresize) any = true;
     });
     return any;
   }
@@ -2380,11 +2368,13 @@ export class BoardCanvas {
     const parts: string[] = [];
     this.opts.awareness.getStates().forEach((state, clientId) => {
       if (clientId === self) return;
-      const ids = state["selection"] as string[] | undefined;
-      if (!ids?.length) return;
-      const color = String(state["color"] ?? DEFAULT_PEER_COLOR);
-      peers.push({ clientId, color, ids });
-      parts.push(`${clientId}:${color}:${ids.join(",")}`);
+      // Hot path: this gathers every awareness change AND every rAF frame during a peer glide (see
+      // ensureAnim's step) — one typed cast, no per-peer readPresence allocation (cf. anyPeerGesturing).
+      const s = state as PresenceState;
+      if (!s.selection?.length) return;
+      const color = s.color ?? DEFAULT_PEER_COLOR;
+      peers.push({ clientId, color, ids: s.selection });
+      parts.push(`${clientId}:${color}:${s.selection.join(",")}`);
     });
     const key = parts.sort().join("|");
     if (!force && key === this.lastRemoteSelKey) return;
@@ -2578,7 +2568,8 @@ export class BoardCanvas {
       null;
     this.opts.awareness.getStates().forEach((state, clientId) => {
       if (hit || clientId === self) return;
-      const ids = state["selection"] as string[] | undefined;
+      const s = state as PresenceState;
+      const ids = s.selection;
       if (!ids?.length) return;
       const u = this.peerSelectionUnionRect(ids);
       if (!u) return;
@@ -2593,8 +2584,8 @@ export class BoardCanvas {
       const id = String(state["id"] ?? "");
       const prof = id ? readUserProfile(this.opts.doc, id) : undefined;
       hit = {
-        name: String(state["user"] ?? prof?.name ?? "Anonymous"),
-        color: String(state["color"] ?? prof?.color ?? DEFAULT_PEER_COLOR),
+        name: String(s.user ?? prof?.name ?? "Anonymous"),
+        color: String(s.color ?? prof?.color ?? DEFAULT_PEER_COLOR),
         photo: prof?.photo,
         top: { x: u.x + u.width / 2, y: u.y - pad },
       };
@@ -2654,11 +2645,12 @@ export class BoardCanvas {
     const dragging = new Set<string>();
     this.opts.awareness.getStates().forEach((state, clientId) => {
       if (clientId === self) return;
-      const ids = state["selection"] as string[] | undefined;
-      if (ids) for (const id of ids) remoteSel.add(id);
+      const p = readPresence(state);
+      if (p.selection) for (const id of p.selection) remoteSel.add(id);
       // a peer actively dragging OR resizing a node owns it → force-yield it below
-      const drag = state["drag"] as { ids?: string[] } | undefined;
-      if (drag?.ids) for (const id of drag.ids) dragging.add(id);
+      if (p.drag?.ids) for (const id of p.drag.ids) dragging.add(id);
+      // `resize` is the legacy GROUP-transform field ({nodes}), distinct from the single-box
+      // `textresize`; canvas only ever nulls it today, but honour it for ownership if present.
       const resize = state["resize"] as { nodes?: { id?: string }[] } | undefined;
       if (resize?.nodes) for (const n of resize.nodes) if (n?.id) dragging.add(n.id);
     });
@@ -2694,7 +2686,7 @@ export class BoardCanvas {
     const active = new Set<string>();
     this.opts.awareness.getStates().forEach((state, clientId) => {
       if (clientId === self) return;
-      const d = state["draw"] as Partial<DrawState> | undefined;
+      const d = readPresence(state).draw;
       if (!d?.id || !d.points?.length) return;
       active.add(d.id);
       if (this.objects.has(d.id)) return; // already committed → the text-layer renders the real svg
@@ -2837,21 +2829,18 @@ export class BoardCanvas {
     const seen = new Set<number>();
     this.opts.awareness.getStates().forEach((state, clientId) => {
       if (clientId === self) return;
-      const cursor = state["cursor"] as { x: number; y: number } | undefined;
-      if (!cursor) return;
+      const p = readPresence(state);
+      if (!p.cursor) return;
       seen.add(clientId);
       let group = this.cursors.get(clientId);
       if (!group) {
-        group = this.buildCursor(
-          String(state["color"] ?? DEFAULT_PEER_COLOR),
-          String(state["user"] ?? "Guest"),
-        );
-        group.position(cursor);
+        group = this.buildCursor(p.color, p.name);
+        group.position(p.cursor);
         group.scale({ x: this.viewport.screenPx(1), y: this.viewport.screenPx(1) });
         this.cursors.set(clientId, group);
         this.cursorLayer.add(group);
       }
-      this.cursorTargets.set(clientId, cursor);
+      this.cursorTargets.set(clientId, p.cursor);
     });
     for (const [clientId, group] of this.cursors) {
       if (!seen.has(clientId)) {

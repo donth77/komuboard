@@ -1003,6 +1003,7 @@ export interface DrawState {
   color: string;
   width: number;
   style: StrokeStyle;
+  opacity?: number;
 }
 
 /** A peer dragging a selection: the moved ids + the live offset from their committed positions. */
