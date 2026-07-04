@@ -1,5 +1,6 @@
 import { routePartykitRequest } from "partyserver";
 import { Board } from "./board";
+import { sniffImage } from "./image-sniff";
 
 // The Durable Object class must be exported from the Worker entry module.
 export { Board };
@@ -9,6 +10,8 @@ export interface Env {
   Main: DurableObjectNamespace<Board>;
   /** R2 bucket for uploaded images (bytes; the Yjs doc only holds the key). */
   UPLOADS: R2Bucket;
+  /** Per-IP upload rate limiter (Cloudflare ratelimit binding). Optional: absent in local dev. */
+  UPLOAD_RL?: { limit(o: { key: string }): Promise<{ success: boolean }> };
 }
 
 // Image-upload guards (free-tier R2: bound storage, zero egress). The client also validates + downscales.
@@ -39,9 +42,23 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST")
     return new Response("Method not allowed", { status: 405, headers: CORS });
 
-  const type = (request.headers.get("content-type") ?? "").split(";")[0]?.trim() ?? "";
-  const ext = ALLOWED_TYPES[type];
-  if (!ext)
+  // Per-IP rate limit (the endpoint is unauthenticated and stores 5MB blobs — a flood is a
+  // storage-cost DoS). Only when Cloudflare gives us a real client IP (prod) and the binding exists;
+  // wrapped so a limiter hiccup / local-dev absence fails OPEN rather than blocking uploads.
+  const ip = request.headers.get("cf-connecting-ip");
+  if (ip && env.UPLOAD_RL) {
+    try {
+      if (!(await env.UPLOAD_RL.limit({ key: ip })).success)
+        return Response.json({ error: "rate limited" }, { status: 429, headers: CORS });
+    } catch {
+      /* limiter unavailable → fail open */
+    }
+  }
+
+  // Fast pre-filter on the declared type (a friendlier error), but it is NOT trusted for what we
+  // store — the authoritative content-type comes from the real magic bytes below.
+  const declared = (request.headers.get("content-type") ?? "").split(";")[0]?.trim() ?? "";
+  if (!ALLOWED_TYPES[declared])
     return Response.json({ error: "unsupported image type" }, { status: 415, headers: CORS });
 
   const bytes = await request.arrayBuffer();
@@ -49,12 +66,18 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
     return Response.json({ error: "image too large or empty" }, { status: 413, headers: CORS });
   }
 
+  // Sniff the REAL type from the bytes and store/serve THAT — a non-image (e.g. HTML) labelled
+  // image/png can't sneak through to be MIME-sniffed into script on the serving origin.
+  const sniffed = sniffImage(new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 16)));
+  if (!sniffed)
+    return Response.json({ error: "not a valid image" }, { status: 415, headers: CORS });
+
   // Content-addressed key: identical images dedup, and the immutable cache is always safe.
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   const hash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  const key = `${hash}.${ext}`;
+  const key = `${hash}.${sniffed.ext}`;
   await env.UPLOADS.put(key, bytes, {
-    httpMetadata: { contentType: type, cacheControl: IMMUTABLE },
+    httpMetadata: { contentType: sniffed.type, cacheControl: IMMUTABLE },
   });
   return Response.json({ key }, { headers: CORS });
 }
@@ -67,6 +90,7 @@ async function handleServe(key: string, env: Env): Promise<Response> {
   obj.writeHttpMetadata(headers);
   headers.set("Cache-Control", IMMUTABLE);
   headers.set("ETag", obj.httpEtag);
+  headers.set("X-Content-Type-Options", "nosniff"); // never let the browser re-sniff a stored image
   // Allow cross-origin reads so a board export can rasterize these images without tainting the canvas
   // (the deployed client is a different origin than the worker). The images are public anyway.
   headers.set("Access-Control-Allow-Origin", "*");

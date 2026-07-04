@@ -34,3 +34,12 @@ bucket_name = "komuboard-uploads"
 
 [observability]
 enabled = true
+
+# Per-IP rate limit for the /upload endpoint (an unauthenticated POST that stores 5MB blobs in R2).
+# Cloudflare's native rate-limiting binding: 30 uploads / 60s / IP. The binding is optional in code,
+# so local dev / miniflare without it simply skips the check.
+[[unsafe.bindings]]
+name = "UPLOAD_RL"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 30, period = 60 }
