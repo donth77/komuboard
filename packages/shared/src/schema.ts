@@ -991,12 +991,96 @@ export interface CursorState {
   y: number;
 }
 
-export interface PresenceState {
-  name: string;
+// Ephemeral live-gesture fields carried on the awareness channel while a peer is mid-action (drawing,
+// dragging, resizing, rotating, group-resizing, or editing text). Each is cleared (set null) on
+// release. These are the authoritative shapes for BOTH the 2D renderer and the VR rasterizer — the
+// VR renderer must reuse them rather than re-declaring, or the two realities drift (docs/09 Q1).
+
+/** A peer's in-progress freehand stroke (live preview before it commits to the doc). */
+export interface DrawState {
+  id?: string;
+  points: number[];
   color: string;
-  cursor?: CursorState;
+  width: number;
+  style: StrokeStyle;
+}
+
+/** A peer dragging a selection: the moved ids + the live offset from their committed positions. */
+export interface DragState {
+  ids: string[];
+  dx: number;
+  dy: number;
+}
+
+/** A peer live-resizing a single box (wire fields `resize` and `textresize` share this shape). */
+export interface LiveResizeState {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+}
+
+/** A peer live-rotating a single box (wire field `textrotate`). */
+export interface LiveRotateState {
+  id: string;
+  rotation: number;
+}
+
+/** A peer's in-progress text edit — a full box snapshot so a not-yet-committed box still renders. */
+export interface TextEditState {
+  id: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  fontFamily: string;
+  align: TextAlign;
+  runs: TextRun[];
+  width?: number;
+  height?: number;
+  bg?: string;
+  shape?: ShapeKind;
+  borderColor?: string;
+  borderStyle?: BorderStyle;
+  rotation?: number;
+}
+
+/** A peer live-resizing a whole group: each member's live geometry. */
+export interface GroupResizeState {
+  nodes: Array<{
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fontSize: number;
+    rotation: number;
+  }>;
+}
+
+/**
+ * The full ephemeral presence payload on the awareness channel. Authoritative for every runtime —
+ * 2D and VR read the SAME fields (docs/09 Q1). NOTE (docs/09 Q2): the identity string is set on the
+ * wire as `user`; `name` is its normalized alias used by some consumers — both are declared here
+ * until the rename lands. All live-gesture fields are optional and nulled on gesture release.
+ */
+export interface PresenceState {
+  /** Normalized display name (alias of the wire `user` field — see Q2). */
+  name: string;
+  /** Wire identity field as actually set by the client. */
+  user?: string;
+  color: string;
+  cursor?: CursorState | null;
   /** Object ids this peer currently has selected (rendered as outlines in their color). */
-  selection?: string[];
+  selection?: string[] | null;
+  draw?: DrawState | null;
+  drag?: DragState | null;
+  resize?: LiveResizeState | null;
+  textresize?: LiveResizeState | null;
+  textrotate?: LiveRotateState | null;
+  textedit?: TextEditState | null;
+  groupresize?: GroupResizeState | null;
 }
 
 /** Colorblind-aware identity palette; each cursor is also labeled with a name. */

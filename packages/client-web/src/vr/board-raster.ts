@@ -13,7 +13,13 @@ import {
   type BoardObject,
   type ConnectorEnd,
   type ConnectorObject,
+  type DragState,
+  type DrawState,
+  type GroupResizeState,
+  type LiveResizeState,
+  type LiveRotateState,
   type StrokeObject,
+  type TextEditState,
   type TextObject,
 } from "@komuboard/shared";
 import type * as Y from "yjs";
@@ -60,58 +66,30 @@ function stampUrl(src: string): string | null {
   return null;
 }
 
-/** A peer's ephemeral state, projected onto the texture (cursor + live gestures + selection). */
+/** A peer's ephemeral state, projected onto the texture (cursor + live gestures + selection). The
+ *  field SHAPES are the shared awareness contract (schema.ts) — reused, not re-declared, so the VR
+ *  renderer can't drift from 2D (docs/09 Q1). Property names are the VR-normalized view: `resize`
+ *  ← wire `textresize`, `rotate` ← `textrotate`, `groupResize` ← `groupresize` (mapped in
+ *  presence-3d.ts). */
 export interface PeerPresence {
   name: string;
   color: string;
   cursor?: { x: number; y: number } | null;
   /** Live pen stroke mid-draw (the "draw" awareness field). */
-  draw?: { points: number[]; color: string; width: number; style: string } | null;
+  draw?: DrawState | null;
   /** Live move offsets (the "drag" awareness field) — dragged objects render displaced. */
-  drag?: { ids: string[]; dx: number; dy: number } | null;
+  drag?: DragState | null;
   /** Selected object ids (the "selection" awareness field) — outlined in the peer's colour. */
   selection?: string[] | null;
   /** Live text edit (the "textedit" field): a full snapshot of the box being typed — rendered in
    *  place of the committed copy so keystrokes appear live. */
-  textedit?: {
-    id: string;
-    x: number;
-    y: number;
-    fontSize: number;
-    fontFamily: string;
-    align: TextObject["align"];
-    runs: TextObject["runs"];
-    width?: number;
-    height?: number;
-    bg?: string;
-    shape?: TextObject["shape"];
-    borderColor?: string;
-    borderStyle?: TextObject["borderStyle"];
-    rotation?: number;
-  } | null;
+  textedit?: TextEditState | null;
   /** Live resize (the "textresize" field) — absolute geometry override (fontSize 0 = unchanged). */
-  resize?: {
-    id: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    fontSize: number;
-  } | null;
+  resize?: LiveResizeState | null;
   /** Live rotate (the "textrotate" field). */
-  rotate?: { id: string; rotation: number } | null;
+  rotate?: LiveRotateState | null;
   /** Live group transform (the "groupresize" field) — absolute per-node preview geometry. */
-  groupResize?: {
-    nodes: {
-      id: string;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      fontSize: number;
-      rotation: number;
-    }[];
-  } | null;
+  groupResize?: GroupResizeState | null;
 }
 
 export interface RasterOptions {
