@@ -12,6 +12,8 @@ export interface Env {
   UPLOADS: R2Bucket;
   /** Per-IP upload rate limiter (Cloudflare ratelimit binding). Optional: absent in local dev. */
   UPLOAD_RL?: { limit(o: { key: string }): Promise<{ success: boolean }> };
+  /** Per-IP room-join (WS connect) rate limiter — bounds room-id enumeration. Optional in dev. */
+  JOIN_RL?: { limit(o: { key: string }): Promise<{ success: boolean }> };
 }
 
 // Image-upload guards (free-tier R2: bound storage, zero egress). The client also validates + downscales.
@@ -105,6 +107,23 @@ export default {
     if (url.pathname === "/upload") return handleUpload(request, env);
     if (url.pathname.startsWith("/img/")) {
       return handleServe(decodeURIComponent(url.pathname.slice("/img/".length)), env);
+    }
+
+    // Per-IP join rate limit before opening a room WS: bounds room-id enumeration (a scanner of the
+    // friendly-name space makes one connection per guess). Generous (6/s) so legit multi-tab/reconnect
+    // never trips it; fails OPEN where the binding/IP is absent (local dev). See docs/09 SEC-RM/SEC-DO.
+    if (url.pathname.startsWith("/parties/")) {
+      const ip = request.headers.get("cf-connecting-ip");
+      if (ip && env.JOIN_RL) {
+        try {
+          if (!(await env.JOIN_RL.limit({ key: ip })).success)
+            return new Response("Too many connection attempts — try again shortly", {
+              status: 429,
+            });
+        } catch {
+          /* limiter unavailable → fail open */
+        }
+      }
     }
 
     // PartyServer routes /parties/<binding>/<room> to the matching Durable Object

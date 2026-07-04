@@ -770,8 +770,8 @@ describe("readPresence — typed awareness reader (docs/09 Q1/Q2)", () => {
 });
 
 describe("randomRoomId — high-entropy shareable ids (docs/09 SEC-RM)", () => {
-  it("keeps a friendly adjective-animal prefix + adds a long CSPRNG token", () => {
-    expect(randomRoomId()).toMatch(/^[a-z]+-[a-z]+-[a-z2-9]{14}$/);
+  it("is a friendly 3-word adjective-animal-noun name (memorable, no gibberish)", () => {
+    expect(randomRoomId()).toMatch(/^[a-z]+-[a-z]+-[a-z]+$/);
   });
 
   it("round-trips through sanitizeRoomId unchanged (already URL-safe)", () => {
@@ -779,9 +779,10 @@ describe("randomRoomId — high-entropy shareable ids (docs/09 SEC-RM)", () => {
     expect(sanitizeRoomId(id)).toBe(id);
   });
 
-  it("is collision-free across many draws (unlike the old ~23k-space form)", () => {
-    const set = new Set<string>();
-    for (let i = 0; i < 5000; i++) set.add(randomRoomId());
-    expect(set.size).toBe(5000);
+  it("draws from a large space — high diversity, only rare collisions (unlike the old ~23k form)", () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 1000; i++) ids.add(randomRoomId());
+    // ~1.3M-combination space → ~0.4 expected collisions per 1000 draws; the old form collided ~constantly.
+    expect(ids.size).toBeGreaterThan(980);
   });
 });
