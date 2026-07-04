@@ -64,6 +64,22 @@ body {
     color var(--dur) var(--ease);
 }
 
+/* Visually hidden but reachable by screen readers + keyboard (the a11y semantic mirror + live
+   announcer, ui/board-a11y.ts). The clip/clip-path pair keeps it out of the visual + layout flow
+   while leaving its text in the accessibility tree. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ---------- top bar ---------- */
 .topbar {
   display: flex;

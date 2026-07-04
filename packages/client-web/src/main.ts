@@ -39,6 +39,7 @@ import "./topbar";
 import "./drawer";
 import "./tooltip"; // body-level singleton tooltip for every [data-tip] element (always top-most)
 import { icon } from "./icons";
+import { createBoardA11y } from "./ui/board-a11y";
 import { createProfileDialog } from "./ui/profile";
 import { maybeShowIdentityNudge } from "./ui/identity-nudge";
 import { createConnectionBanner } from "./ui/connection-banner";
@@ -187,6 +188,8 @@ app.innerHTML = `
 // --------------------------------------------------------------------------
 const boardEl = document.getElementById("board");
 if (!boardEl) throw new Error("#board missing");
+// Accessibility: mirror the board into a screen-reader-navigable list + announce presence (§5.1).
+createBoardA11y({ doc: ydoc, awareness: provider.awareness, board: boardEl });
 const canvas = new BoardCanvas({
   container: boardEl,
   doc: ydoc,
