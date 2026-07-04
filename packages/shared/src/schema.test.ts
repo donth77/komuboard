@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
+
+import { sanitizeRoomId } from "./index";
 import {
   addConnector,
   addImage,
@@ -29,6 +31,7 @@ import {
   translateObjects,
   DEFAULT_PEER_COLOR,
   hasLiveGesture,
+  randomRoomId,
   readPresence,
   type BoardObject,
   type ConnectorObject,
@@ -754,10 +757,31 @@ describe("readPresence — typed awareness reader (docs/09 Q1/Q2)", () => {
       false,
     );
     expect(
-      hasLiveGesture(readPresence({ user: "A", color: "#000", textrotate: { id: "x", rotation: 5 } })),
+      hasLiveGesture(
+        readPresence({ user: "A", color: "#000", textrotate: { id: "x", rotation: 5 } }),
+      ),
     ).toBe(true);
     expect(
-      hasLiveGesture(readPresence({ user: "A", color: "#000", drag: { ids: ["x"], dx: 1, dy: 2 } })),
+      hasLiveGesture(
+        readPresence({ user: "A", color: "#000", drag: { ids: ["x"], dx: 1, dy: 2 } }),
+      ),
     ).toBe(true);
+  });
+});
+
+describe("randomRoomId — high-entropy shareable ids (docs/09 SEC-RM)", () => {
+  it("keeps a friendly adjective-animal prefix + adds a long CSPRNG token", () => {
+    expect(randomRoomId()).toMatch(/^[a-z]+-[a-z]+-[a-z2-9]{14}$/);
+  });
+
+  it("round-trips through sanitizeRoomId unchanged (already URL-safe)", () => {
+    const id = randomRoomId();
+    expect(sanitizeRoomId(id)).toBe(id);
+  });
+
+  it("is collision-free across many draws (unlike the old ~23k-space form)", () => {
+    const set = new Set<string>();
+    for (let i = 0; i < 5000; i++) set.add(randomRoomId());
+    expect(set.size).toBe(5000);
   });
 });

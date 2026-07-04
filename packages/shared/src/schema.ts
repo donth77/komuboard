@@ -1206,9 +1206,24 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** A fresh, shareable, human-friendly room id, e.g. "lunar-otter-42". */
+/** A URL-safe, unambiguous token from the CSPRNG — the entropy that turns a room link into an
+ *  unguessable capability (docs/07 §4.2). 14 chars over a 32-symbol alphabet ≈ 70 bits; `& 31` is
+ *  bias-free (32 divides 256). Web Crypto is present in the browser, Workers, and Node ≥ 20. */
+function secureRoomToken(len = 14): string {
+  const alphabet = "abcdefghijkmnpqrstuvwxyz23456789"; // no ambiguous 0/o/1/l
+  const bytes = crypto.getRandomValues(new Uint8Array(len));
+  let out = "";
+  for (const b of bytes) out += alphabet[b & 31];
+  return out;
+}
+
+/** A fresh, shareable room id: a friendly `adjective-animal` prefix (memorable, typeable) + a
+ *  high-entropy CSPRNG suffix (unguessable + collision-proof), e.g. "lunar-otter-k2xj7mqp9rstuv".
+ *  The SUFFIX — not the words — is what makes the link a real (soft) access boundary; the old
+ *  `-NN` form gave only ~23k enumerable, `Math.random`-generated ids (docs/09 SEC-RM). Existing
+ *  short ids still resolve unchanged. */
 export function randomRoomId(): string {
-  return `${pickWord(ADJECTIVES)}-${pickWord(ANIMALS)}-${Math.floor(Math.random() * 90) + 10}`;
+  return `${pickWord(ADJECTIVES)}-${pickWord(ANIMALS)}-${secureRoomToken()}`;
 }
 
 /** A friendly anonymous display name, e.g. "Swift Otter". */
