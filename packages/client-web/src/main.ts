@@ -14,6 +14,7 @@ import {
   roomIdFromUrl,
   setUserProfile,
   USER_COLORS,
+  readPresence,
   usersMap,
   type PresenceState,
 } from "@komuboard/shared";
@@ -1222,11 +1223,8 @@ function renderPresenceRow(): void {
   provider.awareness.getStates().forEach((st, clientId) => {
     const s = st as Record<string, unknown>;
     const id = String(s["id"] ?? `c${clientId}`);
-    const entry = people.get(id) ?? {
-      name: String(s["user"] ?? "Guest"),
-      color: String(s["color"] ?? "#2563eb"),
-      me: false,
-    };
+    const peer = readPresence(s); // typed identity read (name normalized from the wire `user`)
+    const entry = people.get(id) ?? { name: peer.name, color: peer.color, me: false };
     if (clientId === self) entry.me = true;
     people.set(id, entry);
   });

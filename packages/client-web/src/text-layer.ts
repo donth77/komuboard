@@ -48,6 +48,7 @@ import {
   type StampObject,
   type StrokeObject,
   type TextAlign,
+  DEFAULT_PEER_COLOR,
   type TextObject,
   type TextRun,
 } from "@komuboard/shared";
@@ -3993,7 +3994,7 @@ export class TextLayer {
         textrotate?: unknown;
         color?: unknown;
       };
-      const color = typeof st.color === "string" ? st.color : "#2563eb";
+      const color = typeof st.color === "string" ? st.color : DEFAULT_PEER_COLOR;
       if (Array.isArray(st.selection)) {
         for (const id of st.selection) {
           if (typeof id === "string" && this.els.has(id)) sel.set(id, color);

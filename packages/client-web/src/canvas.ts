@@ -37,6 +37,7 @@ import {
   type ConnectorObject,
   type PresenceState,
   type ShapeKind,
+  DEFAULT_PEER_COLOR,
   type StrokeObject,
   type StrokeStyle,
 } from "@komuboard/shared";
@@ -2381,7 +2382,7 @@ export class BoardCanvas {
       if (clientId === self) return;
       const ids = state["selection"] as string[] | undefined;
       if (!ids?.length) return;
-      const color = String(state["color"] ?? "#2563eb");
+      const color = String(state["color"] ?? DEFAULT_PEER_COLOR);
       peers.push({ clientId, color, ids });
       parts.push(`${clientId}:${color}:${ids.join(",")}`);
     });
@@ -2593,7 +2594,7 @@ export class BoardCanvas {
       const prof = id ? readUserProfile(this.opts.doc, id) : undefined;
       hit = {
         name: String(state["user"] ?? prof?.name ?? "Anonymous"),
-        color: String(state["color"] ?? prof?.color ?? "#2563eb"),
+        color: String(state["color"] ?? prof?.color ?? DEFAULT_PEER_COLOR),
         photo: prof?.photo,
         top: { x: u.x + u.width / 2, y: u.y - pad },
       };
@@ -2842,7 +2843,7 @@ export class BoardCanvas {
       let group = this.cursors.get(clientId);
       if (!group) {
         group = this.buildCursor(
-          String(state["color"] ?? "#2563eb"),
+          String(state["color"] ?? DEFAULT_PEER_COLOR),
           String(state["user"] ?? "Guest"),
         );
         group.position(cursor);
