@@ -25,5 +25,10 @@ test("mobile tool dock is fully within the viewport on a tall phone", async ({ b
   // And it carries actual tool buttons (not an empty/zero-size shell).
   expect(box.height).toBeGreaterThan(20);
   expect(await a.page.locator(".dock .tool").count()).toBeGreaterThan(0);
+
+  // The Hand (pan) tool is present on the phone dock (two-finger pan isn't discoverable), and the
+  // topbar carries the on-screen Reset-view (zoom-to-fit) button next to undo/redo.
+  await expect(a.page.locator('.dock .tool[data-tool="hand"]')).toBeVisible();
+  await expect(a.page.locator('[data-testid="reset-view"]')).toBeVisible();
   await a.close();
 });

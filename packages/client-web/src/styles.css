@@ -4122,9 +4122,8 @@ input[type="range"] {
     width: 24px;
     height: 24px;
   }
-  .tool[data-group="insert"],
-  .tool[data-tool="hand"] {
-    display: none; /* collapsed behind + (insert tools) / covered by two-finger pan (hand) */
+  .tool[data-group="insert"] {
+    display: none; /* the five insert tools collapse behind the + launcher on narrow phones */
   }
   .tool[data-tool="insert"] {
     display: grid; /* …and the launcher itself appears */

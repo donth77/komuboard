@@ -25,10 +25,12 @@ export class CoTopbar extends HTMLElement {
       `<button class="iconbtn nav-btn" id="nav-toggle" data-act="nav" type="button" aria-label="Menu">${icon("menu")}</button>` +
       '<span class="logo">◳</span> <span class="brand-name">Komuboard</span>' +
       "</div>" +
-      // On-screen undo/redo — shown only on the touch layout (CSS), where there's no keyboard.
+      // On-screen undo / redo / reset-view — shown only on the touch layout (CSS), where there's no
+      // keyboard for ⌘Z / zoom-to-fit.
       '<div class="tb-history">' +
       `<button class="iconbtn tb-undo" data-act="undo" type="button" data-testid="undo" aria-label="Undo" title="Undo">${icon("undo")}</button>` +
       `<button class="iconbtn tb-redo" data-act="redo" type="button" data-testid="redo" aria-label="Redo" title="Redo">${icon("redo")}</button>` +
+      `<button class="iconbtn tb-fit" data-act="reset-view" type="button" data-testid="reset-view" aria-label="Reset view" title="Reset view">${icon("fit")}</button>` +
       "</div>" +
       `<div class="room-pill" data-testid="room"><span class="dot" data-testid="dot"></span> <strong>${room}</strong></div>` +
       '<div class="spacer"></div>' +
@@ -48,6 +50,8 @@ export class CoTopbar extends HTMLElement {
         this.dispatchEvent(new CustomEvent("share-board", { bubbles: true }));
       else if (act === "undo") this.dispatchEvent(new CustomEvent("undo", { bubbles: true }));
       else if (act === "redo") this.dispatchEvent(new CustomEvent("redo", { bubbles: true }));
+      else if (act === "reset-view")
+        this.dispatchEvent(new CustomEvent("reset-view", { bubbles: true }));
     });
   }
 

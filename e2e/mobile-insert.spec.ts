@@ -5,17 +5,17 @@ import { connectPeer, uniqueRoom } from "./helpers";
 const PHONE = { width: 390, height: 844 };
 const TABLET = { width: 834, height: 1112 };
 
-test("phone collapses the insert tools behind + (Hand dropped); tablet keeps all nine inline", async ({
+test("phone collapses the insert tools behind + (Hand kept); tablet keeps all nine inline", async ({
   browser,
 }) => {
-  // Phone — only Select / Pen / Eraser / + show; the five insert tools and Hand are hidden.
+  // Phone — Select / Hand / Pen / Eraser / + show; the five insert tools collapse behind +.
   const phone = await connectPeer(browser, uniqueRoom("ins-phone"), {
     touch: true,
     viewport: PHONE,
   });
   await expect(phone.page.locator('komu-tool-dock [data-tool="insert"]')).toBeVisible();
   await expect(phone.page.locator('komu-tool-dock [data-tool="sticky"]')).toBeHidden();
-  await expect(phone.page.locator('komu-tool-dock [data-tool="hand"]')).toBeHidden();
+  await expect(phone.page.locator('komu-tool-dock [data-tool="hand"]')).toBeVisible();
   await phone.close();
 
   // Tablet (coarse pointer, wide) — all nine inline, no + launcher (this is requested behaviour).

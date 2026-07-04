@@ -1139,6 +1139,7 @@ drawer?.addEventListener("share", openShare); // mobile overflow drawer item (if
 // On-screen undo/redo (touch layout) — the same actions as ⌘Z / ⌘⇧Z, for devices with no keyboard.
 topbar?.addEventListener("undo", () => canvas.undo());
 topbar?.addEventListener("redo", () => canvas.redo());
+topbar?.addEventListener("reset-view", () => canvas.zoomToFit()); // mobile "reset view" = frame content
 
 // "Edit profile" (the dropdown + drawer item) → open the profile editor by re-dispatching the
 // avatar row's `rename` intent, so it works even when that row is hidden (e.g. when solo).
