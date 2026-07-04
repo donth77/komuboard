@@ -1,0 +1,24 @@
+# Cloudflare Pages security headers (docs/07 §4.5). Applied to every response from komuboard.app.
+# CSP is scoped to exactly what the app loads: self-hosted JS/CSS, Google Fonts (the Caveat webfont
+# <link> in index.html), the worker origin for realtime + uploads (api.komuboard.app over wss + https),
+# and data:/blob: for the SVG icons, canvas/A-Frame textures, and favicons. `img-src https:` covers
+# user-uploaded images + optional avatar photos (images can't execute; this is the one deliberate
+# relaxation). `unsafe-inline` is styles-only (A-Frame injects inline styles; scripts stay strict —
+# the Vite build emits no inline <script>).
+#
+# connect-src carries two A-Frame quirks (its texture/text loaders FETCH via XHR, so these are
+# connect-src, not img-src): `data:` for the dock/pen SVG icon textures, `blob:` for the GLTF model
+# loads (whiteboard/marker/eraser), and `https://cdn.aframe.io` for the MSDF text font A-Frame uses
+# for peer name labels + the board title. TODO: self-host that
+# MSDF font to drop the cdn.aframe.io runtime dependency (docs/07 §4.9 prefers no CDN deps).
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.komuboard.app wss://api.komuboard.app https://cdn.aframe.io data: blob:; worker-src 'self' blob:; child-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; manifest-src 'self'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: xr-spatial-tracking=(self), camera=(), microphone=(), geolocation=(), gyroscope=(self), accelerometer=(self), magnetometer=(self)
+  X-Frame-Options: DENY
+
+# Hashed asset filenames are content-addressed → cache hard.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
