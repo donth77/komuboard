@@ -87,6 +87,7 @@ export interface PeerPresence {
     shape?: TextObject["shape"];
     borderColor?: string;
     borderStyle?: TextObject["borderStyle"];
+    rotation?: number;
   } | null;
   /** Live resize (the "textresize" field) — absolute geometry override (fontSize 0 = unchanged). */
   resize?: {
@@ -226,12 +227,15 @@ export function drawBoardRegion(
     const bb = objectAABB(o, geomById);
     if (!bb) continue;
     const off = dragOffset.get(o.id);
+    const rot = o.type === "text" || o.type === "stamp" || o.type === "image" ? o.rotation : 0;
     ctx.save();
     if (off) ctx.translate(off.dx, off.dy);
-    ctx.font = `${26 / scale}px system-ui, sans-serif`;
-    ctx.globalAlpha = 0.8;
-    ctx.textAlign = "right";
-    ctx.fillText("🔒", bb.x + bb.w - 3 / scale, bb.y + 3 / scale);
+    withRotation(ctx, bb.x + bb.w / 2, bb.y + bb.h / 2, rot, () => {
+      ctx.font = `${26 / scale}px system-ui, sans-serif`;
+      ctx.globalAlpha = 0.8;
+      ctx.textAlign = "right";
+      ctx.fillText("🔒", bb.x + bb.w - 3 / scale, bb.y + 3 / scale);
+    });
     ctx.restore();
   }
   ctx.textAlign = "left";
@@ -258,15 +262,18 @@ export function drawBoardRegion(
       ux1 = Math.max(ux1, bb.x + bb.w + off.dx);
       uy1 = Math.max(uy1, bb.y + bb.h + off.dy);
       const pad = 4 / scale;
+      const rot = o.type === "text" || o.type === "stamp" || o.type === "image" ? o.rotation : 0;
       ctx.save();
       ctx.translate(off.dx, off.dy);
-      ctx.beginPath();
-      ctx.roundRect(bb.x - pad, bb.y - pad, bb.w + 2 * pad, bb.h + 2 * pad, 6 / scale);
-      ctx.strokeStyle = p.color;
-      ctx.lineWidth = 3.5 / scale;
-      ctx.setLineDash([8 / scale, 5 / scale]);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      withRotation(ctx, bb.x + bb.w / 2, bb.y + bb.h / 2, rot, () => {
+        ctx.beginPath();
+        ctx.roundRect(bb.x - pad, bb.y - pad, bb.w + 2 * pad, bb.h + 2 * pad, 6 / scale);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 3.5 / scale;
+        ctx.setLineDash([8 / scale, 5 / scale]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
       ctx.restore();
     }
     if (selected >= 2) {
@@ -331,6 +338,65 @@ export function drawBoardRegion(
     if (p.cursor) drawCursor(ctx, scale, p.cursor, p.name, p.color);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/** Union AABB of every object — the VR zoom-to-fit target. */
+export function docContentBounds(doc: Y.Doc): WorldRect | null {
+  const objs = objectsMap(doc);
+  const geom = new Map<string, TextObject>();
+  const list: BoardObject[] = [];
+  for (const id of orderArray(doc).toArray()) {
+    const m = objs.get(id);
+    const o = m ? readObject(m) : null;
+    if (!o) continue;
+    list.push(o);
+    if (o.type === "text") geom.set(o.id, o);
+  }
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const o of list) {
+    const bb = objectAABB(o, geom);
+    if (!bb) continue;
+    x0 = Math.min(x0, bb.x);
+    y0 = Math.min(y0, bb.y);
+    x1 = Math.max(x1, bb.x + bb.w);
+    y1 = Math.max(y1, bb.y + bb.h);
+  }
+  if (x0 === Infinity) return null;
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+}
+
+/** Topmost object whose AABB (padded a little for thin ink) contains the world point — the VR
+ *  select/erase hit-test. Coarser than the 2D polyline-precise test; fine at laser distance. */
+export function hitTestWorld(doc: Y.Doc, pt: { x: number; y: number }): string | null {
+  const objs = objectsMap(doc);
+  const order = orderArray(doc).toArray();
+  const geom = new Map<string, TextObject>();
+  const byId = new Map<string, BoardObject>();
+  for (const id of order) {
+    const m = objs.get(id);
+    const o = m ? readObject(m) : null;
+    if (!o) continue;
+    byId.set(id, o);
+    if (o.type === "text") geom.set(o.id, o);
+  }
+  for (let i = order.length - 1; i >= 0; i--) {
+    const o = byId.get(order[i] as string);
+    if (!o) continue;
+    const bb = objectAABB(o, geom);
+    if (!bb) continue;
+    const pad = o.type === "stroke" || o.type === "connector" ? 8 : 0;
+    if (
+      pt.x >= bb.x - pad &&
+      pt.x <= bb.x + bb.w + pad &&
+      pt.y >= bb.y - pad &&
+      pt.y <= bb.y + bb.h + pad
+    )
+      return o.id;
+  }
+  return null;
 }
 
 /** Quick world AABB for the selection outline (defaults mirror drawBox's fallbacks). */
@@ -488,7 +554,7 @@ function drawBox(ctx: CanvasRenderingContext2D, o: TextObject): void {
         ctx.lineTo(o.x + w, o.y + h);
         ctx.lineTo(o.x, o.y + h);
         ctx.closePath();
-      } else ctx.roundRect(o.x, o.y, w, h, 4);
+      } else ctx.roundRect(o.x, o.y, w, h, o.shape ? 4 : 0); // stickies are square-cornered in 2D
       ctx.fillStyle = o.bg ?? "#ffffff";
       ctx.fill();
       // Shapes carry a border by DEFAULT in 2D (1.5px solid #1f2933; borderStyle "none" opts out).
@@ -511,10 +577,12 @@ function drawBox(ctx: CanvasRenderingContext2D, o: TextObject): void {
       .trim();
     if (text) {
       ctx.fillStyle = "#111827";
-      ctx.font = `${o.fontSize || 16}px Inter, system-ui, sans-serif`;
+      const fs = o.fontSize || 16;
+      ctx.font = `${fs}px Inter, system-ui, sans-serif`;
       ctx.textBaseline = "top";
-      const pad = 10;
-      const lh = (o.fontSize || 16) * 1.3;
+      // Padding parity with 2D: .sticky 1.2em, .shape 0.7em, bare text none.
+      const pad = (o.shape ? 0.7 : o.bg ? 1.2 : 0) * fs;
+      const lh = fs * 1.3;
       const lines = text.split("\n");
       const top = o.shape ? Math.max(o.y + pad, o.y + (h - lines.length * lh) / 2) : o.y + pad;
       lines.forEach((line, i) => {
@@ -538,16 +606,22 @@ function drawStroke(ctx: CanvasRenderingContext2D, o: StrokeObject): void {
   ctx.beginPath();
   ctx.moveTo(pts[0] as number, pts[1] as number);
   for (let i = 2; i + 1 < pts.length; i += 2) ctx.lineTo(pts[i] as number, pts[i + 1] as number);
+  // Brush (highlight) and dash are INDEPENDENT axes — "highlight-dashed" carries both. Values
+  // mirror the 2D renderer (text-layer.ts): 1.6× width + 0.4 alpha + multiply blend for the
+  // highlighter, dash pattern max(2, w·2.5)/max(2, w·2) off the BASE width.
   const highlight = o.style.includes("highlight");
+  const dashed = o.style.includes("dashed");
   ctx.strokeStyle = o.color;
-  ctx.globalAlpha = highlight ? Math.min(o.opacity, 0.45) : o.opacity;
+  ctx.globalAlpha = highlight ? Math.min(o.opacity, 0.4) : o.opacity;
   ctx.lineWidth = highlight ? o.width * 1.6 : o.width;
+  if (highlight) ctx.globalCompositeOperation = "multiply";
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.setLineDash(o.style === "dashed" ? [o.width * 2.5, o.width * 2] : []);
+  ctx.setLineDash(dashed ? [Math.max(2, o.width * 2.5), Math.max(2, o.width * 2)] : []);
   ctx.stroke();
   ctx.setLineDash([]);
   ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
 }
 
 /** Resolve a connector end: bound ends re-derive the shape's side midpoint (like the live renderer);

@@ -8,7 +8,7 @@ import type { Awareness } from "y-protocols/awareness";
 
 import { CURSOR_PATH } from "../canvas";
 import type { PeerPresence, WorldRect } from "./board-raster";
-import type { AEntity } from "./three-types";
+import { onSceneTick, type AEntity } from "./three-types";
 import type { BoardFit } from "./whiteboard-model";
 
 export interface Presence3DOptions {
@@ -132,8 +132,8 @@ export function createPresence3D(opts: Presence3DOptions): Presence3D {
   opts.awareness.on("change", onChange);
   onChange();
 
-  // 60 fps glide: each frame, ease every cursor toward its latest target.
-  let raf = 0;
+  // Glide runs as a SCENE BEHAVIOR (ticks per XR frame too — window rAF stalls inside a real
+  // immersive session): each frame, ease every cursor toward its latest target.
   const step = (): void => {
     const fit = opts.panelFit();
     const rect = opts.worldRect();
@@ -157,9 +157,8 @@ export function createPresence3D(opts: Presence3DOptions): Presence3D {
       }
       o3.position.lerp({ x: tx, y: ty, z: tz }, 0.25);
     }
-    raf = requestAnimationFrame(step);
   };
-  raf = requestAnimationFrame(step);
+  const offTick = onSceneTick(step); // XR-frame-safe ticking (see three-types)
 
   const peers = (): PeerPresence[] => {
     const out: PeerPresence[] = [];
@@ -204,7 +203,7 @@ export function createPresence3D(opts: Presence3DOptions): Presence3D {
     peers,
     gestureActive,
     destroy() {
-      cancelAnimationFrame(raf);
+      offTick();
       opts.awareness.off("change", onChange);
       rootEnt.remove();
       cursors.clear();

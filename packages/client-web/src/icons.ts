@@ -30,6 +30,8 @@ export const ICONS: Record<string, string> = {
     '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
   // Plus — the mobile "Insert" launcher (collapses sticky/text/shape/stamp/image on phones).
   plus: '<path d="M12 5v14M5 12h14"/>',
+  // Minus — the VR dock's zoom-out key (pairs with plus).
+  minus: '<path d="M5 12h14"/>',
   // Download (Lucide) — the Export action.
   download:
     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',

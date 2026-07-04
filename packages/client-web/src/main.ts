@@ -721,6 +721,22 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (isTyping(e.target)) return;
+  // VR mode owns the keyboard while its scene is up (vr/vr-mode.ts): its handler drives the VR
+  // tools, A-Frame's wasd-controls handle movement, and only ⌘Z/⌘⇧Z/⌘Y should land here (undo on
+  // the shared doc). Everything else must not reach the invisible 2D board underneath.
+  if (
+    document.querySelector(".vr-root") &&
+    !((e.metaKey || e.ctrlKey) && ["z", "y"].includes(e.key.toLowerCase()))
+  )
+    return;
+  // VR mode owns the keyboard while its scene is up (vr/vr-mode.ts): its handler drives the VR
+  // tools, A-Frame's wasd-controls handle movement, and only ⌘Z/⌘⇧Z/⌘Y should land here (undo on
+  // the shared doc). Everything else must not reach the invisible 2D board underneath.
+  if (
+    document.querySelector(".vr-root") &&
+    !((e.metaKey || e.ctrlKey) && ["z", "y"].includes(e.key.toLowerCase()))
+  )
+    return;
   if (e.key === "?") {
     shortcutsDialog.open();
     e.preventDefault();
@@ -870,6 +886,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 window.addEventListener("keyup", (e) => {
+  if (document.querySelector(".vr-root")) return; // VR active — see the keydown guard
   if (e.key === " " && spacePanning) {
     spacePanning = false;
     canvas.setTool(currentTool);

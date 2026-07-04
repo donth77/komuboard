@@ -34,7 +34,7 @@ komuboard/
 ├── pnpm-workspace.yaml
 └── packages/
     ├── client-web/           # 2D SPA: renderer bound to Yjs, toolbar/panels
-    ├── vr/                   # A-Frame + Three.js WebXR renderer (same Yjs doc)
+    │   └── src/vr/           # VR mode: lazy A-Frame renderer on the SAME doc/session
     ├── shared/               # shared types, Yjs schema, awareness protocol, utils
     └── worker/               # Cloudflare Worker + Durable Object (PartyServer / Y-PartyServer)
 ```
@@ -67,7 +67,8 @@ Welcome aboard — `pnpm install && pnpm dev`, then open two tabs on the same ro
 
 ## Asset credits
 
-- VR whiteboard: ["Low Poly Whiteboard"](https://sketchfab.com/3d-models/low-poly-whiteboard-1cbf089ec4b741ad9d092d15db6d55ba) via Sketchfab (`public/models/low_poly_whiteboard.glb`).
-- VR marker: whiteboard marker model via Sketchfab (`public/models/whiteboard_marker.glb`).
+- VR whiteboard: ["Low Poly Whiteboard" by tankop1](https://sketchfab.com/3d-models/low-poly-whiteboard-1cbf089ec4b741ad9d092d15db6d55ba) via Sketchfab (`public/models/low_poly_whiteboard.glb`).
+- VR marker: whiteboard marker model via Sketchfab (`public/models/whiteboard_marker.glb`) — confirm the author from your download and complete this line.
+- VR eraser: ["Whiteboard eraser" by Jimmy Johansson](https://sketchfab.com/3d-models/whiteboard-eraser-ced8b75f6ecc44c9b1503af9aa4f7d06), CC Attribution (`public/models/whiteboard_eraser.glb`).
 
-See each model page for the author + license; most Sketchfab downloads are CC Attribution — keep this section in sync with the exact credit line from the download.
+Licenses are CC Attribution unless noted — keep this section in sync with the exact credit lines from the downloads.

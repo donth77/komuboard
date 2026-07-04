@@ -12,6 +12,8 @@ export interface BoardFit {
   z: number;
   width: number;
   height: number;
+  /** The model's marker tray, when one is detected: rest surface for the tool props. */
+  tray?: { y: number; z: number };
 }
 
 /** Default free-floating panel placement (also the no-model fallback). */
@@ -45,15 +47,21 @@ export function fitWhiteboardModel(
     const finalBox = new THREE.Box3().setFromObject(o3);
     let board: Box3Like | null = null;
     let bestKey = Infinity;
+    let tray: Box3Like | null = null;
     (o3 as unknown as { traverse(fn: (n: unknown) => void): void }).traverse((n) => {
       if (!(n as { isMesh?: boolean }).isMesh) return;
+      const name = (n as { name?: string }).name ?? "";
+      // The model's marker tray (this GLB: "Marker_Holder…") — the props rest on its top face.
+      if (/holder|tray/i.test(name) && !/wheel/i.test(name)) {
+        tray = new THREE.Box3().setFromObject(n);
+        return;
+      }
       const b = new THREE.Box3().setFromObject(n);
       const sx = b.max.x - b.min.x;
       const sy = b.max.y - b.min.y;
       const sz = b.max.z - b.min.z;
       if (sx < 0.6 || sy < 0.4) return; // too small to be the writing surface
       if (sz > Math.min(sx, sy) * 0.25) return; // not a thin, face-on slab
-      const name = (n as { name?: string }).name ?? "";
       const preferred =
         /back|board|surface|panel/i.test(name) && !/stand|leg|corner|side/i.test(name);
       const key = (preferred ? 0 : 10) + sz;
@@ -63,6 +71,9 @@ export function fitWhiteboardModel(
         board = b;
       }
     });
+    const trayBox = tray as Box3Like | null;
+    // Rest line = the tray's FRONT lip (its z-centre sits underneath the board face).
+    const trayFit = trayBox ? { y: trayBox.max.y, z: trayBox.max.z - 0.035 } : undefined;
     const found = board as Box3Like | null;
     if (found) {
       // Near-full coverage: the frame bars sit in FRONT of the panel plane, so a slight overlap
@@ -73,6 +84,7 @@ export function fitWhiteboardModel(
         z: found.max.z + 0.006,
         width: (found.max.x - found.min.x) * 0.99,
         height: (found.max.y - found.min.y) * 0.99,
+        ...(trayFit ? { tray: trayFit } : {}),
       });
     } else {
       // Single merged mesh → proportional guess: the board area sits in the model's upper half.
