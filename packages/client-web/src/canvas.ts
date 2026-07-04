@@ -47,6 +47,7 @@ import { ViewportController } from "./viewport";
 import { TextLayer } from "./text-layer";
 import { ConnectorBar } from "./connector-bar";
 import { ROTATE_CURSORS, type RotateCorner } from "./cursors";
+import { safePhotoUrl } from "./util";
 
 // "image" and "insert" are momentary UI actions (open a file picker / the mobile insert sheet) rather
 // than sustained canvas modes — the host intercepts them before setTool, so the canvas never runs in them.
@@ -2608,10 +2609,11 @@ export class BoardCanvas {
   }): void {
     const el = this.ensurePeerTip();
     const av = el.querySelector(".av") as HTMLElement;
-    if (hit.photo && hit.photo.startsWith("data:")) {
+    const photo = safePhotoUrl(hit.photo);
+    if (photo) {
       av.textContent = "";
       av.style.backgroundColor = "";
-      av.style.backgroundImage = `url("${hit.photo}")`;
+      av.style.backgroundImage = `url("${photo}")`;
     } else {
       av.style.backgroundImage = "";
       av.style.backgroundColor = hit.color;

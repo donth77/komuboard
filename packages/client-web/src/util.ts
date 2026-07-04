@@ -11,13 +11,17 @@ export function initials(name: string): string {
  *
  * Photos arrive over the peer-controlled `usersMap`/awareness channel, so they are
  * untrusted. We can't use CSS.escape (it would mangle a data: URL); instead we require
- * a data:image or https: URL and reject any character that could break out of the
+ * a self-generated data:image URL and reject any character that could break out of the
  * `url("…")` (quote, paren, backslash, whitespace/control). Callers fall back to
  * initials when this returns null.
+ *
+ * We deliberately do NOT allow https: — a peer-supplied remote URL would load an attacker
+ * origin on every viewer's page (a zero-click IP/deanonymization beacon). Legit avatars are
+ * always data: URLs produced locally by fileToAvatarDataUrl.
  */
 export function safePhotoUrl(url: string | undefined | null): string | null {
   if (!url) return null;
-  if (!(url.startsWith("data:image/") || url.startsWith("https://"))) return null;
+  if (!url.startsWith("data:image/")) return null;
   return /["')\\\s]/.test(url) ? null : url;
 }
 

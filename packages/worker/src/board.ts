@@ -19,6 +19,10 @@ const CORRUPT_ROW_ID = "doc_corrupt";
  *  not a hard limit. The snapshot is the full *compacted* state, so this flags a genuinely large
  *  board or tombstone build-up, not routine growth. */
 const SAVE_WARN_BYTES = 2 * 1024 * 1024;
+// Drop any single WS message larger than this before it reaches the shared doc — a peer otherwise
+// could broadcast a multi-hundred-KB awareness/update blob to every room member. Real Yjs updates are
+// far smaller. (Bounding the CUMULATIVE persisted-doc size is a separate, larger item — see docs/09.)
+const MAX_MESSAGE_BYTES = 512 * 1024;
 
 export class Board extends YServer {
   // WebSocket Hibernation: idle rooms stop accruing duration charges.
@@ -70,6 +74,8 @@ export class Board extends YServer {
   // Per-connection rate limit: allow → hand to Yjs; drop → swallow (Yjs resyncs on the next exchange);
   // close → tear down a sustained flood.
   override onMessage(connection: Connection, message: WSMessage): void | Promise<void> {
+    const size = typeof message === "string" ? message.length : message.byteLength;
+    if (size > MAX_MESSAGE_BYTES) return; // oversized → drop (never a legit update); keeps the doc bounded
     const now = Date.now();
     let limiter = this.#limiters.get(connection.id);
     if (!limiter) {
