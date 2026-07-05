@@ -1,4 +1,5 @@
 import { routePartykitRequest } from "partyserver";
+import { MAX_UPLOAD_BYTES, UPLOAD_IMAGE_EXT } from "@komuboard/shared";
 import { Board } from "./board";
 import { sniffImage } from "./image-sniff";
 
@@ -16,14 +17,8 @@ export interface Env {
   JOIN_RL?: { limit(o: { key: string }): Promise<{ success: boolean }> };
 }
 
-// Image-upload guards (free-tier R2: bound storage, zero egress). The client also validates + downscales.
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const ALLOWED_TYPES: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-  "image/gif": "gif",
-};
+// Image-upload guards (MAX_UPLOAD_BYTES + the type→ext allow-list) live in @komuboard/shared so the
+// worker + client can't drift. The client also validates + downscales before POSTing.
 const IMMUTABLE = "public, max-age=31536000, immutable";
 // Uploads are a cross-origin fetch in dev (vite :5173 → worker :8787); image GETs are <img> loads
 // (no CORS needed). `*` is fine — images are public anyway.
@@ -60,7 +55,7 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
   // Fast pre-filter on the declared type (a friendlier error), but it is NOT trusted for what we
   // store — the authoritative content-type comes from the real magic bytes below.
   const declared = (request.headers.get("content-type") ?? "").split(";")[0]?.trim() ?? "";
-  if (!ALLOWED_TYPES[declared])
+  if (!UPLOAD_IMAGE_EXT[declared])
     return Response.json({ error: "unsupported image type" }, { status: 415, headers: CORS });
 
   const bytes = await request.arrayBuffer();

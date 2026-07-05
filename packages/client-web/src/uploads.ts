@@ -1,6 +1,7 @@
 // Client helpers for uploaded images. Bytes live in R2 (served by the worker); the Yjs doc holds only
 // the R2 key, which we resolve to a serve URL here — keyed off the same worker host the realtime
 // connection uses, so it works in dev (separate vite + worker origins) and prod alike.
+import { MAX_UPLOAD_BYTES, UPLOAD_IMAGE_TYPES } from "@komuboard/shared";
 
 const WORKER_HOST = import.meta.env.VITE_WORKER_HOST ?? "127.0.0.1:8787";
 
@@ -9,10 +10,8 @@ export function imageSrcUrl(key: string): string {
   return `${location.protocol}//${WORKER_HOST}/img/${key}`;
 }
 
-// Keep these in lock-step with the worker's guards (packages/worker/src/index.ts).
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_DIM = 2048; // downscale anything larger so phone photos don't bloat the board / R2
-const ACCEPTED = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const ACCEPTED = new Set<string>(UPLOAD_IMAGE_TYPES); // the shared worker+client allow-list
 
 export interface UploadResult {
   /** R2 content-hash key (store this in the image object's `src`). */

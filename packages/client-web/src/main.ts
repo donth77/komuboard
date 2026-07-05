@@ -5,6 +5,7 @@ import type { Awareness } from "y-protocols/awareness";
 import {
   CLOSE_RATE_LIMIT,
   CLOSE_ROOM_FULL,
+  CONNECTOR_KINDS as CONNECTOR_KIND_LIST,
   DEFAULT_STICKY_COLOR,
   PARTY,
   pickUserColor,
@@ -13,6 +14,8 @@ import {
   randomRoomId,
   roomIdFromUrl,
   setUserProfile,
+  SHAPE_KINDS,
+  UPLOAD_IMAGE_TYPES,
   USER_COLORS,
   readPresence,
   usersMap,
@@ -323,8 +326,8 @@ const shapeMenuEl = document.querySelector("komu-shape-menu");
 const stampWheelEl = document.querySelector("komu-stamp-wheel");
 const emojiPickerEl = document.querySelector("komu-emoji-picker");
 // The "Shapes and lines" menu has two groups: shape boxes (placed) and connectors (drawn as arrows).
-const DRAWABLE_SHAPES = new Set(["rectangle", "ellipse", "rhombus", "triangle"]);
-const CONNECTOR_KINDS = new Set(["line", "arrow", "elbow", "block"]);
+const DRAWABLE_SHAPES = new Set<string>(SHAPE_KINDS); // shared with the schema (no drift)
+const CONNECTOR_KINDS = new Set<string>(CONNECTOR_KIND_LIST);
 const mobileMql = window.matchMedia(TOUCH_MEDIA);
 let currentTool: ToolId = "select";
 
@@ -482,7 +485,7 @@ function selectTool(tool: ToolId): void {
 // --------------------------------------------------------------------------
 const imageInput = document.createElement("input");
 imageInput.type = "file";
-imageInput.accept = "image/png,image/jpeg,image/webp,image/gif";
+imageInput.accept = UPLOAD_IMAGE_TYPES.join(",");
 imageInput.multiple = true;
 imageInput.style.display = "none";
 document.body.appendChild(imageInput);

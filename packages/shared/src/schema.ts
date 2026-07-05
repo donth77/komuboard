@@ -251,12 +251,12 @@ export const DEFAULT_STICKY_SIZE = 150;
 export const DEFAULT_SHAPE_FILL = "#ffffff";
 export const DEFAULT_SHAPE_W = 180;
 export const DEFAULT_SHAPE_H = 130;
-const SHAPE_KINDS: readonly string[] = ["rectangle", "ellipse", "rhombus", "triangle"];
+export const SHAPE_KINDS: readonly string[] = ["rectangle", "ellipse", "rhombus", "triangle"];
 
 /** Connectors: default ink + line width (canvas units), and the kinds the menu can draw. */
 export const DEFAULT_CONNECTOR_COLOR = "#1f2933";
 export const DEFAULT_CONNECTOR_WIDTH = 5; // = the "Medium" weight option in the connector bar
-const CONNECTOR_KINDS: readonly string[] = ["line", "arrow", "elbow", "block"];
+export const CONNECTOR_KINDS: readonly string[] = ["line", "arrow", "elbow", "block"];
 
 /** The mid-edge point of a shape's side, in canvas coords — where a connector end bound to that side
  *  attaches (and re-routes to as the shape moves/resizes). `rect` is the shape's box. */
