@@ -3,6 +3,8 @@
 // connection uses, so it works in dev (separate vite + worker origins) and prod alike.
 import { MAX_UPLOAD_BYTES, UPLOAD_IMAGE_TYPES } from "@komuboard/shared";
 
+import { t } from "./i18n";
+
 const WORKER_HOST = import.meta.env.VITE_WORKER_HOST ?? "127.0.0.1:8787";
 
 /** Resolve an image object's R2 key to the worker's serve URL (GET /img/:key). */
@@ -56,12 +58,12 @@ async function decode(
  *  key + the image's intrinsic size. Throws UploadError with a user-facing message on any failure. */
 export async function uploadImage(file: File): Promise<UploadResult> {
   if (!ACCEPTED.has(file.type)) {
-    throw new UploadError("That image type isn't supported — use PNG, JPG, WebP, or GIF.");
+    throw new UploadError(t("toast.imageTypeUnsupported"));
   }
   const isGif = file.type === "image/gif"; // canvas re-encoding would flatten the animation → never downscale
 
   const { source, width, height } = await decode(file);
-  if (!width || !height) throw new UploadError("That image looks empty or corrupt.");
+  if (!width || !height) throw new UploadError(t("toast.imageEmpty"));
 
   let blob: Blob = file;
   let contentType = file.type;
@@ -74,13 +76,13 @@ export async function uploadImage(file: File): Promise<UploadResult> {
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new UploadError("Couldn't process that image.");
+    if (!ctx) throw new UploadError(t("toast.imageProcessFailed"));
     ctx.drawImage(source, 0, 0, w, h);
     // PNG keeps transparency; everything else re-encodes as WebP (smaller for photos).
     contentType = file.type === "image/png" ? "image/png" : "image/webp";
     blob = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new UploadError("Couldn't process that image."))),
+        (b) => (b ? resolve(b) : reject(new UploadError(t("toast.imageProcessFailed")))),
         contentType,
         0.9,
       ),
@@ -89,7 +91,7 @@ export async function uploadImage(file: File): Promise<UploadResult> {
   if ("close" in source && typeof source.close === "function") source.close(); // release the ImageBitmap
 
   if (blob.size > MAX_UPLOAD_BYTES) {
-    throw new UploadError("That image is too large (over 5 MB even after resizing).");
+    throw new UploadError(t("toast.imageTooLarge"));
   }
 
   let res: Response;
@@ -100,10 +102,10 @@ export async function uploadImage(file: File): Promise<UploadResult> {
       body: blob,
     });
   } catch {
-    throw new UploadError("Upload failed — check your connection and try again.");
+    throw new UploadError(t("toast.uploadFailedConnection"));
   }
-  if (!res.ok) throw new UploadError("Upload failed — please try again.");
+  if (!res.ok) throw new UploadError(t("toast.uploadFailed"));
   const { key } = (await res.json()) as { key?: string };
-  if (!key) throw new UploadError("Upload failed — please try again.");
+  if (!key) throw new UploadError(t("toast.uploadFailed"));
   return { key, width, height };
 }

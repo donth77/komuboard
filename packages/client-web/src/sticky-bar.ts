@@ -4,6 +4,7 @@
 // canvas). Light DOM; reuses the global `.sw` swatch styling. Sibling pattern to <komu-draw-bar>.
 
 import { STICKY_COLORS, STICKY_COLOR_NAMES } from "@komuboard/shared";
+import { t } from "./i18n";
 import { ensureSheetHandle, wireSheetHandle } from "./mobile-sheet";
 
 export class CoStickyBar extends HTMLElement {
@@ -13,13 +14,14 @@ export class CoStickyBar extends HTMLElement {
   connectedCallback(): void {
     this.classList.add("sticky-bar", "mini-sheet");
     this.setAttribute("role", "toolbar");
-    this.setAttribute("aria-label", "Sticky note colours");
+    this.setAttribute("data-i18n-aria", "sticky.barLabel");
     if (this.#wired) return;
     this.#wired = true;
     this.innerHTML =
       '<div class="swatches" data-swatches>' +
       STICKY_COLORS.map((c) => {
-        const name = STICKY_COLOR_NAMES[c.toUpperCase()] ?? c;
+        const en = STICKY_COLOR_NAMES[c.toUpperCase()];
+        const name = en ? t("color." + en.toLowerCase()) : c;
         return `<button class="sw" type="button" data-color="${c}" data-tip="${name}" style="--sw:${c}" aria-label="${name}"></button>`;
       }).join("") +
       "</div>";

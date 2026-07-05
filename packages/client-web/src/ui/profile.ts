@@ -9,6 +9,7 @@
 import { USER_COLOR_NAMES } from "@komuboard/shared";
 import { createDialog } from "../dialog";
 import { COLOR_NAMES } from "../draw-bar";
+import { t } from "../i18n";
 import { initials, safePhotoUrl } from "../util";
 
 export interface ProfileDraft {
@@ -46,19 +47,19 @@ async function fileToAvatarDataUrl(file: File): Promise<string> {
 /** Build the profile dialog once and return an `open()` that (re)seeds it from the current profile. */
 export function createProfileDialog(opts: ProfileDialogOptions): { open: () => void } {
   const dialog = createDialog({
-    title: "Your profile",
+    titleKey: "profile.title",
     width: 360,
     body:
       '<div class="avatar-edit"><div class="avatar-preview" id="profile-avatar"></div>' +
       '<div class="avatar-edit-actions">' +
-      '<button type="button" class="btn-soft" id="profile-photo-btn">Upload photo</button>' +
-      '<button type="button" class="btn-link" id="profile-photo-clear">Remove</button>' +
+      '<button type="button" class="btn-soft" id="profile-photo-btn" data-i18n="profile.uploadPhoto"></button>' +
+      '<button type="button" class="btn-link" id="profile-photo-clear" data-i18n="common.remove"></button>' +
       '<input type="file" id="profile-photo-input" accept="image/*" hidden /></div></div>' +
-      '<label class="field"><span>Display name</span><input type="text" id="profile-name" maxlength="40" placeholder="Your name" /></label>' +
-      '<div class="field" id="profile-color-field"><span>Color</span><div class="swatches" id="profile-swatches" data-tip-in-dialog></div></div>',
+      '<label class="field"><span data-i18n="profile.displayName"></span><input type="text" id="profile-name" maxlength="40" data-i18n-placeholder="profile.namePlaceholder" /></label>' +
+      '<div class="field" id="profile-color-field"><span data-i18n="common.color"></span><div class="swatches" id="profile-swatches" data-tip-in-dialog></div></div>',
     footer:
-      '<button type="button" class="btn-ghost" data-dialog-close>Cancel</button>' +
-      '<button type="button" class="btn-primary" id="profile-save">Save</button>',
+      '<button type="button" class="btn-ghost" data-dialog-close data-i18n="common.cancel"></button>' +
+      '<button type="button" class="btn-primary" id="profile-save" data-i18n="common.save"></button>',
   });
 
   const dName = document.getElementById("profile-name") as HTMLInputElement | null;
@@ -82,7 +83,7 @@ export function createProfileDialog(opts: ProfileDialogOptions): { open: () => v
     } else {
       dAvatar.style.backgroundImage = "";
       dAvatar.classList.remove("has-photo");
-      dAvatar.textContent = initials(draft.name || "Guest");
+      dAvatar.textContent = initials(draft.name || t("profile.guestFallback"));
     }
     // "Remove" only applies to an uploaded photo — the default initials avatar can't be removed.
     if (dPhotoClear) dPhotoClear.style.display = draft.photo ? "" : "none";

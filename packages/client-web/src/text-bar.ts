@@ -11,7 +11,8 @@
 
 import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
-import { COLOR_NAMES } from "./draw-bar";
+import { COLOR_NAMES, tColor } from "./draw-bar";
+import { applyTranslations, t } from "./i18n";
 import { lineWeightIcon } from "./icons";
 import { SWATCHES } from "./palette";
 import type { BorderStyle, ShapeKind, TextAlign } from "@komuboard/shared";
@@ -71,12 +72,12 @@ export const TEXT_FONTS: FontOption[] = [
   { label: "Handwriting", css: "'Caveat', 'Comic Sans MS', cursive" },
 ];
 // Named size presets + a numeric input for an exact value.
-const SIZE_PRESETS: { label: string; size: number }[] = [
-  { label: "Small", size: 16 },
-  { label: "Medium", size: 24 },
-  { label: "Large", size: 40 },
-  { label: "Extra large", size: 64 },
-  { label: "Huge", size: 96 },
+const SIZE_PRESETS: { label: string; size: number; key: string }[] = [
+  { label: "Small", size: 16, key: "text.size.small" },
+  { label: "Medium", size: 24, key: "text.size.medium" },
+  { label: "Large", size: 40, key: "text.size.large" },
+  { label: "Extra large", size: 64, key: "text.size.extraLarge" },
+  { label: "Huge", size: 96, key: "text.size.huge" },
 ];
 // Highlight palette: "none" + pastels (a custom swatch opens the picker). Text color reuses the
 // shared SWATCHES — the same options the draw tool offers.
@@ -107,10 +108,20 @@ const HIGHLIGHT_NAMES: Record<string, string> = {
 const SHAPE_FILLS = SWATCHES.filter((c) => c !== "#ec4899");
 // Shape border colours — a smaller set than the fill palette. Leads with the default outline ink.
 const BORDER_COLORS = ["#1f2933", "#dc2626", "#f59e0b", "#16a34a", "#2563eb", "#7c3aed", "#ffffff"];
-const BORDER_STYLES: { style: BorderStyle; label: string; svg: string }[] = [
-  { style: "solid", label: "Solid", svg: '<path d="M3 10h14"/>' },
-  { style: "dashed", label: "Dashed", svg: '<path d="M3 10h14" stroke-dasharray="3.2 2.6"/>' },
-  { style: "none", label: "No border", svg: '<path d="M4 16 16 4" stroke="#e8554e"/>' },
+const BORDER_STYLES: { style: BorderStyle; label: string; key: string; svg: string }[] = [
+  { style: "solid", label: "Solid", key: "draw.solid", svg: '<path d="M3 10h14"/>' },
+  {
+    style: "dashed",
+    label: "Dashed",
+    key: "text.borderDashed",
+    svg: '<path d="M3 10h14" stroke-dasharray="3.2 2.6"/>',
+  },
+  {
+    style: "none",
+    label: "No border",
+    key: "text.noBorder",
+    svg: '<path d="M4 16 16 4" stroke="#e8554e"/>',
+  },
 ];
 
 const SVG = {
@@ -126,12 +137,6 @@ const SHAPE_SVG: Record<ShapeKind, string> = {
   rhombus: '<path d="M10 3 17 10 10 17 3 10z"/>',
   triangle: '<path d="M10 4 17 16H3z"/>',
 };
-const SHAPE_NAMES: Record<ShapeKind, string> = {
-  rectangle: "Rectangle",
-  ellipse: "Oval",
-  rhombus: "Rhombus",
-  triangle: "Triangle",
-};
 const SHAPE_ORDER: ShapeKind[] = ["rectangle", "ellipse", "rhombus", "triangle"];
 // Text-alignment glyphs (left / center / right).
 const ALIGN_SVG: Record<TextAlign, string> = {
@@ -146,11 +151,13 @@ function ico(path: string): string {
 const UNLINK_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18.84 12.25 1.72-1.71h-.02a5.004 5.004 0 0 0-.12-7.07 5.006 5.006 0 0 0-6.95 0l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5.004 5.004 0 0 0 .12 7.07 5.006 5.006 0 0 0 6.95 0l1.71-1.71"/><line x1="8" x2="8" y1="2" y2="5"/><line x1="2" x2="5" y1="8" y2="8"/><line x1="16" x2="16" y1="19" y2="22"/><line x1="19" x2="22" y1="16" y2="16"/></svg>';
 function fontLabelFor(css: string): string {
-  return TEXT_FONTS.find((f) => f.css === css)?.label ?? "Font";
+  const f = TEXT_FONTS.find((f) => f.css === css);
+  return f ? t(`text.font.${f.label.toLowerCase()}`) : t("text.font");
 }
 /** A named preset's label when the size matches one (Small/Medium/…), else the raw number. */
 function sizeLabelFor(size: number): string {
-  return SIZE_PRESETS.find((p) => p.size === Math.round(size))?.label ?? String(Math.round(size));
+  const p = SIZE_PRESETS.find((p) => p.size === Math.round(size));
+  return p ? t(p.key) : String(Math.round(size));
 }
 
 export class TextBar {
@@ -184,34 +191,35 @@ export class TextBar {
     el.style.display = "none";
     el.innerHTML =
       // Shape-only leading controls: shape-select + fill colour (shown only in shape mode).
-      `<button class="ctb-btn ctb-shape-only ctb-shape-kind" data-act="shape-kind" data-tip="Shape"><span class="ctb-shape-ico">${ico(SHAPE_SVG.rectangle)}</span><span class="ctb-caret">▾</span></button>` +
-      `<button class="ctb-btn ctb-shape-only ctb-fill" data-act="fill" data-tip="Fill color"><span class="ctb-fill-dot" data-fill></span><span class="ctb-caret">▾</span></button>` +
-      `<button class="ctb-btn ctb-shape-only ctb-border" data-act="border" data-tip="Border"><span class="ctb-border-ico">${lineWeightIcon("ctb-ico")}</span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-btn ctb-shape-only ctb-shape-kind" data-act="shape-kind" data-i18n-tip="text.shape"><span class="ctb-shape-ico">${ico(SHAPE_SVG.rectangle)}</span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-btn ctb-shape-only ctb-fill" data-act="fill" data-i18n-tip="text.fillColor"><span class="ctb-fill-dot" data-fill></span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-btn ctb-shape-only ctb-border" data-act="border" data-i18n-tip="text.border"><span class="ctb-border-ico">${lineWeightIcon("ctb-ico")}</span><span class="ctb-caret">▾</span></button>` +
       `<span class="ctb-sep ctb-shape-only"></span>` +
-      `<button class="ctb-text" data-act="font" data-tip="Font"><span class="ctb-font-label">Sans</span><span class="ctb-caret">▾</span></button>` +
-      `<button class="ctb-text" data-act="size" data-tip="Font size"><span class="ctb-size-label">Medium</span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-text" data-act="font" data-i18n-tip="text.font"><span class="ctb-font-label" data-i18n="text.font.sans">Sans</span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-text" data-act="size" data-i18n-tip="text.fontSize"><span class="ctb-size-label" data-i18n="text.size.medium">Medium</span><span class="ctb-caret">▾</span></button>` +
       `<span class="ctb-sep"></span>` +
       // B/I/U/S — inline on desktop; on mobile they collapse behind one toggle that expands a
       // vertical flyout (saves the width that was making the toolbar overflow on phones).
       `<span class="ctb-marks">` +
-      `<button class="ctb-btn ctb-marks-toggle" data-act="marks" data-tip="Text style">${ico(SVG.type)}<span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-btn ctb-marks-toggle" data-act="marks" data-i18n-tip="text.textStyle">${ico(SVG.type)}<span class="ctb-caret">▾</span></button>` +
       `<span class="ctb-marks-menu">` +
-      `<button class="ctb-btn ctb-b" data-mark="bold" data-tip="Bold">B</button>` +
-      `<button class="ctb-btn ctb-i" data-mark="italic" data-tip="Italic">I</button>` +
-      `<button class="ctb-btn ctb-u" data-mark="underline" data-tip="Underline">U</button>` +
-      `<button class="ctb-btn ctb-strike" data-mark="strike" data-tip="Strikethrough">S</button>` +
+      `<button class="ctb-btn ctb-b" data-mark="bold" data-i18n-tip="text.bold">B</button>` +
+      `<button class="ctb-btn ctb-i" data-mark="italic" data-i18n-tip="text.italic">I</button>` +
+      `<button class="ctb-btn ctb-u" data-mark="underline" data-i18n-tip="text.underline">U</button>` +
+      `<button class="ctb-btn ctb-strike" data-mark="strike" data-i18n-tip="text.strikethrough">S</button>` +
       `</span>` +
       `</span>` +
       `<span class="ctb-sep"></span>` +
-      `<button class="ctb-btn" data-act="bullet" data-tip="Bulleted list">${ico(SVG.list)}</button>` +
-      `<button class="ctb-btn" data-act="link" data-tip="Link">${ico(SVG.link)}</button>` +
+      `<button class="ctb-btn" data-act="bullet" data-i18n-tip="text.bulletedList">${ico(SVG.list)}</button>` +
+      `<button class="ctb-btn" data-act="link" data-i18n-tip="text.link">${ico(SVG.link)}</button>` +
       `<span class="ctb-sep"></span>` +
-      `<button class="ctb-btn ctb-color" data-act="color" data-tip="Text color"><span class="ctb-a">A</span><span class="ctb-underbar" data-swatch></span></button>` +
-      `<button class="ctb-btn ctb-hl" data-act="highlight" data-tip="Highlight"><span class="ctb-hl-box" data-hlswatch></span></button>` +
+      `<button class="ctb-btn ctb-color" data-act="color" data-i18n-tip="text.textColor"><span class="ctb-a">A</span><span class="ctb-underbar" data-swatch></span></button>` +
+      `<button class="ctb-btn ctb-hl" data-act="highlight" data-i18n-tip="text.highlight"><span class="ctb-hl-box" data-hlswatch></span></button>` +
       // Shape-only trailing control: text alignment (matters for shapes' centred labels).
       `<span class="ctb-sep ctb-shape-only"></span>` +
-      `<button class="ctb-btn ctb-shape-only ctb-align" data-act="align" data-tip="Alignment"><span class="ctb-align-ico">${ico(ALIGN_SVG.center)}</span><span class="ctb-caret">▾</span></button>`;
+      `<button class="ctb-btn ctb-shape-only ctb-align" data-act="align" data-i18n-tip="text.alignment"><span class="ctb-align-ico">${ico(ALIGN_SVG.center)}</span><span class="ctb-caret">▾</span></button>`;
     document.body.appendChild(el);
+    applyTranslations(el);
     this.root = el;
     this.fontLabel = el.querySelector(".ctb-font-label") as HTMLElement;
     this.sizeLabel = el.querySelector(".ctb-size-label") as HTMLElement;
@@ -318,7 +326,7 @@ export class TextBar {
     const colors =
       kind === "hilite" ? HIGHLIGHTS : kind === "fill" ? ["", ...SHAPE_FILLS] : SWATCHES;
     const names = kind === "hilite" ? HIGHLIGHT_NAMES : COLOR_NAMES;
-    const noneTip = kind === "fill" ? "No fill" : "None";
+    const noneTip = t(kind === "fill" ? "text.noFill" : "common.none");
     // Ring the active swatch. Foreground tracks `color`; fill tracks `fill`; highlight none.
     const curRaw = kind === "fore" ? this.state?.color : kind === "fill" ? this.state?.fill : "";
     const cur = (curRaw ?? "").toLowerCase();
@@ -326,7 +334,7 @@ export class TextBar {
     const sw = colors
       .map((c) =>
         c
-          ? `<button class="sw${c.toLowerCase() === cur ? " on" : ""}" type="button" data-color="${c}" data-tip="${names[c.toUpperCase()] ?? c}" style="--sw:${c}"></button>`
+          ? `<button class="sw${c.toLowerCase() === cur ? " on" : ""}" type="button" data-color="${c}" data-tip="${tColor(names[c.toUpperCase()], c)}" style="--sw:${c}"></button>`
           : `<button class="sw sw-none${noneActive ? " on" : ""}" type="button" data-color="" data-tip="${noneTip}"></button>`,
       )
       .join("");
@@ -334,7 +342,7 @@ export class TextBar {
     const pop = document.createElement("div");
     pop.className = "ctb-pop ctb-color-pop";
     pop.dataset.for = id;
-    pop.innerHTML = `<div class="swatches" data-swatches>${sw}<button class="sw sw-custom${customOn ? " on" : ""}" type="button" data-custom data-tip="Custom"></button></div>`;
+    pop.innerHTML = `<div class="swatches" data-swatches>${sw}<button class="sw sw-custom${customOn ? " on" : ""}" type="button" data-custom data-i18n-tip="common.custom"></button></div>`;
     const grid = pop.querySelector("[data-swatches]") as HTMLElement;
     grid.addEventListener("mousedown", (e) => e.preventDefault()); // keep the editor's selection alive
     grid.addEventListener("click", (e) => {
@@ -361,11 +369,11 @@ export class TextBar {
     const customOn = !!curColor && !BORDER_COLORS.some((c) => c.toLowerCase() === curColor);
     const styleRow = BORDER_STYLES.map(
       (b) =>
-        `<button class="ctb-border-style${b.style === curStyle ? " on" : ""}" type="button" data-style="${b.style}" data-tip="${b.label}"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${b.svg}</svg></button>`,
+        `<button class="ctb-border-style${b.style === curStyle ? " on" : ""}" type="button" data-style="${b.style}" data-tip="${t(b.key)}"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${b.svg}</svg></button>`,
     ).join("");
     const colorRow = BORDER_COLORS.map(
       (c) =>
-        `<button class="sw${c.toLowerCase() === curColor ? " on" : ""}" type="button" data-bcolor="${c}" data-tip="${COLOR_NAMES[c.toUpperCase()] ?? c}" style="--sw:${c}"></button>`,
+        `<button class="sw${c.toLowerCase() === curColor ? " on" : ""}" type="button" data-bcolor="${c}" data-tip="${tColor(COLOR_NAMES[c.toUpperCase()], c)}" style="--sw:${c}"></button>`,
     ).join("");
     const pop = document.createElement("div");
     pop.className = "ctb-pop ctb-border-pop";
@@ -373,7 +381,7 @@ export class TextBar {
     pop.addEventListener("mousedown", (e) => e.preventDefault());
     pop.innerHTML =
       `<div class="ctb-border-styles">${styleRow}</div>` +
-      `<div class="swatches">${colorRow}<button class="sw sw-custom${customOn ? " on" : ""}" type="button" data-custom data-tip="Custom"></button></div>`;
+      `<div class="swatches">${colorRow}<button class="sw sw-custom${customOn ? " on" : ""}" type="button" data-custom data-i18n-tip="common.custom"></button></div>`;
     pop.addEventListener("click", (e) => {
       const t = e.target as HTMLElement;
       const sBtn = t.closest<HTMLElement>("[data-style]");
@@ -413,7 +421,7 @@ export class TextBar {
     pop.addEventListener("mousedown", (e) => e.preventDefault());
     pop.innerHTML = SHAPE_ORDER.map(
       (k) =>
-        `<button class="ctb-shape-opt${k === cur ? " on" : ""}" type="button" data-kind="${k}" data-tip="${SHAPE_NAMES[k]}">${ico(SHAPE_SVG[k])}</button>`,
+        `<button class="ctb-shape-opt${k === cur ? " on" : ""}" type="button" data-kind="${k}" data-tip="${t(`shape.${k}`)}">${ico(SHAPE_SVG[k])}</button>`,
     ).join("");
     pop.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-kind]");
@@ -442,7 +450,7 @@ export class TextBar {
     pop.innerHTML = aligns
       .map(
         (a) =>
-          `<button class="ctb-align-opt${a === cur ? " on" : ""}" type="button" data-align="${a}" data-tip="${a[0]!.toUpperCase() + a.slice(1)}">${ico(ALIGN_SVG[a])}</button>`,
+          `<button class="ctb-align-opt${a === cur ? " on" : ""}" type="button" data-align="${a}" data-tip="${t(`text.align.${a}`)}">${ico(ALIGN_SVG[a])}</button>`,
       )
       .join("");
     pop.addEventListener("click", (e) => {
@@ -547,7 +555,7 @@ export class TextBar {
     const input = document.createElement("input");
     input.type = "text";
     input.className = "ctb-link-input";
-    input.placeholder = "Type or paste URL";
+    input.placeholder = t("text.linkPlaceholder");
     input.spellcheck = false;
     input.value = prefill;
     let done = false;
@@ -607,7 +615,7 @@ export class TextBar {
       const rm = document.createElement("button");
       rm.type = "button";
       rm.className = "ctb-link-unlink";
-      rm.setAttribute("data-tip", "Remove link");
+      rm.setAttribute("data-tip", t("text.removeLink"));
       rm.innerHTML = UNLINK_ICON;
       rm.addEventListener("mousedown", (e) => e.preventDefault()); // don't blur the input first
       rm.addEventListener("click", () => finish(false, true));
@@ -672,6 +680,7 @@ export class TextBar {
    *  flipping up only if it would clip the bottom of the viewport. `center` horizontally centres it
    *  over the anchor (else left-aligns). */
   private placePop(pop: HTMLElement, anchor: HTMLElement, center = false): void {
+    applyTranslations(pop); // lazily-built popover subtree → resolve its data-i18n-* into the active locale
     const ar = anchor.getBoundingClientRect();
     const pw = pop.offsetWidth || 220;
     const ph = pop.offsetHeight || 44;
@@ -709,7 +718,7 @@ export class TextBar {
       anchor,
       false,
       TEXT_FONTS.map((f) => ({
-        html: `<span class="ctb-check">${f.css === cur ? "✓" : ""}</span><span style="font-family:${f.css}">${f.label}</span>`,
+        html: `<span class="ctb-check">${f.css === cur ? "✓" : ""}</span><span style="font-family:${f.css}">${t(`text.font.${f.label.toLowerCase()}`)}</span>`,
         on: () => this.host.setFontFamily(f.css),
       })),
     );
@@ -737,7 +746,7 @@ export class TextBar {
     for (const p of SIZE_PRESETS) {
       const b = document.createElement("button");
       b.className = "ctb-pop-item";
-      b.innerHTML = `<span class="ctb-check">${p.size === cur ? "✓" : ""}</span><span>${p.label}</span>`;
+      b.innerHTML = `<span class="ctb-check">${p.size === cur ? "✓" : ""}</span><span>${t(p.key)}</span>`;
       b.addEventListener("mousedown", (e) => e.preventDefault());
       b.addEventListener("click", () => setSize(p.size));
       pop.appendChild(b);

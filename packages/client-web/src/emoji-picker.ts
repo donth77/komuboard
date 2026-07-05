@@ -2,6 +2,7 @@
 // search + a lazy Noto-SVG grid (served from /emoji/<codepoint>.svg). Picking emits `emoji-pick`
 // (detail.cp = codepoint) → main.ts → canvas.setStamp("emoji:<cp>") + recents. Light DOM.
 import GROUPS from "./emoji-data.json";
+import { applyTranslations, t } from "./i18n";
 
 type Emoji = { c: string; u: string; n: string };
 type Group = { name: string; emojis: Emoji[] };
@@ -31,9 +32,10 @@ export class CoEmojiPicker extends HTMLElement {
       .join("");
     this.innerHTML =
       `<div class="ep-tabs">${tabs}</div>` +
-      `<div class="ep-search"><input type="search" placeholder="Search" aria-label="Search emoji"></div>` +
+      `<div class="ep-search"><input type="search" data-i18n-placeholder="emoji.search" data-i18n-aria="emoji.searchAria"></div>` +
       `<div class="ep-grid"></div>`;
     this.renderGrid();
+    applyTranslations(this); // translate the search field placeholder + aria for the active locale
 
     this.querySelector(".ep-tabs")?.addEventListener("click", (e) => {
       const t = (e.target as HTMLElement).closest<HTMLElement>("[data-tab]");
@@ -93,7 +95,9 @@ export class CoEmojiPicker extends HTMLElement {
         for (const e of g.emojis) if (e.n.includes(query)) hits.push(e);
         if (hits.length > 300) break;
       }
-      html = hits.length ? hits.map(tile).join("") : `<div class="ep-empty">No emoji found</div>`;
+      html = hits.length
+        ? hits.map(tile).join("")
+        : `<div class="ep-empty">${t("emoji.noResults")}</div>`;
     } else {
       html = (groups[this.#active]?.emojis ?? []).map(tile).join("");
     }

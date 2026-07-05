@@ -49,7 +49,9 @@ export class CoDialog extends HTMLElement {
 
     const titleEl = dialog.querySelector<HTMLElement>(".dialog-title");
     if (titleEl) {
-      titleEl.textContent = this.getAttribute("title") ?? "";
+      const titleKey = this.getAttribute("data-title-key");
+      if (titleKey) titleEl.dataset.i18n = titleKey;
+      else titleEl.textContent = this.getAttribute("title") ?? "";
       // Name the modal for screen readers (native <dialog> already gives focus-trap/Esc).
       titleEl.id = `dialog-title-${++dialogTitleSeq}`;
       dialog.setAttribute("aria-labelledby", titleEl.id);
@@ -103,7 +105,10 @@ export class CoDialog extends HTMLElement {
 if (!customElements.get("komu-dialog")) customElements.define("komu-dialog", CoDialog);
 
 export interface DialogOptions {
-  title: string;
+  /** Plain title text — or pass titleKey for a translated, live-updating title. */
+  title?: string;
+  /** i18n key for the title — flows through the data-i18n sweep (translated + updates on locale change). */
+  titleKey?: string;
   body: string | HTMLElement;
   /** Footer content (e.g. buttons). Each top-level element is placed in the footer row. */
   footer?: string | HTMLElement;
@@ -114,7 +119,8 @@ export interface DialogOptions {
 /** Build a <komu-dialog> programmatically and attach it to the document. */
 export function createDialog(opts: DialogOptions): CoDialog {
   const el = document.createElement("komu-dialog") as CoDialog;
-  el.setAttribute("title", opts.title);
+  if (opts.titleKey) el.setAttribute("data-title-key", opts.titleKey);
+  else if (opts.title) el.setAttribute("title", opts.title);
   if (opts.width) el.setAttribute("width", String(opts.width));
   appendContent(el, opts.body, null);
   if (opts.footer !== undefined) appendContent(el, opts.footer, "footer");

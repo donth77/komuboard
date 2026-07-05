@@ -25,14 +25,14 @@ export class CoDrawer extends HTMLElement {
     const room = this.getAttribute("room") ?? "";
     this.innerHTML =
       '<div class="drawer-scrim" id="drawer-scrim" data-act="close"></div>' +
-      '<aside class="drawer" id="drawer" aria-label="Menu">' +
+      '<aside class="drawer" id="drawer" data-i18n-aria="common.menu">' +
       '<div class="drawer-head"><img class="brand-logo" src="/logo.webp" alt="" width="40" height="40" /> <strong>Komuboard</strong></div>' +
-      `<div class="drawer-room">Room · <strong>${room}</strong></div>` +
-      `<button class="drawer-item" data-act="profile" type="button"><span>Edit profile</span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
+      `<div class="drawer-room"><span data-i18n="drawer.room"></span> · <strong>${room}</strong></div>` +
+      `<button class="drawer-item" data-act="profile" type="button"><span data-i18n="menu.editProfile"></span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
       settingsControlsHTML() +
-      `<button class="drawer-item" data-act="vr" type="button"><span>Enter VR</span><span class="drawer-item-ic">${icon("headset")}</span></button>` +
-      `<button class="drawer-item" data-act="export" type="button"><span>Export…</span><span class="drawer-item-ic">${icon("download")}</span></button>` +
-      `<button class="drawer-item" data-act="help" type="button"><span>Help</span><span class="drawer-item-ic">${icon("help")}</span></button>` +
+      `<button class="drawer-item" data-act="vr" type="button"><span data-i18n="menu.enterVr"></span><span class="drawer-item-ic">${icon("headset")}</span></button>` +
+      `<button class="drawer-item" data-act="export" type="button"><span data-i18n="menu.export"></span><span class="drawer-item-ic">${icon("download")}</span></button>` +
+      `<button class="drawer-item" data-act="help" type="button"><span data-i18n="common.help"></span><span class="drawer-item-ic">${icon("help")}</span></button>` +
       "</aside>";
     this.#scrim = this.querySelector(".drawer-scrim");
     this.#panel = this.querySelector(".drawer");

@@ -5,6 +5,8 @@
 // clickable avatar) is hidden when you're alone — so a first-time solo visitor would otherwise have
 // to dig into the menu to find it. Shows at most once per browser and auto-dismisses.
 
+import { t } from "../i18n";
+
 const SEEN_KEY = "komuboard-identity-nudged";
 const AUTO_DISMISS_MS = 9000;
 
@@ -32,7 +34,7 @@ export function maybeShowIdentityNudge(opts: IdentityNudgeOpts): void {
   const close = document.createElement("button");
   close.type = "button";
   close.className = "identity-nudge-close";
-  close.setAttribute("aria-label", "Dismiss");
+  close.setAttribute("aria-label", t("common.dismiss"));
   close.textContent = "×";
 
   const dot = document.createElement("span");
@@ -43,11 +45,12 @@ export function maybeShowIdentityNudge(opts: IdentityNudgeOpts): void {
   line.className = "identity-nudge-line";
   const who = document.createElement("b");
   who.textContent = opts.name;
-  line.append("You're ", who);
+  const [pre, post] = t("presence.youAre").split("{name}");
+  line.append(pre ?? "", who, post ?? "");
 
   const hint = document.createElement("p");
   hint.className = "identity-nudge-hint";
-  hint.textContent = "Set a name and color others will see.";
+  hint.textContent = t("presence.nudgeHint");
 
   const text = document.createElement("div");
   text.className = "identity-nudge-text";
@@ -60,7 +63,7 @@ export function maybeShowIdentityNudge(opts: IdentityNudgeOpts): void {
   const edit = document.createElement("button");
   edit.type = "button";
   edit.className = "identity-nudge-edit";
-  edit.textContent = "Update profile";
+  edit.textContent = t("profile.updateCta");
 
   const actions = document.createElement("div");
   actions.className = "identity-nudge-actions";

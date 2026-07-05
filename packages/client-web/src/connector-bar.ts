@@ -10,7 +10,8 @@ import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
 import { lineWeightIcon } from "./icons";
 import { SWATCHES } from "./palette";
-import { COLOR_NAMES } from "./draw-bar";
+import { COLOR_NAMES, tColor } from "./draw-bar";
+import { applyTranslations, t } from "./i18n";
 import type { ConnectorCap, ConnectorStyle } from "@komuboard/shared";
 
 export interface ConnectorBarHost {
@@ -37,13 +38,15 @@ const WEIGHTS: { w: number; label: string }[] = [
   { w: 13, label: "Bold" },
 ];
 const CAPS_ORDER: ConnectorCap[] = ["none", "line", "arrow", "triangle", "circle", "diamond"];
+// Each cap's display label as an i18n key (resolved with t() where the caps are rendered). The
+// enum name and its label differ (e.g. `line` shows as "Arrow"); English is noted alongside.
 const CAP_NAMES: Record<ConnectorCap, string> = {
-  none: "None",
-  line: "Arrow",
-  arrow: "Solid",
-  triangle: "Outline",
-  circle: "Circle",
-  diamond: "Diamond",
+  none: "common.none", // None
+  line: "shape.arrow", // Arrow
+  arrow: "connector.styleSolid", // Solid
+  triangle: "connector.capOutline", // Outline
+  circle: "connector.capCircle", // Circle
+  diamond: "connector.capDiamond", // Diamond
 };
 
 /** The marker glyph for a cap, drawn on a short shaft. `dir` flips it so a start cap faces left and
@@ -87,14 +90,15 @@ export class ConnectorBar {
     el.className = "komu-connector-bar";
     el.style.display = "none";
     el.innerHTML =
-      `<button class="cb-btn" data-act="color" data-tip="Color"><span class="cb-color-dot" data-color></span><span class="cb-caret">▾</span></button>` +
-      `<button class="cb-btn" data-act="weight" data-tip="Line weight"><span class="cb-weight">${lineWeightIcon("cb-ico")}</span><span class="cb-caret">▾</span></button>` +
+      `<button class="cb-btn" data-act="color" data-i18n-tip="common.color"><span class="cb-color-dot" data-color></span><span class="cb-caret">▾</span></button>` +
+      `<button class="cb-btn" data-act="weight" data-i18n-tip="connector.lineWeight"><span class="cb-weight">${lineWeightIcon("cb-ico")}</span><span class="cb-caret">▾</span></button>` +
       `<span class="cb-sep"></span>` +
-      `<button class="cb-btn" data-act="style" data-tip="Line style"><span class="cb-style">${styleIcon("solid")}</span><span class="cb-caret">▾</span></button>` +
+      `<button class="cb-btn" data-act="style" data-i18n-tip="draw.lineStyle"><span class="cb-style">${styleIcon("solid")}</span><span class="cb-caret">▾</span></button>` +
       `<span class="cb-sep"></span>` +
-      `<button class="cb-btn" data-act="startcap" data-tip="Start point"><span class="cb-startcap">${capIcon("none", "left")}</span><span class="cb-caret">▾</span></button>` +
-      `<button class="cb-btn" data-act="endcap" data-tip="End point"><span class="cb-endcap">${capIcon("arrow", "right")}</span><span class="cb-caret">▾</span></button>`;
+      `<button class="cb-btn" data-act="startcap" data-i18n-tip="connector.startPoint"><span class="cb-startcap">${capIcon("none", "left")}</span><span class="cb-caret">▾</span></button>` +
+      `<button class="cb-btn" data-act="endcap" data-i18n-tip="connector.endPoint"><span class="cb-endcap">${capIcon("arrow", "right")}</span><span class="cb-caret">▾</span></button>`;
     document.body.appendChild(el);
+    applyTranslations(el);
     this.root = el;
     this.wire();
   }
@@ -128,9 +132,9 @@ export class ConnectorBar {
       `<div class="cb-swatches">` +
       SWATCHES.map(
         (c) =>
-          `<button class="cb-sw${c.toLowerCase() === cur ? " on" : ""}" data-color="${c}" data-tip="${COLOR_NAMES[c.toUpperCase()] ?? c}" style="--sw:${c}"></button>`,
+          `<button class="cb-sw${c.toLowerCase() === cur ? " on" : ""}" data-color="${c}" data-tip="${tColor(COLOR_NAMES[c.toUpperCase()], c)}" style="--sw:${c}"></button>`,
       ).join("") +
-      `<button class="cb-sw sw-custom${custom ? " on" : ""}" data-custom data-tip="Custom"></button>` +
+      `<button class="cb-sw sw-custom${custom ? " on" : ""}" data-custom data-i18n-tip="common.custom"></button>` +
       `</div>`;
     pop.addEventListener("click", (e) => {
       const t = e.target as HTMLElement;
@@ -170,7 +174,7 @@ export class ConnectorBar {
     pop.innerHTML = WEIGHTS.map(
       (o) =>
         `<button class="cb-weight-opt${o.w === cur ? " on" : ""}" data-w="${o.w}">` +
-        `<span class="cb-weight-name">${o.label}</span>` +
+        `<span class="cb-weight-name">${t(`connector.weight${o.label}`)}</span>` +
         `<span class="cb-weight-line" style="height:${Math.max(2, Math.round(o.w * 0.6))}px"></span>` +
         `</button>`,
     ).join("");
@@ -191,7 +195,7 @@ export class ConnectorBar {
     pop.innerHTML = styles
       .map(
         (s) =>
-          `<button class="cb-opt${s === cur ? " on" : ""}" data-style="${s}" data-tip="${s}">${styleIcon(s)}</button>`,
+          `<button class="cb-opt${s === cur ? " on" : ""}" data-style="${s}" data-tip="${t(s === "solid" ? "connector.styleSolid" : "connector.styleDashed")}">${styleIcon(s)}</button>`,
       )
       .join("");
     pop.addEventListener("click", (e) => {
@@ -210,7 +214,7 @@ export class ConnectorBar {
     const pop = this.makePop(which + "cap");
     pop.innerHTML = CAPS_ORDER.map(
       (cap) =>
-        `<button class="cb-opt${cap === cur ? " on" : ""}" data-cap="${cap}" data-tip="${CAP_NAMES[cap]}">${capIcon(cap, dir)}</button>`,
+        `<button class="cb-opt${cap === cur ? " on" : ""}" data-cap="${cap}" data-tip="${t(CAP_NAMES[cap])}">${capIcon(cap, dir)}</button>`,
     ).join("");
     pop.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-cap]");
@@ -239,6 +243,7 @@ export class ConnectorBar {
   /** Place a popover below its anchor (the bar already sits above the connector). */
   private placePop(pop: HTMLDivElement, anchor: HTMLElement): void {
     document.body.appendChild(pop);
+    applyTranslations(pop); // lazily-built popover subtree → resolve its data-i18n-* into the active locale
     const ar = anchor.getBoundingClientRect();
     const pw = pop.offsetWidth || 180;
     pop.style.left = `${Math.max(8, Math.min(ar.left + ar.width / 2 - pw / 2, window.innerWidth - pw - 8))}px`;

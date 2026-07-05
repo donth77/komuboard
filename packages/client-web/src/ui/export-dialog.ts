@@ -3,6 +3,7 @@
 // canvas (exportCanvas) + main.ts (blob / PDF + download); this module is just the picker UI.
 
 import { createDialog } from "../dialog";
+import { t } from "../i18n";
 
 export type ExportFormat = "png" | "pdf";
 export type ExportBackground = "grid" | "transparent" | "solid";
@@ -11,10 +12,10 @@ export interface ExportDialog {
   open(): void;
 }
 
-const BG_LABELS: Record<ExportBackground, string> = {
-  grid: "Grid",
-  transparent: "Transparent",
-  solid: "Solid",
+const BG_LABEL_KEYS: Record<ExportBackground, string> = {
+  grid: "export.bgGrid",
+  transparent: "export.bgTransparent",
+  solid: "export.bgSolid",
 };
 const BG_ORDER: ExportBackground[] = ["grid", "transparent", "solid"];
 
@@ -25,27 +26,28 @@ export function createExportDialog(
 
   const body =
     '<div class="export-row">' +
-    '<span class="export-label">File type</span>' +
-    '<div class="export-radios" role="radiogroup" aria-label="File type">' +
+    '<span class="export-label" data-i18n="export.fileType"></span>' +
+    '<div class="export-radios" role="radiogroup" data-i18n-aria="export.fileType">' +
     '<label class="export-radio"><input type="radio" name="komu-export-format" value="png" checked /><span>PNG</span></label>' +
     '<label class="export-radio"><input type="radio" name="komu-export-format" value="pdf" /><span>PDF</span></label>' +
     "</div>" +
     "</div>" +
     '<div class="export-row">' +
-    '<span class="export-label">Background</span>' +
+    '<span class="export-label" data-i18n="export.background"></span>' +
     '<div class="export-bg">' +
-    '<button type="button" class="export-bg-btn" aria-haspopup="true" aria-expanded="false"><span class="export-bg-current">Solid</span><span class="export-bg-caret" aria-hidden="true">⌄</span></button>' +
+    '<button type="button" class="export-bg-btn" aria-haspopup="true" aria-expanded="false"><span class="export-bg-current"></span><span class="export-bg-caret" aria-hidden="true">⌄</span></button>' +
     '<div class="export-bg-menu hidden" role="menu">' +
     BG_ORDER.map(
       (k) =>
-        `<button type="button" class="export-bg-opt" role="menuitemradio" data-bg="${k}" aria-checked="false"><span class="bg-check" aria-hidden="true">✓</span><span class="bg-swatch bg-${k}" aria-hidden="true"></span><span class="bg-name">${BG_LABELS[k]}</span></button>`,
+        `<button type="button" class="export-bg-opt" role="menuitemradio" data-bg="${k}" aria-checked="false"><span class="bg-check" aria-hidden="true">✓</span><span class="bg-swatch bg-${k}" aria-hidden="true"></span><span class="bg-name" data-i18n="${BG_LABEL_KEYS[k]}"></span></button>`,
     ).join("") +
     "</div>" +
     "</div>";
 
-  const footer = '<button type="button" class="btn-primary export-go">Export</button>';
+  const footer =
+    '<button type="button" class="btn-primary export-go" data-i18n="export.title"></button>';
 
-  const dialog = createDialog({ title: "Export", width: 460, body, footer });
+  const dialog = createDialog({ titleKey: "export.title", width: 460, body, footer });
   dialog.classList.add("export-dialog"); // lets CSS let the background dropdown overflow the body
 
   const bgBtn = dialog.querySelector<HTMLButtonElement>(".export-bg-btn")!;
@@ -59,7 +61,8 @@ export function createExportDialog(
   };
   const setBg = (b: ExportBackground): void => {
     background = b;
-    bgCurrent.textContent = BG_LABELS[b];
+    bgCurrent.setAttribute("data-i18n", BG_LABEL_KEYS[b]);
+    bgCurrent.textContent = t(BG_LABEL_KEYS[b]);
     opts.forEach((o) => {
       const on = o.dataset.bg === b;
       o.classList.toggle("selected", on);

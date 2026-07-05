@@ -4,6 +4,7 @@
 // shape, so it slides up flush out of the dock and collapses via its grab handle. Tablet/desktop never
 // show it — the five tools sit inline in the dock there (CSS).
 import { icon } from "../icons";
+import { applyTranslations } from "../i18n";
 import { ensureSheetHandle, wireSheetHandle } from "../mobile-sheet";
 
 export type InsertKind = "sticky" | "text" | "shapes" | "stamp" | "image";
@@ -19,31 +20,32 @@ export function createInsertSheet(onPick: (kind: InsertKind) => void): InsertShe
   const sheet = document.createElement("div");
   sheet.className = "insert-sheet mini-sheet hidden";
   sheet.setAttribute("role", "menu");
-  sheet.setAttribute("aria-label", "Insert");
+  sheet.setAttribute("data-i18n-aria", "tool.insert");
   const row = document.createElement("div");
   row.className = "insert-row";
 
-  const make = (kind: InsertKind, label: string, iconName: string): HTMLButtonElement => {
+  const make = (kind: InsertKind, key: string, iconName: string): HTMLButtonElement => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "insert-btn";
     b.dataset.insert = kind;
-    b.setAttribute("aria-label", label);
-    b.innerHTML = `${icon(iconName, "insert-ico")}<span class="insert-label">${label}</span>`;
+    b.dataset.i18nAria = key;
+    b.innerHTML = `${icon(iconName, "insert-ico")}<span class="insert-label" data-i18n="${key}"></span>`;
     b.addEventListener("click", () => onPick(kind));
     return b;
   };
 
   row.append(
-    make("sticky", "Sticky", "sticky"),
-    make("text", "Text", "text"),
-    make("shapes", "Shape", "shapes"),
-    make("stamp", "Stamp", "stamp"),
-    make("image", "Image", "image"),
+    make("sticky", "insert.sticky", "sticky"),
+    make("text", "tool.text", "text"),
+    make("shapes", "insert.shape", "shapes"),
+    make("stamp", "tool.stamp", "stamp"),
+    make("image", "tool.image", "image"),
   );
   sheet.append(row);
   wireSheetHandle(sheet, ensureSheetHandle(sheet)); // grab-handle drag-to-collapse (prepends the handle)
   (document.querySelector(".sheet-wrap") ?? document.body).appendChild(sheet);
+  applyTranslations(sheet); // fill in the button labels + aria for the active locale
 
   return {
     el: sheet,

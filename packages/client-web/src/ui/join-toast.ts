@@ -2,6 +2,8 @@
 // after you're settled in the room. Existing occupants (present when you first connect) don't toast;
 // see the settle window in main.ts. Purely cosmetic and non-interactive (pointer-events: none).
 
+import { t } from "../i18n";
+
 const VISIBLE_MS = 3200;
 const FADE_MS = 260;
 
@@ -36,7 +38,8 @@ export function createJoinToasts(): JoinToasts {
       const label = document.createElement("span");
       const who = document.createElement("b");
       who.textContent = name;
-      label.append(who, " joined");
+      const [pre, post] = t("presence.joinedToast").split("{name}");
+      label.append(pre ?? "", who, post ?? "");
 
       toast.append(dot, label);
       ensure().appendChild(toast);

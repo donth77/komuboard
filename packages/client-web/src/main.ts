@@ -55,7 +55,7 @@ import { createContextMenu } from "./ui/context-menu";
 import { createShareDialog } from "./ui/share";
 import { paintProfile } from "./util";
 import { SWATCHES } from "./palette";
-import { applyTranslations, initI18n } from "./i18n";
+import { applyTranslations, initI18n, t as tr } from "./i18n";
 import "./ui/lang-picker";
 
 declare global {
@@ -71,6 +71,11 @@ declare global {
 // Drop the prerendered SEO splash (#seo-intro from the per-locale HTML) — the SPA is taking over.
 // Non-JS crawlers/LLMs keep seeing it; real visitors never do.
 document.getElementById("seo-intro")?.remove();
+
+// Set the locale FIRST — before any component is built — so every build-time t() call (dialogs,
+// toasts, the identity nudge, …) resolves in the detected language, not the default English. A final
+// applyTranslations() at the very end re-sweeps the persistent chrome (tool dock, topbar, …).
+initI18n();
 
 const THEME_KEY = "komuboard-theme";
 type Theme = "light" | "dark";
@@ -187,7 +192,7 @@ app.innerHTML = `
 
   <komu-zoombar></komu-zoombar>
 
-  <button class="help-btn" id="help-btn" type="button" data-tip="Help" aria-label="Help">${icon("help")}</button>
+  <button class="help-btn" id="help-btn" type="button" data-i18n-tip="common.help" data-i18n-aria="common.help">${icon("help")}</button>
 
   <komu-drawer room="${room}"></komu-drawer>
 `;
@@ -276,7 +281,7 @@ document.addEventListener("click", (e) => {
   vrActive = true;
   const scrim = document.createElement("div");
   scrim.className = "export-scrim";
-  scrim.textContent = "Preparing VR…";
+  scrim.textContent = tr("status.preparingVr");
   document.body.appendChild(scrim);
   void (async () => {
     try {
@@ -293,7 +298,7 @@ document.addEventListener("click", (e) => {
       });
     } catch (err) {
       console.error("[vr] failed to start:", err);
-      showToast("Couldn't start VR on this device.");
+      showToast(tr("toast.vrStartFailed"));
       vrActive = false;
     } finally {
       scrim.remove();
@@ -530,7 +535,7 @@ async function placeImageFiles(
       canvas.placeImage(upload, at);
       placed++;
     } catch (err) {
-      showToast(err instanceof UploadError ? err.message : "Couldn't add that image.");
+      showToast(err instanceof UploadError ? err.message : tr("toast.imageAddFailed"));
     }
   }
 }
@@ -738,34 +743,34 @@ document.addEventListener("pointerdown", (e) => {
 
 // Shortcuts overlay (reusable <komu-dialog>).
 const shortcutsDialog = createDialog({
-  title: "Keyboard shortcuts",
+  titleKey: "shortcuts.title",
   width: 340,
   body:
-    '<div class="kbd-row"><span>Select</span><kbd class="kbd">V</kbd></div>' +
-    '<div class="kbd-row"><span>Hand / pan</span><kbd class="kbd">H</kbd></div>' +
-    '<div class="kbd-row"><span>Pen</span><kbd class="kbd">P</kbd></div>' +
-    '<div class="kbd-row"><span>Eraser</span><kbd class="kbd">E</kbd></div>' +
-    '<div class="kbd-row"><span>Sticky note</span><kbd class="kbd">S</kbd></div>' +
-    '<div class="kbd-row"><span>Text</span><kbd class="kbd">T</kbd></div>' +
-    '<div class="kbd-row"><span>Shapes and lines</span><kbd class="kbd">R</kbd></div>' +
-    '<div class="kbd-row"><span>Stamp</span><kbd class="kbd">K</kbd></div>' +
-    '<div class="kbd-row"><span>Image</span><kbd class="kbd">I</kbd></div>' +
-    `<div class="kbd-row"><span>Select all</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">A</kbd></span></div>` +
-    `<div class="kbd-row"><span>Copy</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">C</kbd></span></div>` +
-    `<div class="kbd-row"><span>Cut</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">X</kbd></span></div>` +
-    `<div class="kbd-row"><span>Paste</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">V</kbd></span></div>` +
-    '<div class="kbd-row"><span>Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">Backspace</kbd></span></div>' +
-    `<div class="kbd-row"><span>Group / ungroup</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">G</kbd> / <kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">G</kbd></span></div>` +
-    `<div class="kbd-row"><span>Lock / unlock (toggle)</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">L</kbd></span></div>` +
-    '<div class="kbd-row"><span>Rotate (±15° / ±90° with Shift)</span><span><kbd class="kbd">[</kbd> / <kbd class="kbd">]</kbd></span></div>' +
-    '<div class="kbd-row"><span>Nudge selection (1px / 10px with Shift)</span><span><kbd class="kbd">←</kbd> <kbd class="kbd">↑</kbd> <kbd class="kbd">↓</kbd> <kbd class="kbd">→</kbd></span></div>' +
-    `<div class="kbd-row"><span>Bring to front / send to back</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">]</kbd> / <kbd class="kbd">[</kbd></span></div>` +
-    `<div class="kbd-row"><span>Undo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
-    `<div class="kbd-row"><span>Redo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
-    '<div class="kbd-row"><span>Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
-    `<div class="kbd-row"><span>Zoom in / out</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">+</kbd> / <kbd class="kbd">−</kbd></span></div>` +
-    `<div class="kbd-row"><span>Export (PNG / PDF)</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">E</kbd></span></div>` +
-    '<div class="kbd-row"><span>Toggle this menu</span><kbd class="kbd">?</kbd></div>',
+    '<div class="kbd-row"><span data-i18n="tool.select">Select</span><kbd class="kbd">V</kbd></div>' +
+    '<div class="kbd-row"><span data-i18n="shortcuts.handPan">Hand / pan</span><kbd class="kbd">H</kbd></div>' +
+    '<div class="kbd-row"><span data-i18n="draw.pen">Pen</span><kbd class="kbd">P</kbd></div>' +
+    '<div class="kbd-row"><span data-i18n="tool.eraser">Eraser</span><kbd class="kbd">E</kbd></div>' +
+    '<div class="kbd-row"><span data-i18n="tool.sticky">Sticky note</span><kbd class="kbd">S</kbd></div>' +
+    '<div class="kbd-row"><span data-i18n="tool.text">Text</span><kbd class="kbd">T</kbd></div>' +
+    '<div class="kbd-row"><span data-i18n="tool.shapes">Shapes and lines</span><kbd class="kbd">R</kbd></div>' +
+    '<div class="kbd-row"><span data-i18n="tool.stamp">Stamp</span><kbd class="kbd">K</kbd></div>' +
+    '<div class="kbd-row"><span data-i18n="tool.image">Image</span><kbd class="kbd">I</kbd></div>' +
+    `<div class="kbd-row"><span data-i18n="menu.selectAll">Select all</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">A</kbd></span></div>` +
+    `<div class="kbd-row"><span data-i18n="menu.copy">Copy</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">C</kbd></span></div>` +
+    `<div class="kbd-row"><span data-i18n="menu.cut">Cut</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">X</kbd></span></div>` +
+    `<div class="kbd-row"><span data-i18n="menu.paste">Paste</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">V</kbd></span></div>` +
+    '<div class="kbd-row"><span data-i18n="shortcuts.deleteSelection">Delete selection</span><span><kbd class="kbd">Del</kbd> / <kbd class="kbd">Backspace</kbd></span></div>' +
+    `<div class="kbd-row"><span data-i18n="shortcuts.groupUngroup">Group / ungroup</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">G</kbd> / <kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">G</kbd></span></div>` +
+    `<div class="kbd-row"><span data-i18n="shortcuts.lockUnlock">Lock / unlock (toggle)</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">L</kbd></span></div>` +
+    '<div class="kbd-row"><span data-i18n="shortcuts.rotate">Rotate (±15° / ±90° with Shift)</span><span><kbd class="kbd">[</kbd> / <kbd class="kbd">]</kbd></span></div>' +
+    '<div class="kbd-row"><span data-i18n="shortcuts.nudge">Nudge selection (1px / 10px with Shift)</span><span><kbd class="kbd">←</kbd> <kbd class="kbd">↑</kbd> <kbd class="kbd">↓</kbd> <kbd class="kbd">→</kbd></span></div>' +
+    `<div class="kbd-row"><span data-i18n="shortcuts.zorder">Bring to front / send to back</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">]</kbd> / <kbd class="kbd">[</kbd></span></div>` +
+    `<div class="kbd-row"><span data-i18n="common.undo">Undo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
+    `<div class="kbd-row"><span data-i18n="common.redo">Redo</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">Z</kbd></span></div>` +
+    '<div class="kbd-row"><span data-i18n="shortcuts.pan">Pan (hold)</span><kbd class="kbd">Space</kbd></div>' +
+    `<div class="kbd-row"><span data-i18n="shortcuts.zoomInOut">Zoom in / out</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">+</kbd> / <kbd class="kbd">−</kbd></span></div>` +
+    `<div class="kbd-row"><span data-i18n="shortcuts.export">Export (PNG / PDF)</span><span><kbd class="kbd">${MOD_KEY}</kbd> <kbd class="kbd">${SHIFT_KEY}</kbd> <kbd class="kbd">E</kbd></span></div>` +
+    '<div class="kbd-row"><span data-i18n="shortcuts.toggleMenu">Toggle this menu</span><kbd class="kbd">?</kbd></div>',
 });
 
 function isTyping(el: EventTarget | null): boolean {
@@ -1108,12 +1113,12 @@ async function runExport(format: ExportFormat, background: ExportBackground): Pr
   exporting = true;
   const scrim = document.createElement("div");
   scrim.className = "export-scrim";
-  scrim.textContent = "Exporting…";
+  scrim.textContent = tr("status.exporting");
   document.body.appendChild(scrim);
   try {
     const cv = await canvas.exportCanvas({ background });
     if (!cv) {
-      showToast("Nothing to export yet — add something to the board first.");
+      showToast(tr("toast.nothingToExport"));
       return;
     }
     const stamp = new Date().toISOString().slice(0, 10);
@@ -1131,13 +1136,13 @@ async function runExport(format: ExportFormat, background: ExportBackground): Pr
     } else {
       const blob = await new Promise<Blob | null>((res) => cv.toBlob(res, "image/png"));
       if (!blob) {
-        showToast("Export failed — please try again.");
+        showToast(tr("toast.exportFailed"));
         return;
       }
       downloadBlob(blob, `komuboard-${stamp}.png`);
     }
   } catch {
-    showToast("Export failed — please try again.");
+    showToast(tr("toast.exportFailed"));
   } finally {
     scrim.remove();
     exporting = false;
@@ -1402,6 +1407,6 @@ updateConn();
 
 // Connection state drives the room-pill dot inside <komu-topbar> (setStatus).
 
-// Localization: detect the browser locale (mapped to a shipped locale, default English), set the
-// <html lang>, and sweep all built chrome into that language. Runs last so every component exists.
-initI18n();
+// Final localization sweep — the locale was set at the top; this resolves the data-i18n attributes on
+// the persistent chrome (tool dock, topbar, zoombar, settings) now that every component is built.
+applyTranslations();

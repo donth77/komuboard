@@ -10,6 +10,7 @@ import "./color-picker";
 import type { CoColorPicker } from "./color-picker";
 import { wireSheetHandle } from "./mobile-sheet";
 import { TOUCH_MEDIA } from "./platform";
+import { applyTranslations, t } from "./i18n";
 
 /** The `pen-change` event detail — only the changed field(s) are present. */
 export interface PenChange {
@@ -31,6 +32,13 @@ export const COLOR_NAMES: Record<string, string> = {
   "#FFFFFF": "White",
 };
 
+/** Translate a swatch's English palette name (from COLOR_NAMES / HIGHLIGHT_NAMES) into the active
+ *  locale via its `color.*` key; falls back to the raw hex for an unnamed custom colour. Shared with
+ *  the text / connector bars so every swatch tooltip resolves the same way. */
+export function tColor(name: string | undefined, raw: string): string {
+  return name ? t(`color.${name.toLowerCase()}`) : raw;
+}
+
 type Brush = "pen" | "highlighter";
 type Dash = "solid" | "dotted";
 
@@ -50,7 +58,7 @@ export class CoDrawBar extends HTMLElement {
   connectedCallback(): void {
     this.classList.add("draw-bar", "mini-sheet");
     this.setAttribute("role", "toolbar");
-    this.setAttribute("aria-label", "Draw options");
+    this.setAttribute("data-i18n-aria", "draw.barLabel");
     if (this.#wired) return;
     this.#wired = true;
     this.#build();
@@ -77,12 +85,13 @@ export class CoDrawBar extends HTMLElement {
     this.innerHTML =
       '<div class="sheet-handle" aria-hidden="true"></div>' +
       '<div class="db-row">' +
-      `<button class="db-btn" type="button" data-brush="pen" aria-label="Pen" aria-pressed="false">${iconFilled("penClip")}<span class="db-tip">Pen</span></button>` +
-      `<button class="db-btn" type="button" data-brush="highlighter" aria-label="Highlighter" aria-pressed="false">${icon("highlighter")}<span class="db-tip">Highlighter</span></button>` +
-      `<button class="db-btn" type="button" data-pop="style" aria-label="Line style"><span class="db-ico-slot">${icon(this.#styleIconName())}</span><span class="db-tip">Line style</span></button>` +
-      `<button class="db-btn db-color" type="button" data-pop="color" aria-label="Colour"><span class="db-dot"></span><span class="db-tip">Color</span></button>` +
-      `<button class="db-btn" type="button" data-pop="width" aria-label="Stroke width">${lineWeightIcon()}<span class="db-tip">Stroke width</span></button>` +
+      `<button class="db-btn" type="button" data-brush="pen" data-i18n-aria="draw.pen" aria-pressed="false">${iconFilled("penClip")}<span class="db-tip" data-i18n="draw.pen">Pen</span></button>` +
+      `<button class="db-btn" type="button" data-brush="highlighter" data-i18n-aria="draw.highlighter" aria-pressed="false">${icon("highlighter")}<span class="db-tip" data-i18n="draw.highlighter">Highlighter</span></button>` +
+      `<button class="db-btn" type="button" data-pop="style" data-i18n-aria="draw.lineStyle"><span class="db-ico-slot">${icon(this.#styleIconName())}</span><span class="db-tip" data-i18n="draw.lineStyle">Line style</span></button>` +
+      `<button class="db-btn db-color" type="button" data-pop="color" data-i18n-aria="draw.colourAria"><span class="db-dot"></span><span class="db-tip" data-i18n="common.color">Color</span></button>` +
+      `<button class="db-btn" type="button" data-pop="width" data-i18n-aria="draw.strokeWidth">${lineWeightIcon()}<span class="db-tip" data-i18n="draw.strokeWidth">Stroke width</span></button>` +
       "</div>";
+    applyTranslations(this);
     this.#syncBrush();
     this.#syncColorDot();
     this.#wireHandle();
@@ -153,6 +162,7 @@ export class CoDrawBar extends HTMLElement {
     const pop = document.createElement("div");
     pop.className = "db-popover";
     pop.innerHTML = this.#popContent(which);
+    applyTranslations(pop); // lazily-built subtree → resolve its data-i18n-* into the active locale
     document.body.appendChild(pop);
     this.#pop = pop;
     this.#wirePop(which, pop);
@@ -207,23 +217,23 @@ export class CoDrawBar extends HTMLElement {
     if (which === "style") {
       return (
         '<div class="seg" data-style>' +
-        `<button class="seg-opt${this.#dash === "solid" ? " on" : ""}" type="button" data-dash="solid" title="Solid" aria-label="Solid" aria-pressed="${this.#dash === "solid"}">${icon("lineSolid")}</button>` +
-        `<button class="seg-opt${this.#dash === "dotted" ? " on" : ""}" type="button" data-dash="dotted" title="Dotted" aria-label="Dotted" aria-pressed="${this.#dash === "dotted"}">${icon("lineDotted")}</button>` +
+        `<button class="seg-opt${this.#dash === "solid" ? " on" : ""}" type="button" data-dash="solid" data-i18n-title="draw.solid" data-i18n-aria="draw.solid" aria-pressed="${this.#dash === "solid"}">${icon("lineSolid")}</button>` +
+        `<button class="seg-opt${this.#dash === "dotted" ? " on" : ""}" type="button" data-dash="dotted" data-i18n-title="draw.dotted" data-i18n-aria="draw.dotted" aria-pressed="${this.#dash === "dotted"}">${icon("lineDotted")}</button>` +
         "</div>"
       );
     }
     if (which === "color") {
       const sw = this.#swatches
         .map((c) => {
-          const name = COLOR_NAMES[c.toUpperCase()] ?? c;
+          const name = tColor(COLOR_NAMES[c.toUpperCase()], c);
           return `<button class="sw${c === this.#color ? " on" : ""}" type="button" data-color="${c}" data-tip="${name}" style="--sw:${c}" aria-label="${name}" aria-pressed="${c === this.#color}"></button>`;
         })
         .join("");
       const isCustom = !!this.#color && !this.#swatches.includes(this.#color);
-      return `<div class="swatches" data-swatches>${sw}<button class="sw sw-custom${isCustom ? " on" : ""}" type="button" data-custom data-tip="Custom" aria-label="Custom colour" aria-pressed="${isCustom}"></button></div>`;
+      return `<div class="swatches" data-swatches>${sw}<button class="sw sw-custom${isCustom ? " on" : ""}" type="button" data-custom data-i18n-tip="common.custom" data-i18n-aria="draw.customColour" aria-pressed="${isCustom}"></button></div>`;
     }
     return (
-      `<div class="db-pop-label">Stroke width · <b data-w-val>${this.#width}</b> px</div>` +
+      `<div class="db-pop-label">${t("draw.strokeWidthValue", { w: `<b data-w-val>${this.#width}</b>` })}</div>` +
       `<input type="range" data-width min="1" max="96" value="${this.#width}" />`
     );
   }

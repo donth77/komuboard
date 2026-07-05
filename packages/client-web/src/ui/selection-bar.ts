@@ -6,6 +6,7 @@
 // desktop has the keyboard + transform chrome. Icon-only (with aria-label/title) so the full set fits
 // a 390px phone row; Group/Ungroup are mutually exclusive and shown by context.
 import { bringFrontIcon, icon, sendBackIcon } from "../icons";
+import { applyTranslations, t } from "../i18n";
 import { ensureSheetHandle, wireSheetHandle } from "../mobile-sheet";
 
 export interface SelectionBarOpts {
@@ -43,39 +44,39 @@ export function createSelectionBar(opts: SelectionBarOpts): SelectionBar {
   const bar = document.createElement("div");
   bar.className = "selection-actions mini-sheet hidden";
   bar.setAttribute("role", "toolbar");
-  bar.setAttribute("aria-label", "Selection actions");
+  bar.setAttribute("data-i18n-aria", "selection.barLabel");
   const row = document.createElement("div");
   row.className = "sa-row";
 
-  const make = (
-    act: string,
-    label: string,
-    svg: string,
-    onClick: () => void,
-  ): HTMLButtonElement => {
+  const make = (act: string, key: string, svg: string, onClick: () => void): HTMLButtonElement => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "sa-btn";
     b.dataset.act = act;
-    b.title = label;
-    b.setAttribute("aria-label", label);
+    b.dataset.i18nTitle = key;
+    b.dataset.i18nAria = key;
     b.innerHTML = svg;
     b.addEventListener("click", onClick);
     return b;
   };
 
   // Bring-to-front / send-to-back use the filled design-asset glyphs; the rest use the stroke set.
-  const frontBtn = make("front", "Bring to front", bringFrontIcon("sa-ico"), opts.onBringFront);
-  const backBtn = make("back", "Send to back", sendBackIcon("sa-ico"), opts.onSendBack);
-  const groupBtn = make("group", "Group", icon("group", "sa-ico"), opts.onGroup);
-  const ungroupBtn = make("ungroup", "Ungroup", icon("ungroup", "sa-ico"), opts.onUngroup);
-  const lockBtn = make("lock", "Lock", icon("lock", "sa-ico"), opts.onLock);
-  const deleteBtn = make("delete", "Delete", icon("trash", "sa-ico"), opts.onDelete);
+  const frontBtn = make(
+    "front",
+    "common.bringToFront",
+    bringFrontIcon("sa-ico"),
+    opts.onBringFront,
+  );
+  const backBtn = make("back", "common.sendToBack", sendBackIcon("sa-ico"), opts.onSendBack);
+  const groupBtn = make("group", "common.group", icon("group", "sa-ico"), opts.onGroup);
+  const ungroupBtn = make("ungroup", "common.ungroup", icon("ungroup", "sa-ico"), opts.onUngroup);
+  const lockBtn = make("lock", "common.lock", icon("lock", "sa-ico"), opts.onLock);
+  const deleteBtn = make("delete", "common.delete", icon("trash", "sa-ico"), opts.onDelete);
   deleteBtn.classList.add("sa-danger");
 
   row.append(
-    make("duplicate", "Duplicate", icon("copy", "sa-ico"), opts.onDuplicate),
-    make("rotate", "Rotate 15°", icon("rotate", "sa-ico"), opts.onRotate),
+    make("duplicate", "common.duplicate", icon("copy", "sa-ico"), opts.onDuplicate),
+    make("rotate", "selection.rotate", icon("rotate", "sa-ico"), opts.onRotate),
     frontBtn,
     backBtn,
     groupBtn,
@@ -86,16 +87,19 @@ export function createSelectionBar(opts: SelectionBarOpts): SelectionBar {
   bar.append(row);
   wireSheetHandle(bar, ensureSheetHandle(bar)); // grab-handle drag-to-collapse (prepends the handle)
   (document.querySelector(".sheet-wrap") ?? document.body).appendChild(bar);
+  applyTranslations(bar); // fill in the icon-button titles + aria for the active locale
 
   return {
     update(state: SelectionBarState): void {
       const wasHidden = bar.classList.contains("hidden");
       bar.classList.toggle("hidden", !state.visible);
       if (state.visible && wasHidden) bar.classList.remove("collapsed"); // a fresh selection re-expands
-      const lockLabel = state.locked ? "Unlock" : "Lock";
+      const lockKey = state.locked ? "common.unlock" : "common.lock";
       lockBtn.innerHTML = icon(state.locked ? "unlock" : "lock", "sa-ico");
-      lockBtn.title = lockLabel;
-      lockBtn.setAttribute("aria-label", lockLabel);
+      lockBtn.dataset.i18nTitle = lockKey;
+      lockBtn.dataset.i18nAria = lockKey;
+      lockBtn.title = t(lockKey);
+      lockBtn.setAttribute("aria-label", t(lockKey));
       frontBtn.style.display = state.canReorder ? "" : "none"; // z-order only when overlapping
       backBtn.style.display = state.canReorder ? "" : "none";
       groupBtn.style.display = state.canGroup ? "" : "none";

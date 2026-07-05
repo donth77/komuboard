@@ -25,6 +25,7 @@
  */
 import { animate } from "motion";
 import { initials, safePhotoUrl } from "./util";
+import { t as translate, tc } from "./i18n";
 
 export interface PresencePerson {
   id: string;
@@ -122,7 +123,7 @@ export class CoAvatarPresenceRow extends HTMLElement {
   #paint(el: HTMLElement, p: PresencePerson): void {
     el.style.setProperty("--av", p.color);
     el.classList.toggle("self", p.me);
-    const label = p.me ? `${p.name} (you)` : p.name;
+    const label = p.me ? translate("presence.you", { name: p.name }) : p.name;
     el.dataset.tip = label; // unified hover pill (drops below — top-edge; see styles.css)
     el.setAttribute("aria-label", label); // keep the accessible name (data-tip is visual only)
     const photo = safePhotoUrl(p.photo);
@@ -179,8 +180,8 @@ export class CoAvatarPresenceRow extends HTMLElement {
         more.setAttribute("tabindex", "0");
         more.setAttribute("aria-haspopup", "true");
       }
-      more.textContent = `+${extra}`;
-      more.setAttribute("aria-label", `Show ${extra} more ${extra === 1 ? "person" : "people"}`);
+      more.textContent = translate("presence.overflowChip", { count: extra });
+      more.setAttribute("aria-label", tc("presence.showMore", extra));
       this.appendChild(more);
     } else if (more) {
       more.remove();
@@ -237,7 +238,7 @@ export class CoAvatarPresenceRow extends HTMLElement {
     const pop = document.createElement("div");
     pop.className = "presence-overflow";
     pop.setAttribute("role", "menu");
-    pop.setAttribute("aria-label", "More collaborators");
+    pop.setAttribute("aria-label", translate("presence.moreCollaborators"));
     for (const p of overflow) {
       const item = document.createElement("div");
       item.className = "po-item";

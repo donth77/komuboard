@@ -6,6 +6,7 @@
 // It deliberately stays silent during the very first connect (a long initial connect / unreachable
 // server is the separate "loading + error room states" slice): the banner only speaks up once we've
 // been connected at least once. A short show-delay avoids flashing on sub-second blips.
+import { t } from "../i18n";
 import type { ConnectionStatus } from "../store";
 
 export interface ConnectionBanner {
@@ -39,8 +40,8 @@ export function createConnectionBanner(): ConnectionBanner {
     node.dataset.mode = mode;
     node.innerHTML =
       mode === "reconnecting"
-        ? '<span class="conn-spinner" aria-hidden="true"></span><span>Reconnecting…</span>'
-        : '<span class="conn-check" aria-hidden="true">✓</span><span>Back online</span>';
+        ? `<span class="conn-spinner" aria-hidden="true"></span><span>${t("status.reconnecting")}</span>`
+        : `<span class="conn-check" aria-hidden="true">✓</span><span>${t("status.backOnline")}</span>`;
     // Trigger the enter transition SYNCHRONOUSLY (forced reflow), not via requestAnimationFrame:
     // rAF callbacks are paused in a backgrounded tab, so a reconnect while the tab is hidden would
     // defer adding `in` until the tab is refocused — by which point the auto-hide timeout has

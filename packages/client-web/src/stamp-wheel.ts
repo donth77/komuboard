@@ -7,6 +7,7 @@
 // emits `stamp-picker-open`. Light DOM; styled by .komu-stamp-wheel rules in styles.css.
 import { paintAvatar, initials, safePhotoUrl } from "./util";
 import { emojiStickerUrl, cachedEmojiSticker } from "./emoji-sticker";
+import { applyTranslations, t } from "./i18n";
 
 type Profile = { name: string; color: string; photo?: string };
 
@@ -14,15 +15,16 @@ type Profile = { name: string; color: string; photo?: string };
 // avatar slot (9:00) renders the user's photo / initials instead of a masked mark.
 // The colour + white sticker outline is baked into each SVG (scripts/make-mark-stickers), so the
 // wheel and the placed canvas image render the same sticker.
-const SLOTS: ReadonlyArray<{ key: string; file?: string; avatar?: boolean; label: string }> = [
-  { key: "mark:thumbs-up", file: "thumbs-up", label: "Thumbs up sticker" }, // 12:00
-  { key: "mark:one-plus", file: "one-plus", label: "Plus one sticker" }, // 1:30
-  { key: "mark:star", file: "star", label: "Star sticker" }, // 3:00
-  { key: "mark:question-mark", file: "question-mark", label: "Question mark sticker" }, // 4:30
-  { key: "mark:thumbs-down", file: "thumbs-down", label: "Thumbs down sticker" }, // 6:00
-  { key: "mark:sparkle", file: "sparkle", label: "Sparkle sticker" }, // 7:30
-  { key: "avatar", avatar: true, label: "Your avatar sticker" }, // 9:00
-  { key: "mark:heart", file: "heart", label: "Heart sticker" }, // 10:30
+// labelKey → the i18n key (en.ts) for the slot's aria-label (`key` is the stamp src, not the i18n key).
+const SLOTS: ReadonlyArray<{ key: string; file?: string; avatar?: boolean; labelKey: string }> = [
+  { key: "mark:thumbs-up", file: "thumbs-up", labelKey: "stamp.thumbsUp" }, // 12:00
+  { key: "mark:one-plus", file: "one-plus", labelKey: "stamp.onePlus" }, // 1:30
+  { key: "mark:star", file: "star", labelKey: "stamp.star" }, // 3:00
+  { key: "mark:question-mark", file: "question-mark", labelKey: "stamp.question" }, // 4:30
+  { key: "mark:thumbs-down", file: "thumbs-down", labelKey: "stamp.thumbsDown" }, // 6:00
+  { key: "mark:sparkle", file: "sparkle", labelKey: "stamp.sparkle" }, // 7:30
+  { key: "avatar", avatar: true, labelKey: "stamp.avatar" }, // 9:00
+  { key: "mark:heart", file: "heart", labelKey: "stamp.heart" }, // 10:30
 ];
 
 // Popular starter set (no heart — the wheel already has a heart mark): 😂 🔥 🎉 🙏 😎
@@ -73,7 +75,7 @@ export class CoStampWheel extends HTMLElement {
     if (this.#wired) return;
     this.#wired = true;
     this.setAttribute("role", "group");
-    this.setAttribute("aria-label", "Stamp picker");
+    this.setAttribute("data-i18n-aria", "stamp.picker");
     this.render();
     this.addEventListener("click", (e) => {
       const el = (e.target as HTMLElement).closest<HTMLElement>("[data-src],[data-plus]");
@@ -159,7 +161,7 @@ export class CoStampWheel extends HTMLElement {
     // with a name + `data-item` (a roving-tabindex member). Mouse still clicks the wedges beneath.
     const icons = SLOTS.map((s, i) => {
       const pos = ringStyle(i, SLOTS.length, ICON_R);
-      const a11y = `role="button" aria-label="${s.label}" data-src="${s.key}" data-item tabindex="-1"`;
+      const a11y = `role="button" data-i18n-aria="${s.labelKey}" data-src="${s.key}" data-item tabindex="-1"`;
       return s.avatar
         ? `<span class="sw-avatar" ${a11y} style="${pos}"></span>`
         : `<img class="sw-ico" src="/stamps/${s.file}.svg" alt="" draggable="false" ${a11y} style="${pos}">`;
@@ -173,9 +175,10 @@ export class CoStampWheel extends HTMLElement {
         } catch {
           /* keep the generic label */
         }
+        const label = char ? t("emoji.labeled", { emoji: char }) : t("emoji.generic");
         return (
           `<button class="sw-emoji" type="button" data-src="emoji:${cp}" data-item tabindex="-1" ` +
-          `aria-label="${char ? char + " emoji" : "Emoji"}" style="${ringStyle(i, recents.length, 14)}">` +
+          `aria-label="${label}" style="${ringStyle(i, recents.length, 14)}">` +
           `<img src="/emoji/${cp}.svg" alt="" draggable="false"></button>`
         );
       })
@@ -186,8 +189,9 @@ export class CoStampWheel extends HTMLElement {
       icons +
       `<div class="sw-inner"></div>` +
       emojis +
-      `<button class="sw-plus" type="button" data-plus data-item tabindex="-1" aria-label="More emoji">` +
+      `<button class="sw-plus" type="button" data-plus data-item tabindex="-1" data-i18n-aria="emoji.more">` +
       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`;
+    applyTranslations(this); // translate the freshly-built slot + "+" aria-labels for the active locale
     this.paintAvatarSlot();
     this.upgradeEmojiStickers();
     this.applyActive();

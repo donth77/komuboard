@@ -4,6 +4,8 @@
 // eyedropper. Driven by the `value` property (a hex string); reports live edits
 // via a `color-change` event. Reuses the global `.color-picker` styles. ADR-0005.
 
+import { applyTranslations } from "./i18n";
+
 function clamp01(n: number): number {
   return n < 0 ? 0 : n > 1 ? 1 : n;
 }
@@ -95,15 +97,16 @@ export class CoColorPicker extends HTMLElement {
     this.innerHTML =
       '<div class="cp-top">' +
       (ED
-        ? '<button class="cp-eyedropper" type="button" data-tip="Pick from screen" aria-label="Eyedropper">' +
+        ? '<button class="cp-eyedropper" type="button" data-i18n-tip="picker.pickFromScreen" data-i18n-aria="picker.eyedropper">' +
           '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 0 1 3 3L18 9l.4.4a2.1 2.1 0 0 1 0 3 2.1 2.1 0 0 1-3 0l-3.8-3.8a2.1 2.1 0 0 1 0-3 2.1 2.1 0 0 1 3 0Z"/></svg></button>'
         : "") +
-      '<input class="cp-hex" type="text" spellcheck="false" aria-label="Hex colour" />' +
+      '<input class="cp-hex" type="text" spellcheck="false" data-i18n-aria="picker.hex" />' +
       "</div>" +
-      '<div class="cp-hue" data-hue tabindex="0" role="slider" aria-label="Hue" aria-valuemin="0" aria-valuemax="360">' +
+      '<div class="cp-hue" data-hue tabindex="0" role="slider" data-i18n-aria="picker.hue" aria-valuemin="0" aria-valuemax="360">' +
       '<div class="cp-thumb" data-hue-thumb></div></div>' +
-      '<div class="cp-sv" data-sv tabindex="0" role="slider" aria-label="Saturation and brightness" aria-valuemin="0" aria-valuemax="100">' +
+      '<div class="cp-sv" data-sv tabindex="0" role="slider" data-i18n-aria="picker.satBright" aria-valuemin="0" aria-valuemax="100">' +
       '<div class="cp-thumb cp-sv-thumb" data-sv-thumb></div></div>';
+    applyTranslations(this);
 
     const sv = this.querySelector<HTMLElement>("[data-sv]");
     const hue = this.querySelector<HTMLElement>("[data-hue]");

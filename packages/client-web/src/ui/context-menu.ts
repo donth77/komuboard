@@ -2,6 +2,7 @@
 // "canvas" variant (paste / select all / zoom). Built fresh per open (like the app menu), positioned
 // at the pointer and clamped into the viewport; dismissed by click-away, Escape, wheel, or an action.
 
+import { applyTranslations } from "../i18n";
 import { MOD_KEY, SHIFT_KEY } from "../platform";
 
 export interface ContextMenuActions {
@@ -34,6 +35,8 @@ export interface ContextMenu {
 
 interface Item {
   label: string;
+  /** i18n key (en.ts) — drives the visible label via the data-i18n sweep. */
+  key: string;
   hint?: string;
   act: keyof ContextMenuActions;
   disabled?: boolean;
@@ -71,42 +74,78 @@ export function createContextMenu(actions: ContextMenuActions): ContextMenu {
       kind === "object"
         ? [
             [
-              { label: "Cut", hint: `${MOD_KEY} X`, act: "cut" },
-              { label: "Copy", hint: `${MOD_KEY} C`, act: "copy" },
-              { label: "Paste", hint: `${MOD_KEY} V`, act: "paste", disabled: !actions.canPaste() },
-              { label: "Duplicate", act: "duplicate" },
+              { label: "Cut", key: "menu.cut", hint: `${MOD_KEY} X`, act: "cut" },
+              { label: "Copy", key: "menu.copy", hint: `${MOD_KEY} C`, act: "copy" },
+              {
+                label: "Paste",
+                key: "menu.paste",
+                hint: `${MOD_KEY} V`,
+                act: "paste",
+                disabled: !actions.canPaste(),
+              },
+              { label: "Duplicate", key: "common.duplicate", act: "duplicate" },
             ],
             [
-              { label: "Bring to front", hint: `${MOD_KEY} ]`, act: "bringToFront" },
-              { label: "Send to back", hint: `${MOD_KEY} [`, act: "sendToBack" },
+              {
+                label: "Bring to front",
+                key: "common.bringToFront",
+                hint: `${MOD_KEY} ]`,
+                act: "bringToFront",
+              },
+              {
+                label: "Send to back",
+                key: "common.sendToBack",
+                hint: `${MOD_KEY} [`,
+                act: "sendToBack",
+              },
             ],
             [
               ...(meta.grouped
                 ? [
                     {
                       label: "Ungroup",
+                      key: "common.ungroup",
                       hint: `${MOD_KEY} ${SHIFT_KEY} G`,
                       act: "ungroup",
                     } satisfies Item,
                   ]
                 : []),
               ...(!meta.grouped && meta.count >= 2
-                ? [{ label: "Group", hint: `${MOD_KEY} G`, act: "group" } satisfies Item]
+                ? [
+                    {
+                      label: "Group",
+                      key: "common.group",
+                      hint: `${MOD_KEY} G`,
+                      act: "group",
+                    } satisfies Item,
+                  ]
                 : []),
               {
                 label: meta.locked ? "Unlock" : "Lock",
+                key: meta.locked ? "common.unlock" : "common.lock",
                 hint: `${MOD_KEY} L`,
                 act: "toggleLock",
               },
             ],
-            [{ label: "Delete", hint: "Del", act: "remove" }],
+            [{ label: "Delete", key: "common.delete", hint: "Del", act: "remove" }],
           ]
         : [
             [
-              { label: "Paste", hint: `${MOD_KEY} V`, act: "paste", disabled: !actions.canPaste() },
-              { label: "Select all", hint: `${MOD_KEY} A`, act: "selectAll" },
+              {
+                label: "Paste",
+                key: "menu.paste",
+                hint: `${MOD_KEY} V`,
+                act: "paste",
+                disabled: !actions.canPaste(),
+              },
+              {
+                label: "Select all",
+                key: "menu.selectAll",
+                hint: `${MOD_KEY} A`,
+                act: "selectAll",
+              },
             ],
-            [{ label: "Zoom to fit", act: "zoomToFit" }],
+            [{ label: "Zoom to fit", key: "menu.zoomToFit", act: "zoomToFit" }],
           ];
 
     el = document.createElement("div");
@@ -118,7 +157,7 @@ export function createContextMenu(actions: ContextMenuActions): ContextMenu {
         g
           .map(
             (it) =>
-              `<button type="button" class="ctx-item" role="menuitem" data-act="${it.act}"${it.disabled ? " disabled" : ""}><span>${it.label}</span>${it.hint ? `<span class="ctx-kbd">${it.hint}</span>` : ""}</button>`,
+              `<button type="button" class="ctx-item" role="menuitem" data-act="${it.act}"${it.disabled ? " disabled" : ""}><span data-i18n="${it.key}">${it.label}</span>${it.hint ? `<span class="ctx-kbd">${it.hint}</span>` : ""}</button>`,
           )
           .join(""),
       )
@@ -132,6 +171,7 @@ export function createContextMenu(actions: ContextMenuActions): ContextMenu {
       if (act !== "canPaste") (fn as () => void)();
     });
     document.body.appendChild(el);
+    applyTranslations(el); // translate the freshly-built items before measuring for the viewport clamp
     // Clamp into the viewport (measure once after append; flip away from the near edges).
     const r = el.getBoundingClientRect();
     const px = Math.min(x, window.innerWidth - r.width - 8);

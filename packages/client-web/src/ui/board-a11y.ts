@@ -11,6 +11,8 @@ import { objectsMap, orderArray, readObject, type BoardObject } from "@komuboard
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
+import { onLocaleChange, t, tc } from "../i18n";
+
 export interface BoardA11yOptions {
   doc: Y.Doc;
   awareness: Awareness;
@@ -35,38 +37,43 @@ function objectLabel(o: BoardObject): string {
   switch (o.type) {
     case "text": {
       const text = truncate((o.runs ?? []).map((r) => r.text).join(""));
-      const kind = o.shape ?? (o.bg ? "sticky note" : "text");
-      return text ? `${kind}: ${text}` : `empty ${kind}`;
+      const kind = o.shape
+        ? t(`shape.${o.shape}`)
+        : t(o.bg ? "a11y.objStickyNote" : "a11y.objText");
+      return text ? t("a11y.objLabeled", { kind, text }) : t("a11y.objEmpty", { kind });
     }
     case "stroke":
-      return "freehand drawing";
+      return t("a11y.objStroke");
     case "connector":
-      return "connector";
+      return t("a11y.objConnector");
     case "image":
-      return "image";
+      return t("a11y.objImage");
     case "stamp":
-      return (o.src ?? "").startsWith("emoji:") ? "emoji sticker" : "sticker";
+      return (o.src ?? "").startsWith("emoji:") ? t("a11y.objEmojiSticker") : t("a11y.objSticker");
     default:
-      return "object";
+      return t("a11y.objGeneric");
   }
 }
 
 export function createBoardA11y(opts: BoardA11yOptions): BoardA11y {
   // The board is a labelled application surface; the mirror carries the actual content for AT.
-  opts.board.setAttribute("aria-roledescription", "whiteboard");
-  if (!opts.board.getAttribute("aria-label"))
-    opts.board.setAttribute("aria-label", "Collaborative whiteboard");
+  const applyChrome = (): void => {
+    opts.board.setAttribute("aria-roledescription", t("a11y.roleDescription"));
+    opts.board.setAttribute("aria-label", t("a11y.boardLabel"));
+    mirror.setAttribute("aria-label", t("a11y.mirrorLabel"));
+  };
   opts.board.setAttribute("aria-describedby", "board-a11y-mirror-hint");
 
   const mirror = document.createElement("section");
   mirror.id = "board-a11y-mirror";
   mirror.className = "sr-only";
-  mirror.setAttribute("aria-label", "Board content");
   mirror.tabIndex = -1;
   const hint = document.createElement("p");
   hint.id = "board-a11y-mirror-hint";
   const list = document.createElement("ul");
   mirror.append(hint, list);
+
+  applyChrome();
 
   const announcer = document.createElement("div");
   announcer.className = "sr-only";
@@ -120,11 +127,10 @@ export function createBoardA11y(opts: BoardA11yOptions): BoardA11y {
     const selectable = !!opts.selectObject;
     hint.textContent =
       items.length === 0
-        ? "The board is empty."
-        : `${items.length} object${items.length === 1 ? "" : "s"} on the board` +
-          (selectable
-            ? ". Focus one to select it, then edit it with the keyboard."
-            : ", listed below.");
+        ? t("a11y.empty")
+        : selectable
+          ? tc("a11y.hintSelectable", items.length)
+          : tc("a11y.hintListed", items.length);
     // Reconcile the <li><button> set in place (cheap; the list is small and updates are debounced).
     while (list.children.length > items.length) list.lastElementChild?.remove();
     while (list.children.length < items.length) {
@@ -158,23 +164,30 @@ export function createBoardA11y(opts: BoardA11yOptions): BoardA11y {
   // ---- presence announcer: who joined / left (the multiplayer dimension AT users can't see) ----
   const nameOf = (id: number): string => {
     const st = opts.awareness.getStates().get(id) as { user?: unknown } | undefined;
-    return typeof st?.user === "string" && st.user ? st.user : "Someone";
+    return typeof st?.user === "string" && st.user ? st.user : t("a11y.someone");
   };
   const onAwareness = (delta: { added: number[]; removed: number[] }): void => {
     const self = opts.awareness.clientID;
     const joined = delta.added.filter((id) => id !== self).map(nameOf);
     const left = delta.removed.filter((id) => id !== self).length;
-    if (joined.length === 1) announce(`${joined[0]} joined the board.`);
-    else if (joined.length > 1) announce(`${joined.length} people joined the board.`);
-    else if (left === 1) announce("Someone left the board.");
-    else if (left > 1) announce(`${left} people left the board.`);
+    if (joined.length === 1) announce(t("a11y.joined", { name: joined[0]! }));
+    else if (joined.length > 1) announce(t("a11y.joinedMany", { count: joined.length }));
+    else if (left === 1) announce(t("a11y.someoneLeft"));
+    else if (left > 1) announce(t("a11y.leftMany", { count: left }));
   };
   opts.awareness.on("change", onAwareness);
+
+  // Re-translate everything on a language switch (a locale change fires no doc update).
+  const offLocale = onLocaleChange(() => {
+    applyChrome();
+    rebuild();
+  });
 
   return {
     destroy() {
       opts.doc.off("update", scheduleRebuild);
       opts.awareness.off("change", onAwareness);
+      offLocale();
       window.clearTimeout(rebuildTimer);
       window.clearTimeout(announceTimer);
       mirror.remove();

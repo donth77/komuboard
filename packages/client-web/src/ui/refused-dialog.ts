@@ -2,6 +2,7 @@
 // limited) so we stop retrying forever and explain why, instead of an endless "Reconnecting…".
 import { CLOSE_ROOM_FULL, MAX_CONNECTIONS } from "@komuboard/shared";
 import { type CoDialog, createDialog } from "../dialog";
+import { t } from "../i18n";
 
 export interface RefusedDialogOpts {
   /** Re-attempt the connection (reconnect the provider). */
@@ -27,12 +28,12 @@ export function createRefusedDialog(opts: RefusedDialogOpts): RefusedDialog {
       body.className = "refused-body";
       const title = document.createElement("p");
       title.className = "refused-title";
-      title.textContent = full ? "This room is full" : "You were disconnected";
+      title.textContent = full ? t("refused.roomFullTitle") : t("refused.disconnectedTitle");
       const sub = document.createElement("p");
       sub.className = "refused-sub";
       sub.textContent = full
-        ? `Up to ${MAX_CONNECTIONS} people can edit a board at once. Try again in a moment, or start a new board.`
-        : "You were sending updates too quickly and got disconnected. This usually clears up right away.";
+        ? t("refused.roomFullBody", { max: MAX_CONNECTIONS })
+        : t("refused.rateLimitBody");
       body.append(title, sub);
 
       const footer = document.createElement("div");
@@ -41,14 +42,14 @@ export function createRefusedDialog(opts: RefusedDialogOpts): RefusedDialog {
         const fresh = document.createElement("button");
         fresh.type = "button";
         fresh.className = "btn-ghost";
-        fresh.textContent = "New board";
+        fresh.textContent = t("refused.newBoard");
         fresh.addEventListener("click", () => opts.onNewBoard());
         footer.appendChild(fresh);
       }
       const retry = document.createElement("button");
       retry.type = "button";
       retry.className = "btn-primary";
-      retry.textContent = full ? "Try again" : "Reconnect";
+      retry.textContent = full ? t("refused.tryAgain") : t("refused.reconnect");
       retry.addEventListener("click", () => {
         dialog?.close();
         opts.onRetry();
@@ -56,7 +57,7 @@ export function createRefusedDialog(opts: RefusedDialogOpts): RefusedDialog {
       footer.appendChild(retry);
 
       dialog = createDialog({
-        title: full ? "Room full" : "Disconnected",
+        title: full ? t("refused.roomFullDialogTitle") : t("refused.disconnectedDialogTitle"),
         body,
         footer,
         width: 360,
