@@ -44,13 +44,10 @@ enabled = true
 binding = "ASSET_INDEX"
 id = "cbf56a7888d54d62a3d39d03dc4bd395"
 
-# NOTE (2026-07-05): Cloudflare's schedules API is intermittently rejecting the cron registration via
-# wrangler (HTTP 400), which makes `wrangler deploy` exit 1 on the trigger step even though the worker
-# itself deploys fine. Keeping `crons` here would break every deploy + CI, so the weekly trigger is set
-# in the DASHBOARD instead: Workers & Pages → komuboard-worker → Settings → Triggers → Cron Triggers →
-# add "0 4 * * 0". Re-add the block here once the API stops 400-ing.
-# [triggers]
-# crons = ["0 4 * * 0"]   # weekly, Sunday 04:00 UTC
+# Weekly orphan-image sweep. NB: Cloudflare's cron parser uses 1-7 / SUN-SAT for day-of-week and
+# rejects "0" for Sunday — "0 4 * * 0" is what 400'd earlier, NOT a transient API issue. Use "SUN".
+[triggers]
+crons = ["0 4 * * SUN"] # Sunday 04:00 UTC
 
 # Per-IP rate limit for the /upload endpoint (an unauthenticated POST that stores 5MB blobs in R2).
 # Cloudflare's native rate-limiting binding: 30 uploads / 60s / IP. The binding is optional in code,
