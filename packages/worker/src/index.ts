@@ -2,6 +2,7 @@ import { routePartykitRequest } from "partyserver";
 import { MAX_UPLOAD_BYTES, UPLOAD_IMAGE_EXT } from "@komuboard/shared";
 import { Board } from "./board";
 import { sniffImage } from "./image-sniff";
+import { keysToSweep, sweepIsSafe, type R2ObjectInfo } from "./reap-assets";
 
 // The Durable Object class must be exported from the Worker entry module.
 export { Board };
@@ -15,6 +16,9 @@ export interface Env {
   UPLOAD_RL?: { limit(o: { key: string }): Promise<{ success: boolean }> };
   /** Per-IP room-join (WS connect) rate limiter — bounds room-id enumeration. Optional in dev. */
   JOIN_RL?: { limit(o: { key: string }): Promise<{ success: boolean }> };
+  /** KV room→referenced-image-keys index (each Board DO writes its own entry on save); read by the
+   *  scheduled orphan-image sweep. Optional: absent in local dev, where the sweep no-ops. */
+  ASSET_INDEX?: KVNamespace;
 }
 
 // Image-upload guards (MAX_UPLOAD_BYTES + the type→ext allow-list) live in @komuboard/shared so the
@@ -94,6 +98,64 @@ async function handleServe(key: string, env: Env): Promise<Response> {
   return new Response(obj.body, { headers });
 }
 
+/** Periodic orphan-image sweep (SEC-R2): delete R2 images referenced by no live room and older than
+ *  the grace window. The referenced set is the union of every room's KV index entry (written by the
+ *  Board DO on save). Heavily guarded — this deletes user data:
+ *   - ABORT if the KV index is unreadable (never treat "can't read" as "nothing referenced").
+ *   - ABORT if the index is empty (0 rooms) while R2 has objects (index lost / not yet populated).
+ *   - ABORT if the decision would delete > half the bucket (circuit breaker).
+ *   - the grace window in keysToSweep spares freshly-uploaded (not-yet-saved) images. */
+async function sweepOrphanImages(env: Env): Promise<void> {
+  const kv = env.ASSET_INDEX;
+  if (!kv) {
+    console.warn("[sweep] ASSET_INDEX not bound — skipping orphan-image sweep");
+    return;
+  }
+
+  const referenced = new Set<string>();
+  let rooms = 0;
+  try {
+    let cursor: string | undefined;
+    do {
+      const page = await kv.list({ prefix: "room:", cursor });
+      for (const k of page.keys) {
+        rooms++;
+        const val = await kv.get(k.name);
+        if (val) for (const key of JSON.parse(val) as string[]) referenced.add(key);
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+  } catch (err) {
+    console.error("[sweep] aborting — asset index unreadable:", err);
+    return;
+  }
+
+  const objects: R2ObjectInfo[] = [];
+  let r2cursor: string | undefined;
+  do {
+    const listed = await env.UPLOADS.list({ cursor: r2cursor });
+    for (const o of listed.objects) objects.push({ key: o.key, uploaded: o.uploaded.getTime() });
+    r2cursor = listed.truncated ? listed.cursor : undefined;
+  } while (r2cursor);
+
+  const doomed = keysToSweep(referenced, objects, Date.now());
+  if (rooms === 0 && objects.length > 0) {
+    console.error(
+      `[sweep] aborting — index empty (0 rooms) but R2 holds ${objects.length} objects`,
+    );
+    return;
+  }
+  if (!sweepIsSafe(doomed.length, objects.length)) {
+    console.error(`[sweep] aborting — would delete ${doomed.length}/${objects.length} (>50%)`);
+    return;
+  }
+
+  for (let i = 0; i < doomed.length; i += 1000) await env.UPLOADS.delete(doomed.slice(i, i + 1000));
+  console.log(
+    `[sweep] deleted ${doomed.length} orphan image(s) — ${objects.length} R2 objects, ${rooms} rooms, ${referenced.size} referenced`,
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -139,5 +201,9 @@ export default {
     return new Response("Not found — connect a WebSocket to /parties/main/:roomId", {
       status: 404,
     });
+  },
+  /** Cron entry point for the orphan-image sweep — schedule in wrangler.toml [triggers]. */
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await sweepOrphanImages(env);
   },
 } satisfies ExportedHandler<Env>;

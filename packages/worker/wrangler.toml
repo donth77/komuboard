@@ -35,6 +35,23 @@ bucket_name = "komuboard-uploads"
 [observability]
 enabled = true
 
+# ── Orphan-image sweep (SEC-R2) — DISABLED until enabled deliberately ────────────────────────────
+# The code ships live and is safe while unbound: the Board DO's index writes AND the scheduled sweep
+# both no-op when ASSET_INDEX is absent. Left commented so a placeholder namespace id can't block an
+# unrelated `wrangler deploy`. TO TURN ON:
+#   1. wrangler kv namespace create ASSET_INDEX
+#   2. paste the returned id below and uncomment BOTH blocks
+#   3. wrangler deploy   (early sweeps abort safely until rooms save + populate the index)
+# The DO writes room→image-keys to KV on save; the weekly scheduled() handler unions them and deletes
+# R2 objects referenced by no room and older than the 7-day grace window (with hard aborts on an
+# empty/unreadable index and a >50% circuit breaker).
+# [[kv_namespaces]]
+# binding = "ASSET_INDEX"
+# id = "PASTE_KV_NAMESPACE_ID_HERE"
+#
+# [triggers]
+# crons = ["0 4 * * 0"]   # weekly, Sunday 04:00 UTC
+
 # Per-IP rate limit for the /upload endpoint (an unauthenticated POST that stores 5MB blobs in R2).
 # Cloudflare's native rate-limiting binding: 30 uploads / 60s / IP. The binding is optional in code,
 # so local dev / miniflare without it simply skips the check.

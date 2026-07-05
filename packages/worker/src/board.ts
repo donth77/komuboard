@@ -3,6 +3,7 @@ import type { Connection, ConnectionContext, WSMessage } from "partyserver";
 import { encodeDocUpdate, loadStoredDoc } from "./persistence";
 import { CLOSE_RATE_LIMIT, CLOSE_ROOM_FULL, ConnectionLimiter, overCapacity } from "./abuse-guard";
 import { REAP_TTL_MS, shouldRearmReap } from "./reap";
+import { collectImageKeys } from "./reap-assets";
 
 /**
  * Board — one Durable Object per room, hosting the room's single Yjs document
@@ -58,6 +59,27 @@ export class Board extends YServer {
     }
   }
 
+  /** The KV asset index binding, if configured (absent in local dev → asset indexing no-ops). */
+  #assetKv(): KVNamespace | undefined {
+    return (this.env as { ASSET_INDEX?: KVNamespace }).ASSET_INDEX;
+  }
+
+  /** Maintain this room's entry in the KV asset index — the image keys it references — so the periodic
+   *  orphan-image sweep knows which R2 objects are still live. Best-effort: a missing binding (dev) or
+   *  a transient KV error must NEVER fail a save. */
+  async #indexAssets(): Promise<void> {
+    const kv = this.#assetKv();
+    if (!kv) return;
+    try {
+      const keys = collectImageKeys(this.document);
+      const name = `room:${this.name}`;
+      if (keys.length) await kv.put(name, JSON.stringify(keys));
+      else await kv.delete(name); // room references no images → drop the entry
+    } catch (err) {
+      console.error("[board] asset-index update failed:", err);
+    }
+  }
+
   // The reap alarm fired (PartyServer's alarm() recovers the DO name first, then delegates here). If
   // anyone is still connected the room is in use → push the TTL out again; otherwise it's been
   // inactive for REAP_TTL, so drop its persisted snapshot. deleteAll clears the SQLite doc + the
@@ -69,6 +91,16 @@ export class Board extends YServer {
     }
     console.log("[board] reaping room after 90d of inactivity");
     await this.ctx.storage.deleteAll();
+    // Drop the room's asset-index entry too → its images become unreferenced and the next sweep
+    // reclaims them (subject to the grace window). Best-effort; a KV hiccup just defers cleanup.
+    const kv = this.#assetKv();
+    if (kv) {
+      try {
+        await kv.delete(`room:${this.name}`);
+      } catch (err) {
+        console.error("[board] asset-index reap-delete failed:", err);
+      }
+    }
   }
 
   // Per-connection rate limit: allow → hand to Yjs; drop → swallow (Yjs resyncs on the next exchange);
@@ -144,5 +176,6 @@ export class Board extends YServer {
       blob,
     );
     await this.scheduleReap(); // an edit is activity → reset the inactivity TTL
+    await this.#indexAssets(); // keep the orphan-image sweep's reference index current
   }
 }
