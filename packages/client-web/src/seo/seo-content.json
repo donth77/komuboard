@@ -1,0 +1,50 @@
+{
+  "en": {
+    "title": "Komuboard — Free Collaborative Whiteboard",
+    "description": "A free, no-signup collaborative whiteboard for brainstorming, diagramming, and planning together in real time — in your browser and in VR.",
+    "tagline": "Free real-time collaborative whiteboard",
+    "about": "Komuboard is a free collaborative whiteboard. Brainstorm, sketch diagrams, drop sticky notes, and plan together in real time — no signup, just share a link. Works in any browser and in VR."
+  },
+  "es": {
+    "title": "Komuboard — Pizarra colaborativa gratis",
+    "description": "Una pizarra colaborativa gratuita y sin registro para hacer lluvias de ideas, diagramas y planificar en tiempo real, desde el navegador y en RV.",
+    "tagline": "Pizarra colaborativa en tiempo real",
+    "about": "Komuboard es una pizarra colaborativa gratuita. Haz lluvias de ideas, dibuja diagramas, añade notas adhesivas y planifica en tiempo real, sin registro: solo comparte un enlace. Funciona en cualquier navegador y en RV."
+  },
+  "fr": {
+    "title": "Komuboard — Tableau blanc collaboratif gratuit",
+    "description": "Un tableau blanc collaboratif gratuit et sans inscription pour le brainstorming, les diagrammes et la planification en temps réel, dans le navigateur et en RV.",
+    "tagline": "Tableau blanc collaboratif en temps réel",
+    "about": "Komuboard est un tableau blanc collaboratif gratuit. Faites du brainstorming, dessinez des diagrammes, ajoutez des pense-bêtes et planifiez en temps réel, sans inscription : partagez simplement un lien. Fonctionne dans tout navigateur et en RV."
+  },
+  "de": {
+    "title": "Komuboard — Kostenloses kollaboratives Whiteboard",
+    "description": "Ein kostenloses kollaboratives Whiteboard ohne Anmeldung für Brainstorming, Diagramme und Planung in Echtzeit – im Browser und in VR.",
+    "tagline": "Kollaboratives Whiteboard in Echtzeit",
+    "about": "Komuboard ist ein kostenloses kollaboratives Whiteboard. Brainstormen Sie, zeichnen Sie Diagramme, fügen Sie Haftnotizen hinzu und planen Sie gemeinsam in Echtzeit – ohne Anmeldung, einfach einen Link teilen. Funktioniert in jedem Browser und in VR."
+  },
+  "pt-BR": {
+    "title": "Komuboard — Quadro branco colaborativo grátis",
+    "description": "Um quadro branco colaborativo gratuito e sem cadastro para brainstorming, diagramas e planejamento em tempo real, no navegador e em RV.",
+    "tagline": "Quadro branco colaborativo em tempo real",
+    "about": "O Komuboard é um quadro branco colaborativo gratuito. Faça brainstorming, desenhe diagramas, adicione notas adesivas e planeje em tempo real, sem cadastro: basta compartilhar um link. Funciona em qualquer navegador e em RV."
+  },
+  "ja": {
+    "title": "Komuboard — 無料のコラボレーションホワイトボード",
+    "description": "登録不要・無料のコラボレーションホワイトボード。ブレインストーミング、図の作成、リアルタイムの共同編集をブラウザやVRで。",
+    "tagline": "リアルタイム共同編集ホワイトボード",
+    "about": "Komuboardは無料のコラボレーションホワイトボードです。ブレインストーミング、図の作成、付箋の追加、リアルタイムの共同作業が、登録不要でリンクを共有するだけ。あらゆるブラウザとVRで動作します。"
+  },
+  "zh": {
+    "title": "Komuboard — 免费协作白板",
+    "description": "免费、无需注册的协作白板，支持头脑风暴、绘制图表和实时协作规划，可在浏览器和 VR 中使用。",
+    "tagline": "实时协作白板",
+    "about": "Komuboard 是一款免费的协作白板。进行头脑风暴、绘制图表、添加便签并实时协作，无需注册，只需分享链接。可在任何浏览器和 VR 中使用。"
+  },
+  "ko": {
+    "title": "Komuboard — 무료 협업 화이트보드",
+    "description": "회원가입 없이 무료로 사용하는 협업 화이트보드. 브라우저와 VR에서 브레인스토밍, 다이어그램, 실시간 공동 작업을 지원합니다.",
+    "tagline": "실시간 협업 화이트보드",
+    "about": "Komuboard는 무료 협업 화이트보드입니다. 브레인스토밍, 다이어그램 그리기, 스티커 메모 추가, 실시간 공동 작업을 가입 없이 링크만 공유하면 됩니다. 모든 브라우저와 VR에서 작동합니다."
+  }
+}

@@ -82,6 +82,11 @@ export function detectLocale(): Locale {
   } catch {
     /* localStorage blocked (private mode) → fall through to browser languages */
   }
+  // A prerendered per-locale page (/es/, /ja/, …) injects its locale — honor it over browser
+  // detection so a deep SEO link boots in that language even for a differently-configured browser.
+  const injected = (globalThis as { __komuboardLocale?: string }).__komuboardLocale;
+  if (injected && (LOCALES as readonly string[]).includes(injected)) return injected as Locale;
+
   const langs =
     typeof navigator !== "undefined"
       ? (navigator.languages?.length ? navigator.languages : [navigator.language]).filter(Boolean)

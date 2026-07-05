@@ -68,6 +68,10 @@ declare global {
 // --------------------------------------------------------------------------
 // Theme: default to OS preference, follow it until the user picks, persist.
 // --------------------------------------------------------------------------
+// Drop the prerendered SEO splash (#seo-intro from the per-locale HTML) — the SPA is taking over.
+// Non-JS crawlers/LLMs keep seeing it; real visitors never do.
+document.getElementById("seo-intro")?.remove();
+
 const THEME_KEY = "komuboard-theme";
 type Theme = "light" | "dark";
 const darkMedia = window.matchMedia("(prefers-color-scheme: dark)");

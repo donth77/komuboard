@@ -6,7 +6,7 @@
   "description": "Komuboard 2D web client (Vite SPA). M0 shell: PartySocket round-trip + Zustand store + placeholder toolbar.",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/prerender-locales.mjs",
     "preview": "vite preview --port 5173",
     "typecheck": "tsc --noEmit"
   },
