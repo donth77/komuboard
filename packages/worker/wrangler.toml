@@ -35,20 +35,20 @@ bucket_name = "komuboard-uploads"
 [observability]
 enabled = true
 
-# ── Orphan-image sweep (SEC-R2) — DISABLED until enabled deliberately ────────────────────────────
-# The code ships live and is safe while unbound: the Board DO's index writes AND the scheduled sweep
-# both no-op when ASSET_INDEX is absent. Left commented so a placeholder namespace id can't block an
-# unrelated `wrangler deploy`. TO TURN ON:
-#   1. wrangler kv namespace create ASSET_INDEX
-#   2. paste the returned id below and uncomment BOTH blocks
-#   3. wrangler deploy   (early sweeps abort safely until rooms save + populate the index)
-# The DO writes room→image-keys to KV on save; the weekly scheduled() handler unions them and deletes
-# R2 objects referenced by no room and older than the 7-day grace window (with hard aborts on an
-# empty/unreadable index and a >50% circuit breaker).
-# [[kv_namespaces]]
-# binding = "ASSET_INDEX"
-# id = "PASTE_KV_NAMESPACE_ID_HERE"
-#
+# ── Orphan-image sweep (SEC-R2) — ENABLED ────────────────────────────────────────────────────────
+# Each Board DO writes room→referenced-image-keys to KV on save; the weekly scheduled() handler unions
+# them and deletes R2 objects referenced by no room and older than the 7-day grace window (hard aborts
+# on an empty/unreadable index + a >50% circuit breaker). Early runs abort safely until rooms populate
+# the index. The code no-ops if this binding is removed.
+[[kv_namespaces]]
+binding = "ASSET_INDEX"
+id = "cbf56a7888d54d62a3d39d03dc4bd395"
+
+# NOTE (2026-07-05): Cloudflare's schedules API is intermittently rejecting the cron registration via
+# wrangler (HTTP 400), which makes `wrangler deploy` exit 1 on the trigger step even though the worker
+# itself deploys fine. Keeping `crons` here would break every deploy + CI, so the weekly trigger is set
+# in the DASHBOARD instead: Workers & Pages → komuboard-worker → Settings → Triggers → Cron Triggers →
+# add "0 4 * * 0". Re-add the block here once the API stops 400-ing.
 # [triggers]
 # crons = ["0 4 * * 0"]   # weekly, Sunday 04:00 UTC
 
