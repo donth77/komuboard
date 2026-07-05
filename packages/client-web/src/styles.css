@@ -2128,6 +2128,10 @@ input[type="range"] {
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
+  /* The wheel isn't a .mini-sheet, so on mobile it inherits pointer-events:none from .sheet-wrap. The
+     outer wedges re-enable it themselves; these inner buttons (recent emojis + the "+") must too, or
+     taps fall through to the canvas behind. */
+  pointer-events: auto;
 }
 .sw-emoji {
   width: 40px;
