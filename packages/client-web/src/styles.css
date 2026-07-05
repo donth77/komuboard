@@ -867,6 +867,36 @@ body {
   font-weight: 600;
   color: var(--ink);
 }
+/* Language picker — reuses .set-row/.set-label so it lines up with Grid + Theme; the <select> is
+   styled (custom caret, tokens) to match the rest of the menu instead of the raw OS control. */
+.komu-lang-picker {
+  display: block;
+}
+.lang-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 30px 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background-color: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="%23586172" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+}
+.lang-select:hover {
+  border-color: var(--accent);
+}
+.lang-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 /* the grid seg fills the control column; the narrower theme switch sits centered in it
    so both rows' controls line up instead of the switch floating at the right edge */
 .set-row .theme-switch {

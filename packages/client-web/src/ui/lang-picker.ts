@@ -12,11 +12,14 @@ export class CoLangPicker extends HTMLElement {
     if (this.#wired) return;
     this.#wired = true;
     const id = "komu-lang-select";
+    // Same .set-row (label | control column) as the Grid + Theme rows, so it lines up with them.
     this.innerHTML =
-      `<label class="lang-label" for="${id}" data-i18n="menu.language">Language</label>` +
+      `<div class="set-row">` +
+      `<label class="set-label" for="${id}" data-i18n="menu.language">Language</label>` +
       `<select id="${id}" class="lang-select">` +
       LOCALES.map((l) => `<option value="${l}">${LOCALE_NAMES[l]}</option>`).join("") +
-      `</select>`;
+      `</select>` +
+      `</div>`;
     const sel = this.querySelector<HTMLSelectElement>("select")!;
     sel.value = getLocale();
     sel.addEventListener("change", () => setLocale(sel.value as Locale));
