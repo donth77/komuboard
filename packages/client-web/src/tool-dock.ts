@@ -8,20 +8,21 @@
 import { icon } from "./icons";
 import type { ToolId } from "./canvas";
 
-// icon, key, label, tool (null = not yet wired — lands in a later M1 increment)
+// icon, shortcut key, i18n key, tool (null = not yet wired). The i18n key drives the aria-label +
+// tooltip via the data-i18n sweep (i18n.ts); the visible label is resolved at translate time.
 const TOOLS: ReadonlyArray<readonly [string, string, string, ToolId | null]> = [
-  ["select", "v", "Select", "select"],
-  ["hand", "h", "Hand", "hand"],
-  ["pen", "p", "Draw", "pen"],
-  ["eraser", "e", "Eraser", "eraser"],
+  ["select", "v", "tool.select", "select"],
+  ["hand", "h", "tool.hand", "hand"],
+  ["pen", "p", "tool.pen", "pen"],
+  ["eraser", "e", "tool.eraser", "eraser"],
   // Phone-only "Insert" launcher: on small screens it replaces the five insert tools below (which CSS
   // hides), opening a sheet to pick one. On tablet/desktop it's hidden and all five show inline.
-  ["plus", "", "Insert", "insert"],
-  ["sticky", "s", "Sticky note", "sticky"],
-  ["text", "t", "Text", "text"],
-  ["shapes", "r", "Shapes and lines", "shapes"],
-  ["stamp", "k", "Stamp", "stamp"],
-  ["image", "i", "Image", "image"],
+  ["plus", "", "tool.insert", "insert"],
+  ["sticky", "s", "tool.sticky", "sticky"],
+  ["text", "t", "tool.text", "text"],
+  ["shapes", "r", "tool.shapes", "shapes"],
+  ["stamp", "k", "tool.stamp", "stamp"],
+  ["image", "i", "tool.image", "image"],
 ];
 
 // The "drop an object" tools that collapse behind the Insert (+) launcher on phones.
@@ -34,15 +35,16 @@ export class CoToolDock extends HTMLElement {
   connectedCallback(): void {
     this.classList.add("dock");
     this.setAttribute("role", "toolbar");
-    this.setAttribute("aria-label", "Tools");
+    this.setAttribute("data-i18n-aria", "tool.dockLabel");
     if (this.#wired) return;
     this.#wired = true;
-    this.innerHTML = TOOLS.map(([name, key, label, tool]) => {
+    this.innerHTML = TOOLS.map(([name, key, msgKey, tool]) => {
       // Tooltip uses the body-level singleton (always top-most — never hidden under a submenu;
       // see tooltip.ts): beside the vertical dock, with the shortcut key as a chip for wired tools.
       const keyAttr = tool && key ? ` data-tip-key="${key.toUpperCase()}"` : "";
       const groupAttr = tool && INSERT_TOOLS.has(tool) ? ` data-group="insert"` : "";
-      return `<button class="tool${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" data-tip="${label}" data-tip-pos="right"${keyAttr}${groupAttr} aria-label="${label}" aria-pressed="false">${icon(name)}</button>`;
+      // data-i18n-tip / -aria are filled by the i18n sweep (label + tooltip in the active locale).
+      return `<button class="tool${tool ? "" : " disabled"}" type="button" data-tool="${tool ?? ""}" data-i18n-tip="${msgKey}" data-tip-pos="right"${keyAttr}${groupAttr} data-i18n-aria="${msgKey}" aria-pressed="false">${icon(name)}</button>`;
     }).join("");
     this.#sync();
     this.addEventListener("click", (e) => {

@@ -1,0 +1,316 @@
+// English — the source of truth for every user-facing UI string (docs/08). Other locales mirror these
+// keys; a missing key falls back to English via t(). `{name}`-style tokens interpolate; `*.one`/`*.other`
+// are plural variants chosen by tc() via Intl.PluralRules. `app.name` (the brand) is never translated.
+const dict: Record<string, string> = {
+  "app.name": "Komuboard",
+
+  // common (reused across components)
+  "common.close": "Close",
+  "common.cancel": "Cancel",
+  "common.save": "Save",
+  "common.done": "Done",
+  "common.remove": "Remove",
+  "common.delete": "Delete",
+  "common.duplicate": "Duplicate",
+  "common.custom": "Custom",
+  "common.none": "None",
+  "common.color": "Color",
+  "common.menu": "Menu",
+  "common.help": "Help",
+  "common.undo": "Undo",
+  "common.redo": "Redo",
+  "common.dismiss": "Dismiss",
+  "common.group": "Group",
+  "common.ungroup": "Ungroup",
+  "common.lock": "Lock",
+  "common.unlock": "Unlock",
+  "common.bringToFront": "Bring to front",
+  "common.sendToBack": "Send to back",
+
+  // tools
+  "tool.dockLabel": "Tools",
+  "tool.select": "Select",
+  "tool.hand": "Hand",
+  "tool.pen": "Draw",
+  "tool.eraser": "Eraser",
+  "tool.insert": "Insert",
+  "tool.sticky": "Sticky note",
+  "tool.text": "Text",
+  "tool.shapes": "Shapes and lines",
+  "tool.stamp": "Stamp",
+  "tool.image": "Image",
+  "insert.sticky": "Sticky",
+  "insert.shape": "Shape",
+
+  // draw bar
+  "draw.barLabel": "Draw options",
+  "draw.pen": "Pen",
+  "draw.highlighter": "Highlighter",
+  "draw.lineStyle": "Line style",
+  "draw.colourAria": "Color",
+  "draw.customColour": "Custom color",
+  "draw.strokeWidth": "Stroke width",
+  "draw.solid": "Solid",
+  "draw.dotted": "Dotted",
+  "draw.strokeWidthValue": "Stroke width · {w} px",
+
+  // colors (COLOR_NAMES + highlight + sticky + user palettes)
+  "color.black": "Black",
+  "color.red": "Red",
+  "color.orange": "Orange",
+  "color.yellow": "Yellow",
+  "color.green": "Green",
+  "color.blue": "Blue",
+  "color.purple": "Purple",
+  "color.pink": "Pink",
+  "color.white": "White",
+  "color.cyan": "Cyan",
+  "color.gray": "Gray",
+  "color.teal": "Teal",
+  "color.amber": "Amber",
+  "color.violet": "Violet",
+  "color.fuchsia": "Fuchsia",
+  "color.lime": "Lime",
+  "color.indigo": "Indigo",
+
+  // shapes
+  "shape.line": "Line",
+  "shape.arrow": "Arrow",
+  "shape.elbow": "Elbow arrow",
+  "shape.block": "Block arrow",
+  "shape.rectangle": "Rectangle",
+  "shape.ellipse": "Oval",
+  "shape.rhombus": "Rhombus",
+  "shape.triangle": "Triangle",
+
+  // text bar
+  "text.font": "Font",
+  "text.fontSize": "Font size",
+  "text.font.sans": "Sans",
+  "text.font.serif": "Serif",
+  "text.font.mono": "Mono",
+  "text.font.handwriting": "Handwriting",
+  "text.size.small": "Small",
+  "text.size.medium": "Medium",
+  "text.size.large": "Large",
+  "text.size.extraLarge": "Extra large",
+  "text.size.huge": "Huge",
+  "text.textStyle": "Text style",
+  "text.bold": "Bold",
+  "text.italic": "Italic",
+  "text.underline": "Underline",
+  "text.strikethrough": "Strikethrough",
+  "text.bulletedList": "Bulleted list",
+  "text.link": "Link",
+  "text.textColor": "Text color",
+  "text.highlight": "Highlight",
+  "text.alignment": "Alignment",
+  "text.align.left": "Left",
+  "text.align.center": "Center",
+  "text.align.right": "Right",
+  "text.shape": "Shape",
+  "text.fillColor": "Fill color",
+  "text.border": "Border",
+  "text.noFill": "No fill",
+  "text.borderDashed": "Dashed",
+  "text.noBorder": "No border",
+  "text.linkPlaceholder": "Type or paste URL",
+  "text.removeLink": "Remove link",
+  "text.linkOpen": "Open",
+  "text.linkEdit": "Edit",
+  "text.ungroupTitle": "Ungroup ({shortcut})",
+
+  // connectors
+  "connector.lineWeight": "Line weight",
+  "connector.startPoint": "Start point",
+  "connector.endPoint": "End point",
+  "connector.weightThin": "Thin",
+  "connector.weightMedium": "Medium",
+  "connector.weightThick": "Thick",
+  "connector.weightBold": "Bold",
+  "connector.capOutline": "Outline",
+  "connector.capCircle": "Circle",
+  "connector.capDiamond": "Diamond",
+  "connector.styleSolid": "Solid",
+  "connector.styleDashed": "Dashed",
+
+  // zoom
+  "zoom.out": "Zoom out",
+  "zoom.in": "Zoom in",
+  "zoom.level": "Zoom level",
+  "zoom.levelPercent": "Zoom level (percent)",
+  "zoom.reset": "Reset zoom",
+  "zoom.fullscreen": "Toggle fullscreen",
+
+  // color picker
+  "picker.pickFromScreen": "Pick from screen",
+  "picker.eyedropper": "Eyedropper",
+  "picker.hex": "Hex color",
+  "picker.hue": "Hue",
+  "picker.satBright": "Saturation and brightness",
+
+  // emoji / stamp
+  "emoji.search": "Search",
+  "emoji.searchAria": "Search emoji",
+  "emoji.noResults": "No emoji found",
+  "emoji.more": "More emoji",
+  "emoji.generic": "Emoji",
+  "emoji.labeled": "{emoji} emoji",
+  "stamp.picker": "Stamp picker",
+  "stamp.thumbsUp": "Thumbs up sticker",
+  "stamp.onePlus": "Plus one sticker",
+  "stamp.star": "Star sticker",
+  "stamp.question": "Question mark sticker",
+  "stamp.thumbsDown": "Thumbs down sticker",
+  "stamp.sparkle": "Sparkle sticker",
+  "stamp.avatar": "Your avatar sticker",
+  "stamp.heart": "Heart sticker",
+
+  // sticky
+  "sticky.barLabel": "Sticky note colors",
+
+  // selection bar
+  "selection.barLabel": "Selection actions",
+  "selection.rotate": "Rotate 15°",
+
+  // menus (context + app)
+  "menu.cut": "Cut",
+  "menu.copy": "Copy",
+  "menu.paste": "Paste",
+  "menu.selectAll": "Select all",
+  "menu.zoomToFit": "Zoom to fit",
+  "menu.editProfile": "Edit profile",
+  "menu.enterVr": "Enter VR",
+  "menu.export": "Export…",
+  "menu.language": "Language",
+
+  // settings
+  "settings.grid": "Grid",
+  "settings.gridStyle": "Grid style",
+  "settings.dots": "Dots",
+  "settings.lines": "Lines",
+  "settings.theme": "Theme",
+  "settings.darkTheme": "Dark theme",
+
+  // topbar
+  "topbar.resetView": "Reset view",
+  "topbar.shareBoard": "Share board",
+
+  // share dialog
+  "share.title": "Share this board",
+  "share.qrLabel": "QR code for the room link",
+  "share.scanForLink": "Scan for link",
+  "share.roomLink": "Room link",
+  "share.copyLink": "Copy link",
+  "share.copied": "Copied!",
+  "share.helper": "No signup required — anyone with the link can edit.",
+  "share.native": "Share…",
+  "share.shareText": "Join my board",
+
+  // profile dialog
+  "profile.title": "Your profile",
+  "profile.uploadPhoto": "Upload photo",
+  "profile.displayName": "Display name",
+  "profile.namePlaceholder": "Your name",
+  "profile.guestFallback": "Guest",
+  "profile.updateCta": "Update profile",
+
+  // export dialog
+  "export.title": "Export",
+  "export.fileType": "File type",
+  "export.png": "PNG",
+  "export.pdf": "PDF",
+  "export.background": "Background",
+  "export.bgGrid": "Grid",
+  "export.bgTransparent": "Transparent",
+  "export.bgSolid": "Solid",
+
+  // shortcuts dialog
+  "shortcuts.title": "Keyboard shortcuts",
+  "shortcuts.handPan": "Hand / pan",
+  "shortcuts.deleteSelection": "Delete selection",
+  "shortcuts.groupUngroup": "Group / ungroup",
+  "shortcuts.lockUnlock": "Lock / unlock (toggle)",
+  "shortcuts.rotate": "Rotate (±15° / ±90° with Shift)",
+  "shortcuts.nudge": "Nudge selection (1px / 10px with Shift)",
+  "shortcuts.zorder": "Bring to front / send to back",
+  "shortcuts.pan": "Pan (hold)",
+  "shortcuts.zoomInOut": "Zoom in / out",
+  "shortcuts.export": "Export (PNG / PDF)",
+  "shortcuts.toggleMenu": "Toggle this menu",
+
+  // status / scrims / banner
+  "status.preparingVr": "Preparing VR…",
+  "status.exporting": "Exporting…",
+  "status.reconnecting": "Reconnecting…",
+  "status.backOnline": "Back online",
+
+  // toasts
+  "toast.vrStartFailed": "Couldn't start VR on this device.",
+  "toast.imageAddFailed": "Couldn't add that image.",
+  "toast.nothingToExport": "Nothing to export yet — add something to the board first.",
+  "toast.exportFailed": "Export failed — please try again.",
+  "toast.imageTypeUnsupported": "That image type isn't supported — use PNG, JPG, WebP, or GIF.",
+  "toast.imageEmpty": "That image looks empty or corrupt.",
+  "toast.imageProcessFailed": "Couldn't process that image.",
+  "toast.imageTooLarge": "That image is too large (over 5 MB even after resizing).",
+  "toast.uploadFailedConnection": "Upload failed — check your connection and try again.",
+  "toast.uploadFailed": "Upload failed — please try again.",
+
+  // refused / disconnect dialog
+  "refused.roomFullTitle": "This room is full",
+  "refused.disconnectedTitle": "You were disconnected",
+  "refused.roomFullBody":
+    "Up to {max} people can edit a board at once. Try again in a moment, or start a new board.",
+  "refused.rateLimitBody":
+    "You were sending updates too quickly and got disconnected. This usually clears up right away.",
+  "refused.newBoard": "New board",
+  "refused.tryAgain": "Try again",
+  "refused.reconnect": "Reconnect",
+  "refused.roomFullDialogTitle": "Room full",
+  "refused.disconnectedDialogTitle": "Disconnected",
+
+  // presence (toasts / nudge / avatar row)
+  "presence.joinedToast": "{name} joined",
+  "presence.youAre": "You're {name}",
+  "presence.you": "{name} (you)",
+  "presence.overflowChip": "+{count}",
+  "presence.showMore.one": "Show {count} more person",
+  "presence.showMore.other": "Show {count} more people",
+  "presence.moreCollaborators": "More collaborators",
+  "presence.nudgeHint": "Set a name and color others will see.",
+
+  // drawer
+  "drawer.room": "Room",
+
+  // accessibility mirror + announcer
+  "a11y.boardLabel": "Collaborative whiteboard",
+  "a11y.roleDescription": "whiteboard",
+  "a11y.mirrorLabel": "Board content",
+  "a11y.empty": "The board is empty.",
+  "a11y.hintSelectable.one":
+    "{count} object on the board. Focus one to select it, then edit it with the keyboard.",
+  "a11y.hintSelectable.other":
+    "{count} objects on the board. Focus one to select it, then edit it with the keyboard.",
+  "a11y.hintListed.one": "{count} object on the board, listed below.",
+  "a11y.hintListed.other": "{count} objects on the board, listed below.",
+  "a11y.objStickyNote": "sticky note",
+  "a11y.objText": "text",
+  "a11y.objLabeled": "{kind}: {text}",
+  "a11y.objEmpty": "empty {kind}",
+  "a11y.objStroke": "freehand drawing",
+  "a11y.objConnector": "connector",
+  "a11y.objImage": "image",
+  "a11y.objEmojiSticker": "emoji sticker",
+  "a11y.objSticker": "sticker",
+  "a11y.objGeneric": "object",
+  "a11y.someone": "Someone",
+  "a11y.joined": "{name} joined the board.",
+  "a11y.joinedMany": "{count} people joined the board.",
+  "a11y.someoneLeft": "Someone left the board.",
+  "a11y.leftMany": "{count} people left the board.",
+
+  // VR
+  "vr.exit": "Exit VR",
+};
+export default dict;

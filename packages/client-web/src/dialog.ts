@@ -15,6 +15,8 @@
  * Usage (programmatic):  createDialog({ title, body, footer, width, onClose })
  * Any element with [data-dialog-close] closes the dialog.
  */
+import { applyTranslations } from "./i18n";
+
 // Monotonic id source so each dialog's title can be referenced by aria-labelledby.
 let dialogTitleSeq = 0;
 
@@ -42,7 +44,7 @@ export class CoDialog extends HTMLElement {
     if (width) dialog.style.width = `${width}px`;
     dialog.innerHTML =
       '<div class="dialog-head"><span class="dialog-title"></span>' +
-      '<button type="button" class="modal-x" data-dialog-close aria-label="Close">✕</button></div>' +
+      '<button type="button" class="modal-x" data-dialog-close data-i18n-aria="common.close">✕</button></div>' +
       '<div class="dialog-body"></div>';
 
     const titleEl = dialog.querySelector<HTMLElement>(".dialog-title");
@@ -63,6 +65,7 @@ export class CoDialog extends HTMLElement {
 
     this.appendChild(dialog);
     this.dialog = dialog;
+    applyTranslations(dialog); // translate the ✕ + any data-i18n in the caller's body/footer
 
     dialog.addEventListener("click", (e) => {
       if (e.target === dialog) this.close(); // backdrop click

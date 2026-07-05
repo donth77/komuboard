@@ -1,0 +1,316 @@
+// de (German) — mirrors en.ts keys; values translated. Missing keys fall back to English via t().
+const dict: Record<string, string> = {
+  "app.name": "Komuboard",
+
+  // common (reused across components)
+  "common.close": "Schließen",
+  "common.cancel": "Abbrechen",
+  "common.save": "Speichern",
+  "common.done": "Fertig",
+  "common.remove": "Entfernen",
+  "common.delete": "Löschen",
+  "common.duplicate": "Duplizieren",
+  "common.custom": "Benutzerdefiniert",
+  "common.none": "Keine",
+  "common.color": "Farbe",
+  "common.menu": "Menü",
+  "common.help": "Hilfe",
+  "common.undo": "Rückgängig",
+  "common.redo": "Wiederholen",
+  "common.dismiss": "Ausblenden",
+  "common.group": "Gruppieren",
+  "common.ungroup": "Gruppierung aufheben",
+  "common.lock": "Sperren",
+  "common.unlock": "Entsperren",
+  "common.bringToFront": "In den Vordergrund",
+  "common.sendToBack": "In den Hintergrund",
+
+  // tools
+  "tool.dockLabel": "Werkzeuge",
+  "tool.select": "Auswählen",
+  "tool.hand": "Hand",
+  "tool.pen": "Zeichnen",
+  "tool.eraser": "Radierer",
+  "tool.insert": "Einfügen",
+  "tool.sticky": "Haftnotiz",
+  "tool.text": "Text",
+  "tool.shapes": "Formen und Linien",
+  "tool.stamp": "Stempel",
+  "tool.image": "Bild",
+  "insert.sticky": "Haftnotiz",
+  "insert.shape": "Form",
+
+  // draw bar
+  "draw.barLabel": "Zeichenoptionen",
+  "draw.pen": "Stift",
+  "draw.highlighter": "Textmarker",
+  "draw.lineStyle": "Linienstil",
+  "draw.colourAria": "Farbe",
+  "draw.customColour": "Benutzerdefinierte Farbe",
+  "draw.strokeWidth": "Strichstärke",
+  "draw.solid": "Durchgezogen",
+  "draw.dotted": "Gepunktet",
+  "draw.strokeWidthValue": "Strichstärke · {w} px",
+
+  // colors (COLOR_NAMES + highlight + sticky + user palettes)
+  "color.black": "Schwarz",
+  "color.red": "Rot",
+  "color.orange": "Orange",
+  "color.yellow": "Gelb",
+  "color.green": "Grün",
+  "color.blue": "Blau",
+  "color.purple": "Lila",
+  "color.pink": "Rosa",
+  "color.white": "Weiß",
+  "color.cyan": "Cyan",
+  "color.gray": "Grau",
+  "color.teal": "Blaugrün",
+  "color.amber": "Bernstein",
+  "color.violet": "Violett",
+  "color.fuchsia": "Fuchsia",
+  "color.lime": "Limette",
+  "color.indigo": "Indigo",
+
+  // shapes
+  "shape.line": "Linie",
+  "shape.arrow": "Pfeil",
+  "shape.elbow": "Winkelpfeil",
+  "shape.block": "Blockpfeil",
+  "shape.rectangle": "Rechteck",
+  "shape.ellipse": "Oval",
+  "shape.rhombus": "Raute",
+  "shape.triangle": "Dreieck",
+
+  // text bar
+  "text.font": "Schriftart",
+  "text.fontSize": "Schriftgröße",
+  "text.font.sans": "Sans",
+  "text.font.serif": "Serif",
+  "text.font.mono": "Mono",
+  "text.font.handwriting": "Handschrift",
+  "text.size.small": "Klein",
+  "text.size.medium": "Mittel",
+  "text.size.large": "Groß",
+  "text.size.extraLarge": "Sehr groß",
+  "text.size.huge": "Riesig",
+  "text.textStyle": "Textstil",
+  "text.bold": "Fett",
+  "text.italic": "Kursiv",
+  "text.underline": "Unterstrichen",
+  "text.strikethrough": "Durchgestrichen",
+  "text.bulletedList": "Aufzählung",
+  "text.link": "Link",
+  "text.textColor": "Textfarbe",
+  "text.highlight": "Hervorheben",
+  "text.alignment": "Ausrichtung",
+  "text.align.left": "Links",
+  "text.align.center": "Zentriert",
+  "text.align.right": "Rechts",
+  "text.shape": "Form",
+  "text.fillColor": "Füllfarbe",
+  "text.border": "Rahmen",
+  "text.noFill": "Keine Füllung",
+  "text.borderDashed": "Gestrichelt",
+  "text.noBorder": "Kein Rahmen",
+  "text.linkPlaceholder": "URL eingeben oder einfügen",
+  "text.removeLink": "Link entfernen",
+  "text.linkOpen": "Öffnen",
+  "text.linkEdit": "Bearbeiten",
+  "text.ungroupTitle": "Gruppierung aufheben ({shortcut})",
+
+  // connectors
+  "connector.lineWeight": "Linienstärke",
+  "connector.startPoint": "Startpunkt",
+  "connector.endPoint": "Endpunkt",
+  "connector.weightThin": "Dünn",
+  "connector.weightMedium": "Mittel",
+  "connector.weightThick": "Dick",
+  "connector.weightBold": "Sehr dick",
+  "connector.capOutline": "Umriss",
+  "connector.capCircle": "Kreis",
+  "connector.capDiamond": "Raute",
+  "connector.styleSolid": "Durchgezogen",
+  "connector.styleDashed": "Gestrichelt",
+
+  // zoom
+  "zoom.out": "Verkleinern",
+  "zoom.in": "Vergrößern",
+  "zoom.level": "Zoomstufe",
+  "zoom.levelPercent": "Zoomstufe (Prozent)",
+  "zoom.reset": "Zoom zurücksetzen",
+  "zoom.fullscreen": "Vollbild umschalten",
+
+  // color picker
+  "picker.pickFromScreen": "Vom Bildschirm auswählen",
+  "picker.eyedropper": "Pipette",
+  "picker.hex": "Hex-Farbe",
+  "picker.hue": "Farbton",
+  "picker.satBright": "Sättigung und Helligkeit",
+
+  // emoji / stamp
+  "emoji.search": "Suchen",
+  "emoji.searchAria": "Emoji suchen",
+  "emoji.noResults": "Keine Emojis gefunden",
+  "emoji.more": "Weitere Emojis",
+  "emoji.generic": "Emoji",
+  "emoji.labeled": "Emoji {emoji}",
+  "stamp.picker": "Stempelauswahl",
+  "stamp.thumbsUp": "Daumen-hoch-Sticker",
+  "stamp.onePlus": "Plus-eins-Sticker",
+  "stamp.star": "Stern-Sticker",
+  "stamp.question": "Fragezeichen-Sticker",
+  "stamp.thumbsDown": "Daumen-runter-Sticker",
+  "stamp.sparkle": "Funkel-Sticker",
+  "stamp.avatar": "Ihr Avatar-Sticker",
+  "stamp.heart": "Herz-Sticker",
+
+  // sticky
+  "sticky.barLabel": "Haftnotiz-Farben",
+
+  // selection bar
+  "selection.barLabel": "Auswahlaktionen",
+  "selection.rotate": "Um 15° drehen",
+
+  // menus (context + app)
+  "menu.cut": "Ausschneiden",
+  "menu.copy": "Kopieren",
+  "menu.paste": "Einfügen",
+  "menu.selectAll": "Alles auswählen",
+  "menu.zoomToFit": "An Fenster anpassen",
+  "menu.editProfile": "Profil bearbeiten",
+  "menu.enterVr": "VR starten",
+  "menu.export": "Exportieren…",
+  "menu.language": "Sprache",
+
+  // settings
+  "settings.grid": "Raster",
+  "settings.gridStyle": "Rasterstil",
+  "settings.dots": "Punkte",
+  "settings.lines": "Linien",
+  "settings.theme": "Design",
+  "settings.darkTheme": "Dunkles Design",
+
+  // topbar
+  "topbar.resetView": "Ansicht zurücksetzen",
+  "topbar.shareBoard": "Board teilen",
+
+  // share dialog
+  "share.title": "Dieses Board teilen",
+  "share.qrLabel": "QR-Code für den Raum-Link",
+  "share.scanForLink": "Zum Öffnen scannen",
+  "share.roomLink": "Raum-Link",
+  "share.copyLink": "Link kopieren",
+  "share.copied": "Kopiert!",
+  "share.helper": "Keine Anmeldung nötig — alle mit dem Link können bearbeiten.",
+  "share.native": "Teilen…",
+  "share.shareText": "Treten Sie meinem Board bei",
+
+  // profile dialog
+  "profile.title": "Ihr Profil",
+  "profile.uploadPhoto": "Foto hochladen",
+  "profile.displayName": "Anzeigename",
+  "profile.namePlaceholder": "Ihr Name",
+  "profile.guestFallback": "Gast",
+  "profile.updateCta": "Profil aktualisieren",
+
+  // export dialog
+  "export.title": "Exportieren",
+  "export.fileType": "Dateityp",
+  "export.png": "PNG",
+  "export.pdf": "PDF",
+  "export.background": "Hintergrund",
+  "export.bgGrid": "Raster",
+  "export.bgTransparent": "Transparent",
+  "export.bgSolid": "Einfarbig",
+
+  // shortcuts dialog
+  "shortcuts.title": "Tastenkürzel",
+  "shortcuts.handPan": "Hand / schwenken",
+  "shortcuts.deleteSelection": "Auswahl löschen",
+  "shortcuts.groupUngroup": "Gruppieren / Gruppierung aufheben",
+  "shortcuts.lockUnlock": "Sperren / entsperren (umschalten)",
+  "shortcuts.rotate": "Drehen (±15° / ±90° mit Umschalt)",
+  "shortcuts.nudge": "Auswahl verschieben (1 px / 10 px mit Umschalt)",
+  "shortcuts.zorder": "In den Vordergrund / in den Hintergrund",
+  "shortcuts.pan": "Schwenken (halten)",
+  "shortcuts.zoomInOut": "Vergrößern / verkleinern",
+  "shortcuts.export": "Exportieren (PNG / PDF)",
+  "shortcuts.toggleMenu": "Dieses Menü umschalten",
+
+  // status / scrims / banner
+  "status.preparingVr": "VR wird vorbereitet…",
+  "status.exporting": "Export läuft…",
+  "status.reconnecting": "Verbindung wird wiederhergestellt…",
+  "status.backOnline": "Wieder online",
+
+  // toasts
+  "toast.vrStartFailed": "VR konnte auf diesem Gerät nicht gestartet werden.",
+  "toast.imageAddFailed": "Bild konnte nicht hinzugefügt werden.",
+  "toast.nothingToExport": "Noch nichts zu exportieren — fügen Sie zuerst etwas zum Board hinzu.",
+  "toast.exportFailed": "Export fehlgeschlagen — bitte erneut versuchen.",
+  "toast.imageTypeUnsupported":
+    "Dieser Bildtyp wird nicht unterstützt — verwenden Sie PNG, JPG, WebP oder GIF.",
+  "toast.imageEmpty": "Dieses Bild scheint leer oder beschädigt zu sein.",
+  "toast.imageProcessFailed": "Bild konnte nicht verarbeitet werden.",
+  "toast.imageTooLarge": "Dieses Bild ist zu groß (über 5 MB, selbst nach dem Verkleinern).",
+  "toast.uploadFailedConnection":
+    "Upload fehlgeschlagen — prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+  "toast.uploadFailed": "Upload fehlgeschlagen — bitte erneut versuchen.",
+
+  // refused / disconnect dialog
+  "refused.roomFullTitle": "Dieser Raum ist voll",
+  "refused.disconnectedTitle": "Verbindung getrennt",
+  "refused.roomFullBody":
+    "Bis zu {max} Personen können ein Board gleichzeitig bearbeiten. Versuchen Sie es gleich erneut oder starten Sie ein neues Board.",
+  "refused.rateLimitBody":
+    "Sie haben zu schnell Änderungen gesendet und wurden getrennt. Das behebt sich normalerweise sofort.",
+  "refused.newBoard": "Neues Board",
+  "refused.tryAgain": "Erneut versuchen",
+  "refused.reconnect": "Neu verbinden",
+  "refused.roomFullDialogTitle": "Raum voll",
+  "refused.disconnectedDialogTitle": "Getrennt",
+
+  // presence (toasts / nudge / avatar row)
+  "presence.joinedToast": "{name} ist beigetreten",
+  "presence.youAre": "Sie sind {name}",
+  "presence.you": "{name} (Sie)",
+  "presence.overflowChip": "+{count}",
+  "presence.showMore.one": "{count} weitere Person anzeigen",
+  "presence.showMore.other": "{count} weitere Personen anzeigen",
+  "presence.moreCollaborators": "Weitere Mitwirkende",
+  "presence.nudgeHint": "Legen Sie einen Namen und eine Farbe fest, die andere sehen.",
+
+  // drawer
+  "drawer.room": "Raum",
+
+  // accessibility mirror + announcer
+  "a11y.boardLabel": "Kollaboratives Whiteboard",
+  "a11y.roleDescription": "Whiteboard",
+  "a11y.mirrorLabel": "Board-Inhalt",
+  "a11y.empty": "Das Board ist leer.",
+  "a11y.hintSelectable.one":
+    "{count} Objekt auf dem Board. Fokussieren Sie es, um es auszuwählen, und bearbeiten Sie es dann mit der Tastatur.",
+  "a11y.hintSelectable.other":
+    "{count} Objekte auf dem Board. Fokussieren Sie eines, um es auszuwählen, und bearbeiten Sie es dann mit der Tastatur.",
+  "a11y.hintListed.one": "{count} Objekt auf dem Board, unten aufgelistet.",
+  "a11y.hintListed.other": "{count} Objekte auf dem Board, unten aufgelistet.",
+  "a11y.objStickyNote": "Haftnotiz",
+  "a11y.objText": "Text",
+  "a11y.objLabeled": "{kind}: {text}",
+  "a11y.objEmpty": "{kind} (leer)",
+  "a11y.objStroke": "Freihandzeichnung",
+  "a11y.objConnector": "Verbindung",
+  "a11y.objImage": "Bild",
+  "a11y.objEmojiSticker": "Emoji-Sticker",
+  "a11y.objSticker": "Sticker",
+  "a11y.objGeneric": "Objekt",
+  "a11y.someone": "Jemand",
+  "a11y.joined": "{name} ist dem Board beigetreten.",
+  "a11y.joinedMany": "{count} Personen sind dem Board beigetreten.",
+  "a11y.someoneLeft": "Jemand hat das Board verlassen.",
+  "a11y.leftMany": "{count} Personen haben das Board verlassen.",
+
+  // VR
+  "vr.exit": "VR beenden",
+};
+export default dict;

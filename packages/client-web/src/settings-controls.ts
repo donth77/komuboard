@@ -10,15 +10,15 @@ import { icon } from "./icons";
 export function settingsControlsHTML(): string {
   return (
     '<div class="set-row">' +
-    '<span class="set-label">Grid</span>' +
-    '<div class="seg" role="group" aria-label="Grid style">' +
-    '<button class="seg-opt" type="button" data-grid-opt="dots">Dots</button>' +
-    '<button class="seg-opt" type="button" data-grid-opt="lines">Lines</button>' +
+    '<span class="set-label" data-i18n="settings.grid"></span>' +
+    '<div class="seg" role="group" data-i18n-aria="settings.gridStyle">' +
+    '<button class="seg-opt" type="button" data-grid-opt="dots" data-i18n="settings.dots"></button>' +
+    '<button class="seg-opt" type="button" data-grid-opt="lines" data-i18n="settings.lines"></button>' +
     "</div>" +
     "</div>" +
     '<div class="set-row">' +
-    '<span class="set-label">Theme</span>' +
-    '<button class="theme-switch" type="button" role="switch" data-theme-toggle aria-label="Dark theme">' +
+    '<span class="set-label" data-i18n="settings.theme"></span>' +
+    '<button class="theme-switch" type="button" role="switch" data-theme-toggle data-i18n-aria="settings.darkTheme">' +
     `<span class="theme-switch-ic sun">${icon("sun")}</span>` +
     `<span class="theme-switch-ic moon">${icon("moon")}</span>` +
     '<span class="theme-switch-knob"></span>' +

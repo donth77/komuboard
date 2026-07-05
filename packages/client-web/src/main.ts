@@ -55,6 +55,8 @@ import { createContextMenu } from "./ui/context-menu";
 import { createShareDialog } from "./ui/share";
 import { paintProfile } from "./util";
 import { SWATCHES } from "./palette";
+import { applyTranslations, initI18n } from "./i18n";
+import "./ui/lang-picker";
 
 declare global {
   interface Window {
@@ -1044,15 +1046,18 @@ function toggleAppMenu(): void {
   menu.innerHTML =
     '<div class="app-menu-head"><img class="brand-logo" src="/logo.webp" alt="" width="40" height="40" /> <strong>Komuboard</strong></div>' +
     '<div class="app-menu-body">' +
-    `<button class="app-menu-item" type="button" data-act="profile"><span>Edit profile</span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
+    `<button class="app-menu-item" type="button" data-act="profile"><span data-i18n="menu.editProfile"></span><span class="profile-id"><span class="profile-name" data-profile-name></span><span class="menu-avatar" data-profile-avatar aria-hidden="true"></span></span></button>` +
     '<div class="app-menu-sep"></div>' +
     settingsControlsHTML() +
     '<div class="app-menu-sep"></div>' +
-    `<button class="app-menu-item" type="button" data-act="vr"><span>Enter VR</span><span class="drawer-item-ic">${icon("headset")}</span></button>` +
+    "<komu-lang-picker></komu-lang-picker>" +
     '<div class="app-menu-sep"></div>' +
-    `<button class="app-menu-item" type="button" data-act="export"><span>Export…</span><span class="drawer-item-ic">${icon("download")}</span></button>` +
+    `<button class="app-menu-item" type="button" data-act="vr"><span data-i18n="menu.enterVr"></span><span class="drawer-item-ic">${icon("headset")}</span></button>` +
+    '<div class="app-menu-sep"></div>' +
+    `<button class="app-menu-item" type="button" data-act="export"><span data-i18n="menu.export"></span><span class="drawer-item-ic">${icon("download")}</span></button>` +
     "</div>";
   document.body.appendChild(menu);
+  applyTranslations(menu); // lazily-built subtree → sweep it now (picker label + item text)
   appMenu = menu;
   paintProfile(menu, { name: identity.name, color: identity.color, photo: identity.photo });
   const r = navBtn.getBoundingClientRect();
@@ -1392,3 +1397,7 @@ window.setInterval(updateConn, 1000);
 updateConn();
 
 // Connection state drives the room-pill dot inside <komu-topbar> (setStatus).
+
+// Localization: detect the browser locale (mapped to a shipped locale, default English), set the
+// <html lang>, and sweep all built chrome into that language. Runs last so every component exists.
+initI18n();

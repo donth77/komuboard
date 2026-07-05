@@ -22,22 +22,22 @@ export class CoTopbar extends HTMLElement {
     const room = this.getAttribute("room") ?? "";
     this.innerHTML =
       '<div class="brand">' +
-      `<button class="iconbtn nav-btn" id="nav-toggle" data-act="nav" type="button" aria-label="Menu">${icon("menu")}</button>` +
+      `<button class="iconbtn nav-btn" id="nav-toggle" data-act="nav" type="button" data-i18n-aria="common.menu">${icon("menu")}</button>` +
       '<span class="logo">◳</span> <span class="brand-name">Komuboard</span>' +
       "</div>" +
       // On-screen undo / redo / reset-view — shown only on the touch layout (CSS), where there's no
       // keyboard for ⌘Z / zoom-to-fit.
       '<div class="tb-history">' +
-      `<button class="iconbtn tb-undo" data-act="undo" type="button" data-testid="undo" aria-label="Undo" title="Undo">${icon("undo")}</button>` +
-      `<button class="iconbtn tb-redo" data-act="redo" type="button" data-testid="redo" aria-label="Redo" title="Redo">${icon("redo")}</button>` +
-      `<button class="iconbtn tb-fit" data-act="reset-view" type="button" data-testid="reset-view" aria-label="Reset view" title="Reset view">${icon("fit")}</button>` +
+      `<button class="iconbtn tb-undo" data-act="undo" type="button" data-testid="undo" data-i18n-aria="common.undo" data-i18n-title="common.undo">${icon("undo")}</button>` +
+      `<button class="iconbtn tb-redo" data-act="redo" type="button" data-testid="redo" data-i18n-aria="common.redo" data-i18n-title="common.redo">${icon("redo")}</button>` +
+      `<button class="iconbtn tb-fit" data-act="reset-view" type="button" data-testid="reset-view" data-i18n-aria="topbar.resetView" data-i18n-title="topbar.resetView">${icon("fit")}</button>` +
       "</div>" +
       `<div class="room-pill" data-testid="room"><span class="dot" data-testid="dot"></span> <strong>${room}</strong></div>` +
       '<div class="spacer"></div>' +
       // per-avatar tooltips live on the avatars themselves (a host title would double up)
       '<komu-avatar-presence-row id="presence-row" data-testid="presence-row"></komu-avatar-presence-row>' +
       // icon-only Share, pinned to the far right with the presence row immediately to its left
-      `<button class="btn-share" data-act="share" type="button" data-testid="share" aria-label="Share board" title="Share board">${icon("share", "ico")}</button>`;
+      `<button class="btn-share" data-act="share" type="button" data-testid="share" data-i18n-aria="topbar.shareBoard" data-i18n-title="topbar.shareBoard">${icon("share", "ico")}</button>`;
 
     this.#dot = this.querySelector('[data-testid="dot"]');
 
