@@ -188,8 +188,6 @@ app.innerHTML = `
 // --------------------------------------------------------------------------
 const boardEl = document.getElementById("board");
 if (!boardEl) throw new Error("#board missing");
-// Accessibility: mirror the board into a screen-reader-navigable list + announce presence (§5.1).
-createBoardA11y({ doc: ydoc, awareness: provider.awareness, board: boardEl });
 const canvas = new BoardCanvas({
   container: boardEl,
   doc: ydoc,
@@ -212,6 +210,14 @@ const canvas = new BoardCanvas({
   },
 });
 if (window.__komuboard) window.__komuboard.canvas = canvas; // e2e hook: introspect remote presence
+// Accessibility: mirror the board into a screen-reader-navigable list, announce presence, and let a
+// mirror item's focus/activation select that object so the keyboard shortcuts can act on it (§5.1).
+createBoardA11y({
+  doc: ydoc,
+  awareness: provider.awareness,
+  board: boardEl,
+  selectObject: (id) => canvas.selectById(id),
+});
 canvas.setColor(penColor);
 canvas.setWidth(8);
 

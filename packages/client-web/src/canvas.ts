@@ -1790,6 +1790,23 @@ export class BoardCanvas {
     // non-stroke object makes ⌘A a mixed selection → union box, transform box detached) and redraw it.
     this.reattachTransformer();
   }
+  /** Select a single object by id exactly as a click would (unified through the text layer — works for
+   *  connectors too), then pan it into view if it's off-screen. Wired to the offscreen a11y mirror so
+   *  keyboard users can pick an object and then act on it with the usual shortcuts (delete/nudge/…). */
+  selectById(id: string): void {
+    if (!this.objects.get(id)) return; // gone (e.g. a stale mirror item during a rebuild)
+    this.clearSelection();
+    this.textLayer.selectText(id); // fires onSelectionChange → selection box / handles / toolbar refresh
+    const r = this.textLayer.worldRectOf(id);
+    if (!r) return;
+    const view = this.viewport.worldViewport();
+    const visible =
+      r.x >= view.x &&
+      r.y >= view.y &&
+      r.x + r.width <= view.x + view.width &&
+      r.y + r.height <= view.y + view.height;
+    if (!visible) this.viewport.zoomToFitBox(r, this.viewport.scale()); // pan to centre; never zoom IN
+  }
   deleteSelection(): void {
     this.textLayer.deleteSelected();
     const connIds = [...this.selectedConnectors];

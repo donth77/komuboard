@@ -16,6 +16,9 @@ export interface BoardA11yOptions {
   awareness: Awareness;
   /** The board `<main>` — gets a descriptive label + `aria-describedby` pointing at the mirror. */
   board: HTMLElement;
+  /** Select a board object by id (focus/activate a mirror item → select it on the canvas, so the
+   *  keyboard shortcuts — delete/nudge/rotate/z-order/group/lock — can act on it). */
+  selectObject?: (id: string) => void;
 }
 
 export interface BoardA11y {
@@ -82,29 +85,62 @@ export function createBoardA11y(opts: BoardA11yOptions): BoardA11y {
     announceTimer = window.setTimeout(() => (announcer.textContent = msg), 60);
   };
 
+  // Focusing (Tab) or activating (Enter/Space/click) a mirror item selects that object on the canvas,
+  // so the existing keyboard shortcuts can act on it. Delegated so it survives list reconciliation.
+  const onItemActivate = (e: Event): void => {
+    // `data-object-id`, NOT `data-id` — the canvas renderer already uses `data-id`, and a duplicate
+    // would make every `[data-id="…"]` query (renderer + tests) ambiguous.
+    const id = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-object-id]")
+      ?.dataset.objectId;
+    if (id) opts.selectObject?.(id);
+  };
+  if (opts.selectObject) {
+    list.addEventListener("focusin", onItemActivate);
+    list.addEventListener("click", onItemActivate);
+    // Space activates the focused item — stop it reaching the canvas' hold-Space-to-pan. Arrows,
+    // Delete, ⌘-combos, [ / ] deliberately DO propagate so they nudge/delete/z-order the selection.
+    list.addEventListener("keydown", (e) => {
+      if (e.key === " ") e.stopPropagation();
+    });
+  }
+
   // ---- semantic mirror: rebuild the object list on doc change (debounced) ----
   const rebuild = (): void => {
     const map = objectsMap(opts.doc);
     const order = orderArray(opts.doc).toArray();
     const seen = new Set<string>();
-    const items: string[] = [];
+    const items: { id: string; label: string }[] = [];
     for (const id of order) {
       if (typeof id !== "string" || seen.has(id)) continue;
       seen.add(id);
       const m = map.get(id);
       const o = m ? readObject(m) : null;
-      if (o) items.push(objectLabel(o));
+      if (o) items.push({ id, label: objectLabel(o) });
     }
+    const selectable = !!opts.selectObject;
     hint.textContent =
       items.length === 0
         ? "The board is empty."
-        : `${items.length} object${items.length === 1 ? "" : "s"} on the board, listed below.`;
-    // Reconcile the <li> set in place (cheap; the list is small and updates are debounced).
+        : `${items.length} object${items.length === 1 ? "" : "s"} on the board` +
+          (selectable
+            ? ". Focus one to select it, then edit it with the keyboard."
+            : ", listed below.");
+    // Reconcile the <li><button> set in place (cheap; the list is small and updates are debounced).
     while (list.children.length > items.length) list.lastElementChild?.remove();
-    while (list.children.length < items.length) list.appendChild(document.createElement("li"));
-    items.forEach((text, i) => {
-      const li = list.children[i] as HTMLLIElement;
-      if (li.textContent !== text) li.textContent = text;
+    while (list.children.length < items.length) {
+      const li = document.createElement("li");
+      if (selectable) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "board-a11y-item";
+        li.appendChild(btn);
+      }
+      list.appendChild(li);
+    }
+    items.forEach(({ id, label }, i) => {
+      const host = (list.children[i]!.firstElementChild ?? list.children[i]!) as HTMLElement;
+      if (host.dataset.objectId !== id) host.dataset.objectId = id;
+      if (host.textContent !== label) host.textContent = label;
     });
   };
 
