@@ -1391,6 +1391,13 @@ input[type="range"] {
   box-shadow: var(--shadow);
   opacity: 0;
   transform: translateY(10px) scale(0.97);
+  /* Column layout lives on the BASE rule, not on [open]. On close the `open` attribute
+     is removed immediately while `display: flex` lingers for the exit transition (see
+     `display … allow-discrete` below) — any layout property scoped to [open] would snap
+     back to its initial value for those 180ms. flex-direction reverting to `row` re-laid
+     the head/body/foot side by side inside the fixed width, which read as the content
+     visibly compressing as the dialog faded out. Harmless here while display is none. */
+  flex-direction: column;
   transition:
     opacity 180ms var(--ease),
     transform 180ms var(--ease),
@@ -1400,8 +1407,7 @@ input[type="range"] {
 .dialog[open] {
   opacity: 1;
   transform: none;
-  display: flex; /* column layout so the head/foot stay put while .dialog-body scrolls */
-  flex-direction: column;
+  display: flex; /* with flex-direction:column above: head/foot stay put while .dialog-body scrolls */
 }
 @starting-style {
   .dialog[open] {
