@@ -224,6 +224,8 @@ const dict: Record<string, string> = {
   "export.bgSolid": "단색",
 
   // shortcuts dialog
+  "help.reportIssue": "문제를 발견하셨나요? 제출하기",
+  "help.viewSource": "GitHub에서 소스 보기",
   "shortcuts.title": "키보드 단축키",
   "shortcuts.handPan": "손 / 이동",
   "shortcuts.deleteSelection": "선택 항목 삭제",

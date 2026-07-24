@@ -41,7 +41,7 @@ import type { ZoomDetail } from "./zoombar";
 import "./topbar";
 import "./drawer";
 import "./tooltip"; // body-level singleton tooltip for every [data-tip] element (always top-most)
-import { icon } from "./icons";
+import { icon, iconFilled } from "./icons";
 import { createBoardA11y } from "./ui/board-a11y";
 import { createProfileDialog } from "./ui/profile";
 import { maybeShowIdentityNudge } from "./ui/identity-nudge";
@@ -741,11 +741,19 @@ document.addEventListener("pointerdown", (e) => {
   emojiPickerEl?.classList.add("hidden");
 });
 
-// Shortcuts overlay (reusable <komu-dialog>).
+// Help overlay (reusable <komu-dialog>): a "report an issue" link + the keyboard-shortcuts reference.
 const shortcutsDialog = createDialog({
-  titleKey: "shortcuts.title",
+  titleKey: "common.help",
   width: 340,
   body:
+    // Report-an-issue link → GitHub issues (new tab). Full-width so it reads well on phone + desktop.
+    '<a class="help-report" href="https://github.com/donth77/komuboard/issues" target="_blank" rel="noopener noreferrer">' +
+    iconFilled("github") +
+    '<span data-i18n="help.reportIssue">Found an issue? Submit</span></a>' +
+    // Secondary, muted link to the project repo (open source) — subordinate to the issues CTA above.
+    '<a class="help-repo-link" href="https://github.com/donth77/komuboard#komuboard" target="_blank" rel="noopener noreferrer" data-i18n="help.viewSource">View source on GitHub</a>' +
+    // Keyboard shortcuts as a subsection of Help.
+    '<h3 class="help-subhead" data-i18n="shortcuts.title">Keyboard shortcuts</h3>' +
     '<div class="kbd-row"><span data-i18n="tool.select">Select</span><kbd class="kbd">V</kbd></div>' +
     '<div class="kbd-row"><span data-i18n="shortcuts.handPan">Hand / pan</span><kbd class="kbd">H</kbd></div>' +
     '<div class="kbd-row"><span data-i18n="draw.pen">Pen</span><kbd class="kbd">P</kbd></div>' +

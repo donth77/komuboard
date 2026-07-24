@@ -1377,6 +1377,68 @@ input[type="range"] {
 .kbd-row:last-child {
   border-bottom: none;
 }
+/* "Found an issue? Submit" → GitHub issues. Full-width block that stretches to the dialog body
+   (flex column, align-items:stretch) so it fills the width on both phone and desktop. */
+.help-report {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 120ms var(--ease),
+    border-color 120ms var(--ease);
+}
+.help-report svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.help-report:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+  border-color: var(--accent);
+}
+.help-report:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Secondary "View source on GitHub" link — muted, subordinate to the issues button; tucked
+   just beneath it (negative margin pulls it up against the body's 16px flex gap). */
+.help-repo-link {
+  margin-top: -6px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.help-repo-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.help-repo-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* Subsection heading inside the Help dialog (e.g. "Keyboard shortcuts"). */
+.help-subhead {
+  margin: 4px 0 -4px; /* pull the following list up a touch against the body's 16px gap */
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 
 /* ---------- profile dialog (native <dialog>, fully custom + animated) ---------- */
 .dialog {

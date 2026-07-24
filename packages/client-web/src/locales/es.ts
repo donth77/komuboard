@@ -224,6 +224,8 @@ const dict: Record<string, string> = {
   "export.bgSolid": "Sólido",
 
   // shortcuts dialog
+  "help.reportIssue": "¿Encontraste un problema? Envíalo",
+  "help.viewSource": "Ver el código en GitHub",
   "shortcuts.title": "Atajos de teclado",
   "shortcuts.handPan": "Mano / desplazar",
   "shortcuts.deleteSelection": "Eliminar selección",

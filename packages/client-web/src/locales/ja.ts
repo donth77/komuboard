@@ -224,6 +224,8 @@ const dict: Record<string, string> = {
   "export.bgSolid": "単色",
 
   // shortcuts dialog
+  "help.reportIssue": "問題を見つけましたか？報告する",
+  "help.viewSource": "GitHubでソースを見る",
   "shortcuts.title": "キーボードショートカット",
   "shortcuts.handPan": "ハンド / パン",
   "shortcuts.deleteSelection": "選択を削除",

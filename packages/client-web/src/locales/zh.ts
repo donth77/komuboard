@@ -224,6 +224,8 @@ const dict: Record<string, string> = {
   "export.bgSolid": "纯色",
 
   // shortcuts dialog
+  "help.reportIssue": "发现问题？提交反馈",
+  "help.viewSource": "在 GitHub 上查看源码",
   "shortcuts.title": "键盘快捷键",
   "shortcuts.handPan": "抓手 / 平移",
   "shortcuts.deleteSelection": "删除所选",
