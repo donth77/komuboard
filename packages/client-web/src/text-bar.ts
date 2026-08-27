@@ -15,7 +15,13 @@ import { COLOR_NAMES, tColor } from "./draw-bar";
 import { applyTranslations, t } from "./i18n";
 import { lineWeightIcon } from "./icons";
 import { SWATCHES } from "./palette";
-import type { BorderStyle, ShapeKind, TextAlign } from "@komuboard/shared";
+import {
+  STICKY_COLOR_NAMES,
+  STICKY_COLORS,
+  type BorderStyle,
+  type ShapeKind,
+  type TextAlign,
+} from "@komuboard/shared";
 
 export interface TextBarHost {
   setFontFamily(css: string): void;
@@ -51,7 +57,11 @@ export interface TextBarState {
   color: string;
   /** When set, the bar enters shape mode (adds shape-select / fill / border / align controls). */
   shape?: ShapeKind;
-  /** Current shape fill + border + text alignment (shape mode). */
+  /** Set on a sticky note (a box with a `bg` but no shape) — adds the fill control on its own, with
+   *  the sticky palette behind it. Without this a committed note can't be recoloured at all: the
+   *  sticky palette only reaches the note being edited, and it's only shown by the Sticky tool. */
+  sticky?: boolean;
+  /** Current shape/sticky fill + border + text alignment (shape mode). */
   fill?: string;
   borderColor?: string;
   borderStyle?: BorderStyle;
@@ -190,11 +200,12 @@ export class TextBar {
     el.className = "komu-text-bar";
     el.style.display = "none";
     el.innerHTML =
-      // Shape-only leading controls: shape-select + fill colour (shown only in shape mode).
+      // Leading controls: shape-select + border are shape-only; fill is shown for shapes AND sticky
+      // notes (`.ctb-fill-only`), so a note's colour is reachable from the box itself.
       `<button class="ctb-btn ctb-shape-only ctb-shape-kind" data-act="shape-kind" data-i18n-tip="text.shape"><span class="ctb-shape-ico">${ico(SHAPE_SVG.rectangle)}</span><span class="ctb-caret">▾</span></button>` +
-      `<button class="ctb-btn ctb-shape-only ctb-fill" data-act="fill" data-i18n-tip="text.fillColor"><span class="ctb-fill-dot" data-fill></span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-btn ctb-fill-only ctb-fill" data-act="fill" data-i18n-tip="text.fillColor"><span class="ctb-fill-dot" data-fill></span><span class="ctb-caret">▾</span></button>` +
       `<button class="ctb-btn ctb-shape-only ctb-border" data-act="border" data-i18n-tip="text.border"><span class="ctb-border-ico">${lineWeightIcon("ctb-ico")}</span><span class="ctb-caret">▾</span></button>` +
-      `<span class="ctb-sep ctb-shape-only"></span>` +
+      `<span class="ctb-sep ctb-fill-only"></span>` +
       `<button class="ctb-text" data-act="font" data-i18n-tip="text.font"><span class="ctb-font-label" data-i18n="text.font.sans">Sans</span><span class="ctb-caret">▾</span></button>` +
       `<button class="ctb-text" data-act="size" data-i18n-tip="text.fontSize"><span class="ctb-size-label" data-i18n="text.size.medium">Medium</span><span class="ctb-caret">▾</span></button>` +
       `<span class="ctb-sep"></span>` +
@@ -321,16 +332,27 @@ export class TextBar {
       return;
     }
     this.closePop();
-    // hilite + fill offer a "none" swatch (the "" entry, rendered as the red-slash sw-none); fore
-    // doesn't. Fill's none = transparent.
-    const colors =
-      kind === "hilite" ? HIGHLIGHTS : kind === "fill" ? ["", ...SHAPE_FILLS] : SWATCHES;
-    const names = kind === "hilite" ? HIGHLIGHT_NAMES : COLOR_NAMES;
+    // A sticky note's fill is its paper — it uses the sticky palette and has no "no fill" option.
+    const stickyFill = kind === "fill" && this.state?.sticky === true;
+    // hilite + shape fill offer a "none" swatch (the "" entry, rendered as the red-slash sw-none);
+    // fore doesn't. Fill's none = transparent.
+    const colors = stickyFill
+      ? [...STICKY_COLORS]
+      : kind === "hilite"
+        ? HIGHLIGHTS
+        : kind === "fill"
+          ? ["", ...SHAPE_FILLS]
+          : SWATCHES;
+    const names = stickyFill
+      ? STICKY_COLOR_NAMES
+      : kind === "hilite"
+        ? HIGHLIGHT_NAMES
+        : COLOR_NAMES;
     const noneTip = t(kind === "fill" ? "text.noFill" : "common.none");
     // Ring the active swatch. Foreground tracks `color`; fill tracks `fill`; highlight none.
     const curRaw = kind === "fore" ? this.state?.color : kind === "fill" ? this.state?.fill : "";
     const cur = (curRaw ?? "").toLowerCase();
-    const noneActive = kind === "fill" && (cur === "" || cur === "transparent");
+    const noneActive = kind === "fill" && !stickyFill && (cur === "" || cur === "transparent");
     const sw = colors
       .map((c) =>
         c
@@ -823,18 +845,23 @@ export class TextBar {
     this.root.querySelector<HTMLElement>('[data-act="bullet"]')?.classList.toggle("on", s.bullet);
     const sw = this.root.querySelector<HTMLElement>("[data-swatch]");
     if (sw) sw.style.background = s.color || "#0e1116";
-    // Shape mode: toggle the shape-only controls + reflect shape kind / fill / alignment.
+    // Shape mode: toggle the shape-only controls + reflect shape kind / fill / alignment. A sticky
+    // note gets the fill control alone (its paper colour) — no shape kind / border / alignment.
     const isShape = s.shape != null;
+    const isSticky = !isShape && s.sticky === true;
     this.root.classList.toggle("shape-mode", isShape);
-    if (isShape) {
-      const ico2 = this.root.querySelector<HTMLElement>(".ctb-shape-ico");
-      if (ico2 && s.shape) ico2.innerHTML = ico(SHAPE_SVG[s.shape]);
+    this.root.classList.toggle("sticky-mode", isSticky);
+    if (isShape || isSticky) {
       const dot = this.root.querySelector<HTMLElement>("[data-fill]");
       if (dot) {
         const noFill = !s.fill || s.fill === "transparent";
         dot.classList.toggle("is-none", noFill); // red-slash when the shape has no fill
         dot.style.background = noFill ? "" : (s.fill ?? "");
       }
+    }
+    if (isShape) {
+      const ico2 = this.root.querySelector<HTMLElement>(".ctb-shape-ico");
+      if (ico2 && s.shape) ico2.innerHTML = ico(SHAPE_SVG[s.shape]);
       // Tint the border icon to its colour (dimmed when the outline is off).
       const bico = this.root.querySelector<HTMLElement>(".ctb-border-ico");
       if (bico) {

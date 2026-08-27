@@ -39,6 +39,7 @@ export type BoardWindow = {
       selectionUnionRect(): { x: number; y: number; width: number; height: number } | null;
       setStamp(src: string): void;
       setShape(kind: string): void;
+      setConnector(kind: string): void;
       setTool(tool: string): void;
       textLayer: { selectedIds(): string[]; selectedCount(): number };
     };

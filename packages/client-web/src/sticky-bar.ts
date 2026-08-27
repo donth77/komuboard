@@ -26,6 +26,17 @@ export class CoStickyBar extends HTMLElement {
       }).join("") +
       "</div>";
     wireSheetHandle(this, ensureSheetHandle(this)); // mobile sheet drag-to-collapse
+    // Pressing anywhere in the palette — a swatch, or the mobile grab handle — must not move focus.
+    // A note you've just dropped is a focused contenteditable, and any focus change blurs it, which
+    // COMMITS and closes the note; the pick that follows then has nothing left to recolour. Cancelling
+    // the press keeps the edit session alive, so the swatch recolours the note you're typing on.
+    // Same trick (and same event) the text bar uses. On touch the emulated mousedown still arrives
+    // before focus moves, so this covers taps too.
+    //
+    // mousedown ONLY — do not add pointerdown here. WebKit (iOS Safari) swallows the click when
+    // pointerdown is cancelled, so the swatch would go dead on exactly the devices this is for;
+    // Chromium fires click either way and hides the breakage.
+    this.addEventListener("mousedown", (e) => e.preventDefault());
     this.#sync();
     this.addEventListener("click", (e) => {
       const sw = (e.target as HTMLElement).closest<HTMLElement>(".sw");

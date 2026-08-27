@@ -2742,8 +2742,15 @@ input[type="range"] {
   .komu-text-bar .ctb-text {
     flex: 0 0 auto; /* keep full-size, tappable targets */
   }
-  .komu-text-bar .ctb-sep {
-    display: none; /* drop the vertical dividers on the compact mobile bar */
+  /* Drop the vertical dividers on the compact mobile bar. The shape/sticky variants need the extra
+     class to out-specify the .shape-mode / .sticky-mode rules, which sit *after* this @media in the
+     file — the same reason the marks selectors below are scoped under .ctb-marks. Without this the
+     sticky bar's one extra control (fill) tips it over 100vw and wraps to a second row. */
+  .komu-text-bar .ctb-sep,
+  .komu-text-bar.shape-mode .ctb-sep.ctb-shape-only,
+  .komu-text-bar.shape-mode .ctb-sep.ctb-fill-only,
+  .komu-text-bar.sticky-mode .ctb-sep.ctb-fill-only {
+    display: none;
   }
   /* the B/I/U/S group → one toggle that expands a vertical flyout below it. Selectors are scoped
      under .ctb-marks so they out-specify the desktop defaults (which sit *after* this @media in the
@@ -3496,6 +3503,29 @@ input[type="range"] {
 .komu-connector-handle:active {
   cursor: grabbing;
 }
+/* Touch: the attach dots and the endpoint handles are aim points for a fingertip, not a 1px cursor.
+   The dots grow a little; the handles keep a modest visual size but get an invisible ~44px hit pad
+   (the ::before inherits pointer-events: auto from the handle), so they can be grabbed at all. */
+@media (pointer: coarse) {
+  .komu-connector-dot {
+    width: 15px;
+    height: 15px;
+  }
+  .komu-connector-dot.is-snapped {
+    width: 20px;
+    height: 20px;
+  }
+  .komu-connector-handle {
+    width: 20px;
+    height: 20px;
+  }
+  .komu-connector-handle::before {
+    content: "";
+    position: absolute;
+    inset: -12px;
+    border-radius: 50%;
+  }
+}
 
 /* ── Connector edit bar — a light floating toolbar above a selected connector (matches the text /
    draw bars; FigJam's dark pill is only a layout reference). ───────────────────────────────────── */
@@ -3888,6 +3918,15 @@ input[type="range"] {
   display: none;
 }
 .komu-text-bar.shape-mode .ctb-shape-only {
+  display: inline-flex;
+}
+/* The fill control is shared: a shape's fill and a sticky note's paper colour (which has no other
+   home — the sticky palette only reaches the note being placed). */
+.komu-text-bar .ctb-fill-only {
+  display: none;
+}
+.komu-text-bar.shape-mode .ctb-fill-only,
+.komu-text-bar.sticky-mode .ctb-fill-only {
   display: inline-flex;
 }
 .komu-text-bar .ctb-shape-kind,

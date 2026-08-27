@@ -72,6 +72,10 @@ import { imageSrcUrl } from "./uploads";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
+/** How far outside a shape's edge its connector attach dots float, in screen px. The dot is what the
+ *  user aims at, so the canvas's snap test measures from here too (see snapConnectorEnd). */
+export const CONNECTOR_DOT_GAP = 16;
+
 /** The live camera transform: world→screen is `world × scale + offset`. */
 export interface Camera {
   scale: number;
@@ -2106,12 +2110,13 @@ export class TextLayer {
     this.reflectBar();
   }
 
-  /** Shape mode: change the fill colour of the shape being edited. */
+  /** Change the fill of the box being edited — a shape's fill, or a sticky note's paper colour. */
   private setEditFill(color: string): void {
     const e = this.edit;
-    if (!e || e.shape == null) return;
+    if (!e || (e.shape == null && e.bg == null)) return; // only shapes + stickies have a fill
     e.bg = color;
-    this.applyShape(e.el, e.shape, color, e.borderColor, e.borderStyle);
+    if (e.shape != null) this.applyShape(e.el, e.shape, color, e.borderColor, e.borderStyle);
+    else this.applySticky(e.el, color);
     this.scheduleEditBroadcast();
     this.reflectBar();
   }
@@ -2254,6 +2259,9 @@ export class TextLayer {
       state.borderColor = obj.borderColor ?? SHAPE_STROKE;
       state.borderStyle = obj.borderStyle ?? "solid";
       state.align = obj.align;
+    } else if (obj.bg != null) {
+      state.sticky = true; // a note: the bar offers its paper colour (and nothing else shape-ish)
+      state.fill = obj.bg;
     }
     return state;
   }
@@ -2276,6 +2284,9 @@ export class TextLayer {
       state.borderColor = e.borderColor ?? SHAPE_STROKE;
       state.borderStyle = e.borderStyle ?? "solid";
       state.align = e.align;
+    } else if (e?.bg != null) {
+      state.sticky = true; // a note being typed: same paper-colour control as when it's selected
+      state.fill = e.bg;
     }
     return state;
   }
@@ -3382,7 +3393,7 @@ export class TextLayer {
       return;
     }
     const cam = this.opts.camera();
-    const GAP = 16; // screen px outside the edge (matches the reference's floating dots)
+    const GAP = CONNECTOR_DOT_GAP; // screen px outside the edge (matches the reference's floating dots)
     const SIDES: ConnectorSide[] = ["top", "right", "bottom", "left"];
     const dots: HTMLElement[] = [];
     for (const id of ids) {

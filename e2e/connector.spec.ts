@@ -223,3 +223,96 @@ test("connector: a peer's body-move shows exactly one connector (no double-draw)
   await a.close();
   await b.close();
 });
+
+/**
+ * Snapping reach. Both of these were unreachable before: the catch radius was a flat 18 screen px
+ * measured from the side's mid-edge, while the dot you actually aim at floats 16px further out — so
+ * hitting the dot itself left ~2px of slack, and pressing on the shape's body bound nothing at all.
+ */
+
+/** Arm the shapes tool in arrow-draw mode (the flyout is flaky under synthetic input). */
+async function armArrow(page: import("@playwright/test").Page): Promise<void> {
+  await page.evaluate(() => {
+    const c = (window as unknown as BoardWindow).__komuboard.canvas!;
+    c.setTool("shapes");
+    c.setConnector("arrow");
+  });
+}
+
+/** The `from` end of the one connector in the doc (null if none was created). */
+async function drawnFrom(
+  page: import("@playwright/test").Page,
+): Promise<{ shapeId?: string; side?: string } | null> {
+  return page.evaluate(() => {
+    const objs = (window as unknown as BoardWindow).__komuboard.doc.getMap("objects");
+    for (const v of objs.values()) {
+      const o = v.toJSON() as { type?: string; from?: { shapeId?: string; side?: string } };
+      if (o.type === "connector") return o.from ?? null;
+    }
+    return null;
+  });
+}
+
+test("connector: aiming at a side's visible dot binds, even a little past it", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("connaim"));
+  await injectShape(a.page, { id: "rc1", x: 0, y: 0, width: 160, height: 120 });
+  const cal = await calibrate(a.page);
+  await armArrow(a.page);
+
+  // The right dot sits 16px outside the mid-edge (160,60); press 24px out — 8px past the dot, and
+  // 24px from the mid-edge, i.e. outside the old radius entirely.
+  const mid = worldToScreen(cal, 160, 60);
+  await a.page.mouse.move(mid.x + 24, mid.y);
+  await a.page.mouse.down();
+  await a.page.mouse.move(mid.x + 120, mid.y + 90, { steps: 4 });
+  await a.page.mouse.up();
+  await expect.poll(() => drawnFrom(a.page)).toMatchObject({ shapeId: "rc1", side: "right" });
+
+  await a.close();
+});
+
+test("connector: pressing on a shape's body binds to its nearest side (touch)", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("connbody"), {
+    touch: true,
+    viewport: { width: 390, height: 844 },
+  });
+  await injectShape(a.page, { id: "rc1", x: -140, y: -260, width: 240, height: 180 });
+  const cal = await calibrate(a.page);
+  await armArrow(a.page);
+
+  // World (60,-170): inside the box, 40px from the right wall and 90 from top/bottom — too far from
+  // every mid-edge AND every dot for the proximity test, so only the body fallback can bind it.
+  const on = worldToScreen(cal, 60, -170);
+  await a.page.mouse.move(on.x, on.y);
+  await a.page.mouse.down();
+  await a.page.mouse.move(on.x + 40, on.y + 110, { steps: 4 });
+  await a.page.mouse.move(on.x + 75, on.y + 220, { steps: 4 });
+  await a.page.mouse.up();
+  await expect.poll(() => drawnFrom(a.page)).toMatchObject({ shapeId: "rc1", side: "right" });
+
+  await a.close();
+});
+
+test("connector: a drag in open space still draws a free (unbound) connector", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("connfree"));
+  await injectShape(a.page, { id: "rc1", x: 0, y: 0, width: 160, height: 120 });
+  const cal = await calibrate(a.page);
+  await armArrow(a.page);
+
+  // Well clear of the shape: the wider catch radius must not swallow ordinary free-hand lines.
+  const s = worldToScreen(cal, 300, 260);
+  await a.page.mouse.move(s.x, s.y);
+  await a.page.mouse.down();
+  await a.page.mouse.move(s.x + 60, s.y + 40, { steps: 4 });
+  await a.page.mouse.move(s.x + 130, s.y + 80, { steps: 4 });
+  await a.page.mouse.up();
+  await expect.poll(async () => (await drawnFrom(a.page))?.shapeId ?? null).toBeNull();
+
+  await a.close();
+});

@@ -35,6 +35,7 @@ import {
   type ConnectorEnd,
   type ConnectorKind,
   type ConnectorObject,
+  type ConnectorSide,
   type PresenceState,
   type ShapeKind,
   DEFAULT_PEER_COLOR,
@@ -44,7 +45,7 @@ import {
 } from "@komuboard/shared";
 import { toCanvas } from "html-to-image";
 import { ViewportController } from "./viewport";
-import { TextLayer } from "./text-layer";
+import { CONNECTOR_DOT_GAP, TextLayer } from "./text-layer";
 import { ConnectorBar } from "./connector-bar";
 import { ROTATE_CURSORS, type RotateCorner } from "./cursors";
 import { safePhotoUrl } from "./util";
@@ -107,6 +108,11 @@ const STAMP_CURSOR_URL = `url("data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="-4 -4 32 32"><g transform="rotate(18 12 12)"><g fill="#ffffff" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"><path d="M20.809,16.492c0.146,-0.802 -0.072,-1.628 -0.594,-2.254c-0.523,-0.626 -1.296,-0.988 -2.111,-0.988l-12.208,-0c-0.815,0 -1.588,0.362 -2.111,0.988c-0.522,0.626 -0.74,1.452 -0.594,2.254c0.188,1.036 0.39,2.149 0.496,2.732c0.109,0.594 0.626,1.026 1.23,1.026l14.166,-0c0.604,-0 1.121,-0.432 1.23,-1.026l0.496,-2.732Zm-1.935,2.258l-13.748,0l-0.459,-2.526c-0.067,-0.365 0.032,-0.74 0.27,-1.025c0.237,-0.284 0.589,-0.449 0.959,-0.449c0,-0 12.208,-0 12.208,-0c0.37,0 0.722,0.165 0.959,0.449c0.238,0.285 0.337,0.66 0.27,1.025l-0.459,2.526Z"/><path d="M19.235 19.647c.045-.22-.012-.449-.155-.622-.142-.174-.355-.275-.58-.275l-13 0c-.225 0-.438.101-.58.275-.143.173-.2.402-.155.622l.339 1.693c.163.818.882 1.407 1.716 1.407 2.191 0 8.169 0 10.36 0 .834 0 1.553-.589 1.716-1.407l.339-1.693zm-1.65.603l-.159.796c-.024.117-.126.201-.246.201l-10.36 0c-.12 0-.222-.084-.246-.201 0 0-.159-.796-.159-.796l11.17 0zM8.298 13.736c-.087.23-.055.488.085.691.14.202.371.323.617.323l6 0c.246 0 .477-.121.617-.323.14-.203.172-.461.085-.691 0 0-1.005-2.633-.013-4.94.407-.947 1.048-2.079 1.372-3.136.267-.872.32-1.705.03-2.405-.257-.618-.771-1.165-1.715-1.53-.763-.295-1.853-.478-3.376-.475-1.523-.003-2.613.18-3.376.475-.944.365-1.458.912-1.715 1.53-.29.7-.237 1.533.03 2.405.324 1.057.965 2.189 1.372 3.136.992 2.307-.013 4.94-.013 4.94zm1.687-.486c.261-1.178.499-3.197-.296-5.046-.388-.903-1.007-1.977-1.316-2.984-.155-.505-.246-.985-.078-1.39.125-.302.409-.528.869-.706.64-.247 1.558-.376 2.835-.374.001 0 .001 0 .002 0 1.277-.002 2.195.127 2.835.374.46.178.744.404.869.706.168.405.077.885-.078 1.39-.309 1.007-.928 2.081-1.316 2.984-.795 1.849-.557 3.868-.296 5.046l-4.03 0z"/></g><g fill="#1e1e1e" fill-rule="evenodd"><path d="M20.809,16.492c0.146,-0.802 -0.072,-1.628 -0.594,-2.254c-0.523,-0.626 -1.296,-0.988 -2.111,-0.988l-12.208,-0c-0.815,0 -1.588,0.362 -2.111,0.988c-0.522,0.626 -0.74,1.452 -0.594,2.254c0.188,1.036 0.39,2.149 0.496,2.732c0.109,0.594 0.626,1.026 1.23,1.026l14.166,-0c0.604,-0 1.121,-0.432 1.23,-1.026l0.496,-2.732Zm-1.935,2.258l-13.748,0l-0.459,-2.526c-0.067,-0.365 0.032,-0.74 0.27,-1.025c0.237,-0.284 0.589,-0.449 0.959,-0.449c0,-0 12.208,-0 12.208,-0c0.37,0 0.722,0.165 0.959,0.449c0.238,0.285 0.337,0.66 0.27,1.025l-0.459,2.526Z"/><path d="M19.235 19.647c.045-.22-.012-.449-.155-.622-.142-.174-.355-.275-.58-.275l-13 0c-.225 0-.438.101-.58.275-.143.173-.2.402-.155.622l.339 1.693c.163.818.882 1.407 1.716 1.407 2.191 0 8.169 0 10.36 0 .834 0 1.553-.589 1.716-1.407l.339-1.693zm-1.65.603l-.159.796c-.024.117-.126.201-.246.201l-10.36 0c-.12 0-.222-.084-.246-.201 0 0-.159-.796-.159-.796l11.17 0zM8.298 13.736c-.087.23-.055.488.085.691.14.202.371.323.617.323l6 0c.246 0 .477-.121.617-.323.14-.203.172-.461.085-.691 0 0-1.005-2.633-.013-4.94.407-.947 1.048-2.079 1.372-3.136.267-.872.32-1.705.03-2.405-.257-.618-.771-1.165-1.715-1.53-.763-.295-1.853-.478-3.376-.475-1.523-.003-2.613.18-3.376.475-.944.365-1.458.912-1.715 1.53-.29.7-.237 1.533.03 2.405.324 1.057.965 2.189 1.372 3.136.992 2.307-.013 4.94-.013 4.94zm1.687-.486c.261-1.178.499-3.197-.296-5.046-.388-.903-1.007-1.977-1.316-2.984-.155-.505-.246-.985-.078-1.39.125-.302.409-.528.869-.706.64-.247 1.558-.376 2.835-.374.001 0 .001 0 .002 0 1.277-.002 2.195.127 2.835.374.46.178.744.404.869.706.168.405.077.885-.078 1.39-.309 1.007-.928 2.081-1.316 2.984-.795 1.849-.557 3.868-.296 5.046l-4.03 0z"/></g></g></svg>`,
 )}") 15 15, auto`;
 // The rotate cursor lives in ./cursors (shared per-corner ROTATE_CURSORS — same one the HTML boxes use).
+// Connector snapping: how close (in SCREEN px) a connector end has to land to bind to a shape's
+// attach point. A mouse lands within a couple of px of what it's pointing at; a fingertip covers ~40px
+// and can't see under itself, so touch gets a much larger catch radius.
+const CONNECTOR_SNAP_FINE = 18;
+const CONNECTOR_SNAP_COARSE = 32;
 const ERASER_GHOST_W = 12; // eraser ghost-trail width on screen (px)
 const ERASER_TAIL_MS = 450; // a swept ghost point lingers ~450 ms, then the trail shrinks + fades away
 const ERASER_UNDO_MERGE_MS = 60_000; // during one swipe, merge every live delete into a single undo step
@@ -130,6 +136,25 @@ function pointInRect(p: { x: number; y: number }, r: Rect, pad = 0): boolean {
     p.y >= r.y - pad &&
     p.y <= r.y + r.height + pad
   );
+}
+
+/** Push a shape's side mid-edge `d` units away from the box — where the text layer paints that
+ *  side's connector dot. */
+function offsetOutward(
+  p: { x: number; y: number },
+  side: ConnectorSide,
+  d: number,
+): { x: number; y: number } {
+  switch (side) {
+    case "top":
+      return { x: p.x, y: p.y - d };
+    case "bottom":
+      return { x: p.x, y: p.y + d };
+    case "left":
+      return { x: p.x - d, y: p.y };
+    case "right":
+      return { x: p.x + d, y: p.y };
+  }
 }
 
 /** A *remote* peer's in-progress stroke, streamed over awareness while they draw. */
@@ -1137,22 +1162,48 @@ export class BoardCanvas {
     if (!this.connectorEndDrag) this.updateConnectorChrome();
   }
 
-  /** Snap a draw point to the nearest shape connector point (side mid-edge) within ~18px on screen.
-   *  Returns the bound end, or a free end at `world` when nothing is close enough. */
+  /** Snap a draw point to a shape's connector point (side mid-edge), preferring the closest.
+   *  Returns the bound end, or a free end at `world` when nothing is close enough.
+   *
+   *  Two aim assists make this workable with a finger. (1) The distance is measured to whichever is
+   *  nearer — the mid-edge itself or the *dot* painted CONNECTOR_DOT_GAP px outside it — because the
+   *  dot is what the user aims at, and it used to sit 16 of the 18 available px away, leaving ~2px of
+   *  outward slack. (2) Failing that, a point landing anywhere ON a shape binds to that shape's
+   *  nearest side, so the whole box is a target rather than four small dots. */
   private snapConnectorEnd(world: { x: number; y: number }): ConnectorEnd {
     const scale = this.stage.scaleX() || 1;
-    const threshold = 18 / scale;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const threshold = (coarse ? CONNECTOR_SNAP_COARSE : CONNECTOR_SNAP_FINE) / scale;
+    const gap = CONNECTOR_DOT_GAP / scale;
     let best: { end: ConnectorEnd; d: number } | null = null;
+    // Nearest side by perpendicular distance to each wall — how "which side am I on" reads to a user
+    // pressing inside the box (and what decides the body snap below).
+    let body: { end: ConnectorEnd; d: number } | null = null;
     for (const id of this.textLayer.shapeIds()) {
       const rect = this.textLayer.shapeWorldRect(id);
       if (!rect) continue;
       for (const side of CONNECTOR_SIDES) {
         const p = sideMidpoint(rect, side);
-        const d = Math.hypot(p.x - world.x, p.y - world.y);
+        const dot = offsetOutward(p, side, gap);
+        const d = Math.min(
+          Math.hypot(p.x - world.x, p.y - world.y),
+          Math.hypot(dot.x - world.x, dot.y - world.y),
+        );
         if (d <= threshold && (!best || d < best.d)) best = { end: { ...p, shapeId: id, side }, d };
       }
+      if (best || !pointInRect(world, rect)) continue;
+      const walls: Record<ConnectorSide, number> = {
+        left: world.x - rect.x,
+        right: rect.x + rect.width - world.x,
+        top: world.y - rect.y,
+        bottom: rect.y + rect.height - world.y,
+      };
+      const side = CONNECTOR_SIDES.reduce((a, b) => (walls[b] < walls[a] ? b : a));
+      // Overlapping shapes: the tightest fit wins (a small box on top of a big one binds to the small).
+      if (!body || walls[side] < body.d)
+        body = { end: { ...sideMidpoint(rect, side), shapeId: id, side }, d: walls[side] };
     }
-    return best ? best.end : { x: world.x, y: world.y };
+    return best?.end ?? body?.end ?? { x: world.x, y: world.y };
   }
 
   /** A live preview connector object (default caps for the current kind) from `from` → `to`. */
