@@ -55,6 +55,7 @@ import {
 import {
   allRunsHaveMark,
   type BoolMark,
+  colorToHex,
   elementToRuns,
   runsAreBulleted,
   runsToHtml,
@@ -170,6 +171,22 @@ type Geom = {
 
 const INK = "#0e1116"; // default text ink (matches the pen default)
 const SHAPE_STROKE = "#1f2933"; // shape outline colour (matches the CSS border)
+
+/** Highlight at the editor's caret/selection, normalised from execCommand's browser-specific CSS. */
+function selectedHighlight(): string {
+  const raw = String(
+    document.queryCommandValue("hiliteColor") || document.queryCommandValue("backColor") || "",
+  );
+  const compact = raw.toLowerCase().replace(/\s+/g, "");
+  if (
+    !compact ||
+    compact === "transparent" ||
+    (compact.startsWith("rgba(") && Number(compact.slice(5, -1).split(",")[3]) === 0) ||
+    /\/0(?:\.0+)?\)$/.test(compact)
+  )
+    return "";
+  return safeColor(colorToHex(raw));
+}
 // Polygon shapes drawn as an SVG-outline background (rectangle/ellipse use a CSS border).
 // Points are in a 0..100 viewBox, inset slightly so the stroke isn't clipped at the edges.
 const SHAPE_POLYGONS: Record<string, string> = {
@@ -2243,6 +2260,9 @@ export class TextLayer {
   /** Toolbar state derived from a committed box (selection mode) rather than the editor's selection. */
   private barStateForObject(obj: TextObject): TextBarState {
     const colors = new Set(obj.runs.filter((r) => r.text).map((r) => r.color ?? ""));
+    const highlights = new Set(
+      obj.runs.filter((r) => r.text).map((r) => safeColor(r.highlight ?? "")),
+    );
     const state: TextBarState = {
       bold: allRunsHaveMark(obj.runs, "bold"),
       italic: allRunsHaveMark(obj.runs, "italic"),
@@ -2252,6 +2272,7 @@ export class TextLayer {
       fontFamily: obj.fontFamily,
       fontSize: obj.fontSize,
       color: (colors.size === 1 ? [...colors][0] : "") || INK,
+      highlight: highlights.size === 1 ? ([...highlights][0] ?? "") : "",
     };
     if (obj.shape != null) {
       state.shape = obj.shape;
@@ -2276,6 +2297,7 @@ export class TextLayer {
       fontFamily: e?.fontFamily ?? DEFAULT_TEXT_FONT,
       fontSize: e?.fontSize ?? DEFAULT_TEXT_SIZE,
       color: document.queryCommandValue("foreColor") || INK,
+      highlight: selectedHighlight(),
     };
     // Shape mode adds the shape kind / fill / border / alignment so the bar can show its extra controls.
     if (e?.shape != null) {

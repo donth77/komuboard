@@ -3913,6 +3913,11 @@ input[type="range"] {
   background: #ffec99;
   border: 1px solid rgba(0, 0, 0, 0.12);
 }
+/* No highlight (or a mixed whole-box selection): show a slash instead of a stale colour. */
+.komu-text-bar .ctb-hl-box.is-none {
+  background:
+    linear-gradient(135deg, transparent 43%, #e03131 43%, #e03131 57%, transparent 57%), #ffffff;
+}
 /* ── Shape-mode controls — only visible when the bar edits a shape (.shape-mode on the root) ──── */
 .komu-text-bar .ctb-shape-only {
   display: none;

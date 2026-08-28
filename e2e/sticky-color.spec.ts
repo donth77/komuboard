@@ -69,11 +69,88 @@ test("phone: a committed sticky can be recoloured from its toolbar", async ({ br
   await a.page.touchscreen.tap(195, 320); // select the note → its toolbar appears
   const fill = a.page.locator(".komu-text-bar .ctb-fill");
   await expect(fill).toBeVisible();
+  await expect(fill).toHaveAttribute("data-tip", "Sticky note colors");
   await fill.tap();
   // A note's fill is its paper: the sticky palette, with no "no fill" option.
   await expect(a.page.locator(".ctb-color-pop .sw-none")).toHaveCount(0);
   await a.page.locator('.ctb-color-pop .sw[data-color="#d0bfff"]').tap();
   await expect.poll(() => bgs(a.page)).toEqual(["#d0bfff"]);
+  await a.close();
+});
+
+test("phone: a newly placed sticky can be recoloured from its text toolbar", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("sticky-edit-fill"), {
+    touch: true,
+    viewport: PHONE,
+  });
+  await a.page.locator('komu-tool-dock [data-tool="insert"]').tap();
+  await a.page.locator('.insert-btn[data-insert="sticky"]').tap();
+  await a.page.touchscreen.tap(195, 320);
+  await a.page.keyboard.type("hello");
+
+  const fill = a.page.locator(".komu-text-bar .ctb-fill");
+  await expect(fill).toBeVisible();
+  await fill.tap();
+  await a.page.locator('.ctb-color-pop .sw[data-color="#a5d8ff"]').tap();
+  await expect(a.page.locator(".komu-text-editor")).toHaveCSS(
+    "background-color",
+    "rgb(165, 216, 255)",
+  );
+
+  // Edit-mode reflection uses the browser's execCommand state rather than stored runs. Exercise it
+  // separately so both the live editor and a later whole-box selection keep the indicator current.
+  await a.page.locator(".komu-text-editor").evaluate((editor) => {
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
+  const highlight = a.page.locator(".komu-text-bar .ctb-hl");
+  await highlight.tap();
+  await a.page.locator('.ctb-color-pop .sw[data-color="#fcc2d7"]').tap();
+  await expect(highlight.locator("[data-hlswatch]")).toHaveCSS(
+    "background-color",
+    "rgb(252, 194, 215)",
+  );
+
+  await a.page.keyboard.press("Escape");
+  await expect.poll(() => bgs(a.page)).toEqual(["#a5d8ff"]);
+  await a.close();
+});
+
+test("phone: a sticky's selected text-highlight color is reflected by its toolbar", async ({
+  browser,
+}) => {
+  const a = await connectPeer(browser, uniqueRoom("sticky-highlight-state"), {
+    touch: true,
+    viewport: PHONE,
+  });
+  await a.page.locator('komu-tool-dock [data-tool="insert"]').tap();
+  await a.page.locator('.insert-btn[data-insert="sticky"]').tap();
+  await a.page.touchscreen.tap(195, 320);
+  await a.page.keyboard.type("highlight me");
+  await a.page.keyboard.press("Escape");
+  await a.page.touchscreen.tap(195, 320); // select the committed note
+
+  const highlight = a.page.locator(".komu-text-bar .ctb-hl");
+  await highlight.tap();
+  await a.page.locator('.ctb-color-pop .sw[data-color="#b2f2bb"]').tap();
+
+  // The formatting itself worked before; the bug was stale toolbar state. The indicator must show
+  // the chosen green, and reopening the palette must ring that same swatch as active.
+  await expect(a.page.locator(".komu-text.sticky span").first()).toHaveCSS(
+    "background-color",
+    "rgb(178, 242, 187)",
+  );
+  await expect(highlight.locator("[data-hlswatch]")).toHaveCSS(
+    "background-color",
+    "rgb(178, 242, 187)",
+  );
+  await highlight.tap();
+  await expect(a.page.locator('.ctb-color-pop .sw.on[data-color="#b2f2bb"]')).toBeVisible();
   await a.close();
 });
 

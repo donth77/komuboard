@@ -55,6 +55,8 @@ export interface TextBarState {
   fontFamily: string;
   fontSize: number;
   color: string;
+  /** Highlight behind the current text selection / selected box's runs; empty when none or mixed. */
+  highlight: string;
   /** When set, the bar enters shape mode (adds shape-select / fill / border / align controls). */
   shape?: ShapeKind;
   /** Set on a sticky note (a box with a `bg` but no shape) — adds the fill control on its own, with
@@ -349,10 +351,19 @@ export class TextBar {
         ? HIGHLIGHT_NAMES
         : COLOR_NAMES;
     const noneTip = t(kind === "fill" ? "text.noFill" : "common.none");
-    // Ring the active swatch. Foreground tracks `color`; fill tracks `fill`; highlight none.
-    const curRaw = kind === "fore" ? this.state?.color : kind === "fill" ? this.state?.fill : "";
+    // Ring the active swatch for the colour kind this popover controls.
+    const curRaw =
+      kind === "fore"
+        ? this.state?.color
+        : kind === "hilite"
+          ? this.state?.highlight
+          : kind === "fill"
+            ? this.state?.fill
+            : "";
     const cur = (curRaw ?? "").toLowerCase();
-    const noneActive = kind === "fill" && !stickyFill && (cur === "" || cur === "transparent");
+    const noneActive =
+      (kind === "hilite" && (cur === "" || cur === "transparent")) ||
+      (kind === "fill" && !stickyFill && (cur === "" || cur === "transparent"));
     const sw = colors
       .map((c) =>
         c
@@ -507,7 +518,9 @@ export class TextBar {
         ? this.state?.fill
         : this.pickerKind === "border"
           ? this.state?.borderColor
-          : this.state?.color) || "#0e1116";
+          : this.pickerKind === "hilite"
+            ? this.state?.highlight
+            : this.state?.color) || (this.pickerKind === "hilite" ? "#ffec99" : "#0e1116");
     this.picker.classList.remove("hidden");
     this.placePop(this.picker, anchor);
     document.addEventListener("pointerdown", this.onDocDown);
@@ -845,12 +858,26 @@ export class TextBar {
     this.root.querySelector<HTMLElement>('[data-act="bullet"]')?.classList.toggle("on", s.bullet);
     const sw = this.root.querySelector<HTMLElement>("[data-swatch]");
     if (sw) sw.style.background = s.color || "#0e1116";
+    const hl = this.root.querySelector<HTMLElement>("[data-hlswatch]");
+    if (hl) {
+      const noHighlight = !s.highlight || s.highlight === "transparent";
+      hl.classList.toggle("is-none", noHighlight);
+      hl.style.background = noHighlight ? "" : s.highlight;
+    }
     // Shape mode: toggle the shape-only controls + reflect shape kind / fill / alignment. A sticky
     // note gets the fill control alone (its paper colour) — no shape kind / border / alignment.
     const isShape = s.shape != null;
     const isSticky = !isShape && s.sticky === true;
     this.root.classList.toggle("shape-mode", isShape);
     this.root.classList.toggle("sticky-mode", isSticky);
+    // Sticky paper colour and text highlight are adjacent controls with similar pastel palettes.
+    // Name the former explicitly whenever this is a note so their hover/focus labels stay distinct.
+    const fillBtn = this.root.querySelector<HTMLElement>(".ctb-fill");
+    if (fillBtn) {
+      const key = isSticky ? "sticky.barLabel" : "text.fillColor";
+      fillBtn.dataset.i18nTip = key;
+      fillBtn.dataset.tip = t(key);
+    }
     if (isShape || isSticky) {
       const dot = this.root.querySelector<HTMLElement>("[data-fill]");
       if (dot) {
