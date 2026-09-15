@@ -28,6 +28,7 @@ export function createInsertSheet(onPick: (kind: InsertKind) => void): InsertShe
     const b = document.createElement("button");
     b.type = "button";
     b.className = "insert-btn";
+    b.setAttribute("role", "menuitem"); // the sheet is role=menu → its options must be menuitems
     b.dataset.insert = kind;
     b.dataset.i18nAria = key;
     b.innerHTML = `${icon(iconName, "insert-ico")}<span class="insert-label" data-i18n="${key}"></span>`;

@@ -2066,7 +2066,8 @@ input[type="range"] {
 }
 .sm-item.on {
   background: color-mix(in srgb, var(--accent, #3b6ff6) 12%, transparent);
-  color: var(--accent, #3b6ff6);
+  /* accent pulled 20% toward the ink: the plain accent on its tint misses WCAG AA text contrast */
+  color: color-mix(in srgb, var(--accent, #3b6ff6) 80%, var(--ink, #0e1116));
 }
 .sm-ico {
   width: 22px;
@@ -2089,6 +2090,254 @@ input[type="range"] {
   right: 6px;
   height: 1px;
   background: var(--border, #e4e7ec);
+}
+/* "More shapes" — opens the panel; while a panel-picked shape is armed it shows that shape instead */
+.sm-more-ico {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+.sm-more-ico svg {
+  width: 22px;
+  height: 22px;
+}
+.sm-more .sm-chevron {
+  color: var(--muted, #586172);
+  font-size: 18px;
+  line-height: 1;
+}
+.sm-more.on .sm-chevron {
+  color: inherit;
+}
+
+/* ── Shapes panel (<komu-shape-panel>) — the searchable shape library ("More shapes"). Desktop: a
+   side panel right of the dock that REPLACES the shape menu while open. Phone: a bottom sheet. ── */
+.komu-shape-panel {
+  position: absolute;
+  left: 84px; /* where the shape menu sits (just right of the dock) */
+  top: 72px; /* below the 56px topbar + a 16px margin */
+  bottom: 16px;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  max-width: calc(100vw - 100px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.komu-shape-panel.hidden {
+  display: none;
+}
+.sp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 10px 4px 16px;
+}
+.sp-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+.sp-close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+.sp-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.sp-search {
+  padding: 4px 12px 8px;
+}
+.sp-search input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.sp-search input:focus {
+  border-color: var(--accent);
+}
+.sp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+}
+.sp-section + .sp-section {
+  margin-top: 6px;
+}
+.sp-section-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.sp-section-head {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 34px;
+  padding: 0 4px 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font:
+    600 13px Inter,
+    system-ui,
+    sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.sp-section-head:hover {
+  background: var(--surface-2);
+}
+.sp-chevron {
+  display: inline-flex;
+}
+.sp-chevron-ico {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  transition: transform var(--dur) var(--ease);
+}
+.sp-section-head[aria-expanded="false"] .sp-chevron-ico {
+  transform: rotate(-90deg);
+}
+.sp-hint {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: help;
+}
+.sp-hint:hover,
+.sp-hint:focus-visible {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.sp-hint-ico {
+  width: 15px;
+  height: 15px;
+}
+.sp-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  padding: 2px 0 6px;
+}
+.sp-tilewrap {
+  position: relative;
+}
+.sp-tile {
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.sp-tile:hover {
+  background: var(--surface-2);
+}
+.sp-tile.on {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.sp-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.sp-ico {
+  width: 28px;
+  height: 28px;
+}
+.sp-remove {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 18px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+.sp-tilewrap:hover .sp-remove,
+.sp-tilewrap:focus-within .sp-remove,
+.sp-remove:focus-visible {
+  opacity: 1;
+}
+.sp-remove:hover {
+  background: var(--bad);
+  color: #fff;
+}
+.sp-upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  margin-top: 4px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font:
+    500 13px Inter,
+    system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.sp-upload:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.sp-upload-ico {
+  width: 16px;
+  height: 16px;
+}
+.sp-empty {
+  padding: 28px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 /* ── Stamp wheel (<komu-stamp-wheel>) — FigJam-style radial picker shown with the Stamp tool.
@@ -2711,6 +2960,36 @@ input[type="range"] {
   .shape-menu > .sheet-handle {
     grid-column: 1 / -1;
   }
+  /* "More shapes" (or the armed panel shape) is a full-width labelled row under the icon grid */
+  .shape-menu .sm-item.sm-more {
+    grid-column: 1 / -1;
+    width: auto;
+    height: 40px;
+    gap: 8px;
+    justify-content: center;
+  }
+  .shape-menu .sm-item.sm-more .sm-label {
+    display: inline;
+    flex: none;
+    font-size: 14px;
+  }
+  .shape-menu .sm-item.sm-more::before {
+    width: 100%;
+  }
+  .sm-more .sm-chevron {
+    display: none;
+  }
+  /* the shapes panel becomes a centred bottom sheet sitting just above the dock (which stays
+     reachable, so a tool switch can still dismiss it) */
+  .komu-shape-panel {
+    left: 50%;
+    top: auto;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    width: min(340px, calc(100vw - 20px));
+    max-width: none;
+    height: min(62vh, 520px);
+  }
   /* Stamp wheel + emoji picker float centred above the bottom dock (they're not mini-sheets — a
      radial wheel doesn't fit the slide-up clip). The picker overlays the wheel while open. */
   /* The wheel's containing block (#app) ends at the dock's top edge, so `bottom` is measured from
@@ -3301,22 +3580,23 @@ input[type="range"] {
   width: 100%; /* stretch so text-align positions the text; height stays content-sized (centred) */
   outline: none;
 }
-.komu-text.shape-ellipse {
+/* CSS-border kinds (catalog `box` hints): rectangle keeps the base 4px radius; a rounded rectangle's
+   radius is set inline by layout() (18% of the shorter side, in screen px); pill + oval are fixed. */
+.komu-text.shape-box-ellipse {
   border-radius: 50%;
 }
-/* polygon shapes draw their outline as an SVG background → no CSS border; the SVG fills the box */
-.komu-text.shape-triangle,
-.komu-text.shape-rhombus {
+.komu-text.shape-box-pill {
+  border-radius: 9999px;
+}
+/* Every other catalog shape — and a custom SVG shape — draws its outline as a stretched SVG
+   background (non-scaling 1.5px stroke) → no CSS border; the SVG fills the box. A shape's label
+   inset (tail / point / cylinder cap) is applied as inline padding by layout(). */
+.komu-text.shape-path {
   border: none;
   border-radius: 0;
   background-repeat: no-repeat;
   background-position: center;
   background-size: 100% 100%;
-}
-/* the triangle's label sits lower (its width is widest near the base) */
-.komu-text.shape-triangle {
-  justify-content: flex-end;
-  padding-bottom: 0.9em;
 }
 /* "Add text" placeholder while a shape's body is empty — but ONLY when the shape is selected
    (.selected) or being edited (.komu-text-editor). An idle, unselected empty shape shows nothing, so
@@ -3337,10 +3617,6 @@ input[type="range"] {
   text-align: inherit; /* matches the active horizontal alignment */
   color: #98a2b3;
   pointer-events: none;
-}
-.komu-text.shape-triangle.selected:has(> .komu-text-body:empty)::before,
-.komu-text.komu-text-editor.shape-triangle:has(> .komu-text-body:empty)::before {
-  justify-content: flex-end; /* match the triangle's lower-sitting label */
 }
 .komu-text.shape.selected {
   box-shadow: 0 0 0 1.5px #4a9eff;
@@ -3732,6 +4008,14 @@ input[type="range"] {
 .komu-text-resize-image .komu-text-handle.h-e {
   display: none;
 }
+/* A circle symbol (catalog lockAspect) stays square → corner handles only (after the shape rule
+   that shows n/s, so this wins on order). */
+.komu-text-resize-square .komu-text-handle.h-n,
+.komu-text-resize-square .komu-text-handle.h-s,
+.komu-text-resize-square .komu-text-handle.h-w,
+.komu-text-resize-square .komu-text-handle.h-e {
+  display: none;
+}
 /* ADR-0009 P3 Step 2: a selected stroke shows only the outline box — resize/rotate handles arrive
    in Step 3 (gating them off here keeps a handle-drag from mis-committing through the text path). */
 .komu-text-resize-stroke .komu-text-handle,
@@ -3970,18 +4254,52 @@ input[type="range"] {
   background:
     linear-gradient(135deg, transparent 43%, #e03131 43%, #e03131 57%, transparent 57%), #ffffff;
 }
-/* shape-kind + alignment option grids (popovers) */
-.ctb-shape-pop {
-  flex-direction: row;
-  gap: 2px;
-  padding: 5px;
+/* shape-kind popover: search + the catalog grid (shared .sp-grid / .sp-tile styles) */
+.ctb-pop.ctb-shape-pop {
+  flex-direction: column;
+  gap: 6px;
+  width: 300px;
+  max-height: 380px;
+  padding: 8px;
+  overflow: hidden; /* only the tile body scrolls */
 }
+.ctb-shape-search {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 8px;
+  background: var(--surface-2, #f1f3f5);
+  color: var(--ink, #0e1116);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.ctb-shape-search:focus {
+  border-color: var(--accent, #3b6ff6);
+}
+.ctb-shape-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+.ctb-shape-title {
+  padding: 6px 4px 2px;
+  font:
+    600 12px Inter,
+    system-ui,
+    sans-serif;
+  color: var(--muted, #586172);
+}
+.ctb-shape-glyph {
+  width: 20px;
+  height: 20px;
+}
+/* alignment option row (popover) */
 .ctb-align-pop {
   flex-direction: row;
   gap: 2px;
   padding: 5px;
 }
-.ctb-shape-opt,
 .ctb-align-opt {
   display: inline-flex;
   align-items: center;
@@ -3994,16 +4312,13 @@ input[type="range"] {
   color: var(--ink, #0e1116);
   cursor: pointer;
 }
-.ctb-shape-opt svg,
 .ctb-align-opt svg {
   width: 22px;
   height: 22px;
 }
-.ctb-shape-opt:hover,
 .ctb-align-opt:hover {
   background: var(--surface-2, #f1f3f5);
 }
-.ctb-shape-opt.on,
 .ctb-align-opt.on {
   background: color-mix(in srgb, var(--accent, #3b6ff6) 16%, transparent);
   color: var(--accent, #3b6ff6);

@@ -38,6 +38,9 @@ import {
   type ConnectorSide,
   type PresenceState,
   type ShapeKind,
+  type CustomShape,
+  CUSTOM_SHAPE,
+  customShapeOf,
   DEFAULT_PEER_COLOR,
   readPresence,
   type StrokeObject,
@@ -179,6 +182,22 @@ function downsamplePoints(pts: number[], maxVerts: number): number[] {
  * doc, live labeled cursors, and a **select** tool (marquee +
  * click select, a transform box with corner handles, drag-to-move and resize).
  */
+/** A pasted text box's custom-shape fields are untrusted (another tab wrote them): apply the same
+ *  rule the doc reader does — invalid / oversized geometry degrades to a rectangle, and stray
+ *  geometry on a non-custom kind is dropped — so the clipboard can't bloat the doc past the cap. */
+function sanitizePastedShape(o: BoardObject): BoardObject {
+  if (
+    o.type !== "text" ||
+    (o.shape !== CUSTOM_SHAPE && o.shapeSvg == null && o.shapeViewBox == null)
+  )
+    return o;
+  const { shapeSvg, shapeViewBox, ...rest } = o;
+  const custom = o.shape === CUSTOM_SHAPE ? customShapeOf(shapeSvg, shapeViewBox) : null;
+  if (custom)
+    return { ...rest, shape: CUSTOM_SHAPE, shapeSvg: custom.svg, shapeViewBox: custom.viewBox };
+  return o.shape === CUSTOM_SHAPE ? { ...rest, shape: "rectangle" } : rest;
+}
+
 export class BoardCanvas {
   private readonly stage: Konva.Stage;
   private readonly overlay = new Konva.Layer();
@@ -278,8 +297,10 @@ export class BoardCanvas {
   private eraserRaf = 0;
   private color = "#0e1116";
   private stickyColor: string = DEFAULT_STICKY_COLOR;
-  /** The shape/line kind the "Shapes and lines" tool draws next (driven by the shape menu). */
+  /** The shape/line kind the "Shapes and lines" tool draws next (driven by the shape menu/panel). */
   private currentShape: ShapeKind = "rectangle";
+  /** The armed custom shape's geometry (only while currentShape === "custom"). */
+  private currentShapeCustom: CustomShape | null = null;
   /** True while setTool is baking an open editor → suppresses the commit's auto-revert-to-select. */
   private suppressAutoSelect = false;
   private widthPx = 8;
@@ -527,9 +548,12 @@ export class BoardCanvas {
     this.stickyColor = color;
     this.textLayer.setStickyColor(color); // recolours the note currently being edited, too
   }
-  /** The shape/line the "Shapes and lines" tool draws next (driven by the shape menu). */
-  setShape(kind: ShapeKind): void {
+  /** The shape/line the "Shapes and lines" tool draws next (driven by the shape menu / panel). A
+   *  custom shape passes its geometry, which every placed instance embeds. */
+  setShape(kind: ShapeKind, custom?: CustomShape): void {
+    if (kind === CUSTOM_SHAPE && !custom) return; // unrenderable without geometry — keep the current kind
     this.currentShape = kind;
+    this.currentShapeCustom = kind === CUSTOM_SHAPE && custom ? custom : null;
     this.currentConnector = null; // a shape kind → the tool places boxes, not connectors
     this.textLayer.setConnectorMode(false);
   }
@@ -783,7 +807,12 @@ export class BoardCanvas {
       this.publishCursor(p);
       if (this.tool === "sticky") this.textLayer.showStickyGhost(p, this.stickyColor); // placement preview
       if (this.tool === "shapes" && !this.currentConnector)
-        this.textLayer.showShapeGhost(p, this.currentShape, DEFAULT_SHAPE_FILL);
+        this.textLayer.showShapeGhost(
+          p,
+          this.currentShape,
+          DEFAULT_SHAPE_FILL,
+          this.currentShapeCustom ?? undefined,
+        );
       if (this.tool === "text") {
         // I-beam over an existing text box (click to edit it); the default cursor over empty board.
         this.stage.container().style.cursor = this.textLayer.hitTest(p) ? "text" : CURSOR_URL;
@@ -1093,7 +1122,12 @@ export class BoardCanvas {
   private bindShapes(): void {
     this.bindTapPlace("shapes", (at) => {
       if (this.currentConnector) return; // connector mode draws on drag (bindConnectors), not tap-place
-      this.textLayer.shapeAt(at, this.currentShape, DEFAULT_SHAPE_FILL);
+      this.textLayer.shapeAt(
+        at,
+        this.currentShape,
+        DEFAULT_SHAPE_FILL,
+        this.currentShapeCustom ?? undefined,
+      );
       this.opts.onPlaced?.(); // collapse the mobile shape sheet while you type the label
     });
   }
@@ -2025,7 +2059,7 @@ export class BoardCanvas {
     );
     if (!valid.length) return false;
     this.pasteCount += 1;
-    this.pasteObjects(valid, 24 * this.pasteCount);
+    this.pasteObjects(valid.map(sanitizePastedShape), 24 * this.pasteCount);
     return true;
   }
 

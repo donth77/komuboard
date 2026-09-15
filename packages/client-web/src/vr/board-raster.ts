@@ -6,12 +6,17 @@
 // Also reusable for a future minimap.
 
 import {
+  CUSTOM_SHAPE,
+  customShapeOf,
   DEFAULT_TEXT_FONT,
   objectsMap,
   orderArray,
+  parseViewBox,
   readObject,
+  shapeDef,
   sideMidpoint,
   type BoardObject,
+  type ShapeDef,
   type ConnectorEnd,
   type ConnectorObject,
   type DragState,
@@ -520,6 +525,221 @@ function withRotation(
   ctx.restore();
 }
 
+// ---- custom shapes: sanitized SVG markup → Path2D --------------------------------------------
+// A custom shape's markup (see shape-import.ts: only g/path/rect/circle/ellipse/polygon/polyline/
+// line with numeric attributes + transforms survive) is compiled ONCE into Path2D geometry in its
+// viewBox units and cached by markup. Drawing then bakes the box transform into the coordinates,
+// exactly like the catalog paths — so the outline stays a uniform 1.5 units at any size and there's
+// no bitmap to load. (Rasterizing the 2D data-URI image instead thins the stroke: an SVG with only
+// a viewBox rasterizes at its default intrinsic size and gets scaled to the box.) The markup is
+// parsed into a detached XML document (no script runs, nothing loads) and only read.
+interface CompiledCustom {
+  /** One entry per filled source element (each filled on its own, like SVG does — merging them
+   *  would let opposite windings cancel each other). */
+  fills: Array<{ path: Path2D; rule: CanvasFillRule }>;
+  stroke: Path2D;
+}
+const customCache = new Map<string, CompiledCustom | null>();
+const CUSTOM_CACHE_MAX = 200;
+
+/** An SVG `transform` list (the sanitizer's grammar) as a matrix; unknown input → identity. */
+function svgTransform(tf: string | null): DOMMatrix {
+  let m = new DOMMatrix();
+  if (!tf) return m;
+  const re = /(matrix|translate|scale|rotate|skewX|skewY)\s*\(([^)]*)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(tf))) {
+    const args = match[2]!
+      .trim()
+      .split(/[\s,]+/)
+      .filter(Boolean)
+      .map(Number);
+    if (!args.length || args.some((n) => !Number.isFinite(n))) continue;
+    const [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0] = args;
+    switch (match[1]) {
+      case "translate":
+        m = m.translate(a, b);
+        break;
+      case "scale":
+        m = m.scale(a, args.length > 1 ? b : a);
+        break;
+      case "rotate":
+        m = args.length > 2 ? m.translate(b, c).rotate(a).translate(-b, -c) : m.rotate(a);
+        break;
+      case "skewX":
+        m = m.skewX(a);
+        break;
+      case "skewY":
+        m = m.skewY(a);
+        break;
+      case "matrix":
+        if (args.length === 6) m = m.multiply(new DOMMatrix([a, b, c, d, e, f]));
+        break;
+    }
+  }
+  return m;
+}
+
+/** One geometry element as a Path2D in its own coordinates (null if it has no usable geometry). */
+function elementPath(el: Element): Path2D | null {
+  const num = (name: string, fallback = 0): number => {
+    const v = parseFloat(el.getAttribute(name) ?? "");
+    return Number.isFinite(v) ? v : fallback;
+  };
+  const points = (): number[] =>
+    (el.getAttribute("points") ?? "")
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number)
+      .filter((n) => Number.isFinite(n));
+  const p = new Path2D();
+  switch (el.localName) {
+    case "path": {
+      const d = el.getAttribute("d");
+      return d ? new Path2D(d) : null;
+    }
+    case "rect": {
+      const w = num("width");
+      const h = num("height");
+      if (!(w > 0) || !(h > 0)) return null;
+      const rx = Math.max(0, num("rx", num("ry")));
+      const ry = Math.max(0, num("ry", rx));
+      if (rx > 0 || ry > 0) p.roundRect(num("x"), num("y"), w, h, [{ x: rx, y: ry }]);
+      else p.rect(num("x"), num("y"), w, h);
+      return p;
+    }
+    case "circle": {
+      const r = num("r");
+      if (!(r > 0)) return null;
+      p.moveTo(num("cx") + r, num("cy"));
+      p.arc(num("cx"), num("cy"), r, 0, Math.PI * 2);
+      p.closePath();
+      return p;
+    }
+    case "ellipse": {
+      const rx = num("rx");
+      const ry = num("ry");
+      if (!(rx > 0) || !(ry > 0)) return null;
+      p.moveTo(num("cx") + rx, num("cy"));
+      p.ellipse(num("cx"), num("cy"), rx, ry, 0, 0, Math.PI * 2);
+      p.closePath();
+      return p;
+    }
+    case "polygon":
+    case "polyline": {
+      const pts = points();
+      if (pts.length < 4) return null;
+      p.moveTo(pts[0]!, pts[1]!);
+      for (let i = 2; i + 1 < pts.length; i += 2) p.lineTo(pts[i]!, pts[i + 1]!);
+      if (el.localName === "polygon") p.closePath();
+      return p;
+    }
+    case "line":
+      p.moveTo(num("x1"), num("y1"));
+      p.lineTo(num("x2"), num("y2"));
+      return p;
+    default:
+      return null;
+  }
+}
+
+/** Compile (and cache) custom-shape markup into fill + stroke geometry in viewBox units. */
+function compileCustomShape(svg: string): CompiledCustom | null {
+  const hit = customCache.get(svg);
+  if (hit !== undefined) return hit;
+  let out: CompiledCustom | null = null;
+  try {
+    const doc = new DOMParser().parseFromString(
+      `<svg xmlns="http://www.w3.org/2000/svg">${svg}</svg>`,
+      "image/svg+xml",
+    );
+    const root = doc.documentElement;
+    if (root.localName === "svg" && !doc.getElementsByTagName("parsererror").length) {
+      const fills: CompiledCustom["fills"] = [];
+      const stroke = new Path2D();
+      let kept = 0;
+      const walk = (el: Element, m: DOMMatrix): void => {
+        for (const child of Array.from(el.children)) {
+          const cm = m.multiply(svgTransform(child.getAttribute("transform")));
+          if (child.localName === "g") {
+            walk(child, cm);
+            continue;
+          }
+          const path = elementPath(child);
+          if (!path) continue;
+          stroke.addPath(path, cm);
+          if (child.getAttribute("fill") !== "none") {
+            const placed = new Path2D();
+            placed.addPath(path, cm);
+            fills.push({
+              path: placed,
+              rule: child.getAttribute("fill-rule") === "evenodd" ? "evenodd" : "nonzero",
+            });
+          }
+          kept++;
+        }
+      };
+      walk(root, new DOMMatrix());
+      if (kept) out = { fills, stroke };
+    }
+  } catch {
+    out = null; // unparseable markup → the box draws its fill only (like a missing image)
+  }
+  if (customCache.size >= CUSTOM_CACHE_MAX) customCache.clear();
+  customCache.set(svg, out);
+  return out;
+}
+
+/** A custom shape's compiled geometry mapped from its viewBox into the box (transform baked). */
+function customPaths(
+  custom: { svg: string; viewBox: string },
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): CompiledCustom | null {
+  const compiled = compileCustomShape(custom.svg);
+  const vb = parseViewBox(custom.viewBox);
+  if (!compiled || !vb) return null;
+  const [vx, vy, vw, vh] = vb;
+  const sx = w / vw;
+  const sy = h / vh;
+  const m = new DOMMatrix([sx, 0, 0, sy, x - vx * sx, y - vy * sy]);
+  const map = (src: Path2D): Path2D => {
+    const p = new Path2D();
+    p.addPath(src, m);
+    return p;
+  };
+  return {
+    fills: compiled.fills.map((f) => ({ path: map(f.path), rule: f.rule })),
+    stroke: map(compiled.stroke),
+  };
+}
+
+/** A box's outline as a Path2D in world coords, mirroring the 2D renderer: CSS-border kinds
+ *  (rectangle / rounded / pill / oval) via roundRect / ellipse with the same radius rules, every
+ *  other catalog shape as its 0..100 path scaled into the box with the transform BAKED into the
+ *  coordinates — so the 1.5-unit stroke stays uniform (the 2D non-scaling stroke). A sticky (no
+ *  shape) is a square-cornered rect; an id the catalog doesn't know draws as a rectangle. */
+function boxPath(
+  kind: string | undefined,
+  def: ShapeDef | undefined,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): Path2D {
+  const p = new Path2D();
+  const box = !kind ? "sticky" : def ? (def.box ?? "path") : "rect";
+  if (box === "sticky") p.rect(x, y, w, h);
+  else if (box === "rect") p.roundRect(x, y, w, h, 4);
+  else if (box === "round") p.roundRect(x, y, w, h, Math.max(2, Math.min(w, h) * 0.18));
+  else if (box === "pill") p.roundRect(x, y, w, h, Math.min(w, h) / 2);
+  else if (box === "ellipse") p.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else p.addPath(new Path2D(def!.path), new DOMMatrix([w / 100, 0, 0, h / 100, x, y]));
+  return p;
+}
+
 /** Sticky / shape / plain text box. Heights follow the stored geometry (auto-grown text may render
  *  slightly shorter than the DOM — fine for the texture's fidelity target). */
 function drawBox(ctx: CanvasRenderingContext2D, o: TextObject): void {
@@ -527,31 +747,27 @@ function drawBox(ctx: CanvasRenderingContext2D, o: TextObject): void {
   const h = o.height ?? (o.bg ? w : 40);
   withRotation(ctx, o.x + w / 2, o.y + h / 2, o.rotation, () => {
     if (o.bg || o.shape) {
-      ctx.beginPath();
-      if (o.shape === "ellipse") ctx.ellipse(o.x + w / 2, o.y + h / 2, w / 2, h / 2, 0, 0, 7);
-      else if (o.shape === "rhombus") {
-        ctx.moveTo(o.x + w / 2, o.y);
-        ctx.lineTo(o.x + w, o.y + h / 2);
-        ctx.lineTo(o.x + w / 2, o.y + h);
-        ctx.lineTo(o.x, o.y + h / 2);
-        ctx.closePath();
-      } else if (o.shape === "triangle") {
-        ctx.moveTo(o.x + w / 2, o.y);
-        ctx.lineTo(o.x + w, o.y + h);
-        ctx.lineTo(o.x, o.y + h);
-        ctx.closePath();
-      } else ctx.roundRect(o.x, o.y, w, h, o.shape ? 4 : 0); // stickies are square-cornered in 2D
-      ctx.fillStyle = o.bg ?? "#ffffff";
-      ctx.fill();
+      const def = o.shape ? shapeDef(o.shape) : undefined;
+      const fill = o.bg ?? "#ffffff";
       // Shapes carry a border by DEFAULT in 2D (1.5px solid #1f2933; borderStyle "none" opts out).
       // Stickies/plain text have none unless explicitly set.
       const bStyle = o.borderStyle ?? "solid";
       const bColor = o.borderColor ?? (o.shape ? "#1f2933" : undefined);
-      if (bColor && bStyle !== "none") {
-        ctx.strokeStyle = bColor;
+      const stroke = bColor && bStyle !== "none" ? bColor : null;
+      const custom = o.shape === CUSTOM_SHAPE ? customShapeOf(o.shapeSvg, o.shapeViewBox) : null;
+      const paths = custom ? customPaths(custom, o.x, o.y, w, h) : null;
+      const outline = paths ? null : boxPath(custom ? undefined : o.shape, def, o.x, o.y, w, h);
+      ctx.fillStyle = fill;
+      if (paths) {
+        // Custom geometry: each element filled on its own; unfilled source elements (fill="none")
+        // stay unfilled, like the 2D wrapper.
+        for (const f of paths.fills) ctx.fill(f.path, f.rule);
+      } else if (outline && !def?.noFill) ctx.fill(outline);
+      if (stroke) {
+        ctx.strokeStyle = stroke;
         ctx.lineWidth = 1.5;
         ctx.setLineDash(bStyle === "dashed" ? [6, 4] : []);
-        ctx.stroke();
+        ctx.stroke(paths ? paths.stroke : outline!);
         ctx.setLineDash([]);
       }
     }
@@ -575,9 +791,15 @@ function drawObjectText(ctx: CanvasRenderingContext2D, o: TextObject, w: number,
   const fs = o.fontSize || 16;
   const family = o.fontFamily || DEFAULT_TEXT_FONT;
   const lh = fs * 1.3;
-  // Padding parity with 2D: .sticky 1.2em, .shape 0.7em, bare text none.
+  // Padding parity with 2D: .sticky 1.2em, .shape 0.7em, bare text none — plus a shape's label
+  // inset (fractions of the box that keep the text out of a tail / point / cylinder cap).
   const pad = (o.shape ? 0.7 : o.bg ? 1.2 : 0) * fs;
-  const innerW = Math.max(1, w - 2 * pad);
+  const [it, ir, ib, il] = (o.shape && shapeDef(o.shape)?.inset) || [0, 0, 0, 0];
+  const padT = pad + it * h;
+  const padR = pad + ir * w;
+  const padB = pad + ib * h;
+  const padL = pad + il * w;
+  const innerW = Math.max(1, w - padL - padR);
   const fontFor = (r: TextRun): string =>
     `${r.italic ? "italic " : ""}${r.bold ? "700" : "400"} ${fs}px ${family}`;
 
@@ -603,7 +825,9 @@ function drawObjectText(ctx: CanvasRenderingContext2D, o: TextObject, w: number,
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
   const totalH = lines.length * lh;
-  const top = o.shape ? Math.max(o.y + pad, o.y + (h - totalH) / 2) : o.y + pad;
+  const top = o.shape
+    ? Math.max(o.y + padT, o.y + padT + (h - padT - padB - totalH) / 2)
+    : o.y + pad;
   // Trailing whitespace on a line doesn't count toward centre/right alignment.
   const displayWidth = (line: Word[]): number => {
     let end = line.length;
@@ -619,10 +843,10 @@ function drawObjectText(ctx: CanvasRenderingContext2D, o: TextObject, w: number,
     const dispW = displayWidth(line);
     let x =
       o.align === "center"
-        ? o.x + (w - dispW) / 2
+        ? o.x + padL + (innerW - dispW) / 2
         : o.align === "right"
-          ? o.x + w - pad - dispW
-          : o.x + pad;
+          ? o.x + w - padR - dispW
+          : o.x + padL;
     for (const word of line) {
       ctx.font = fontFor(word.run);
       if (word.run.highlight) {

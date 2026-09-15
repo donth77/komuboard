@@ -22,6 +22,7 @@ export const MAX_CONNECTIONS = 50;
 
 // Yjs document schema + presence types (the shared contract for canvas content).
 export * from "./schema";
+export * from "./shapes";
 export * from "./uploads";
 
 /**

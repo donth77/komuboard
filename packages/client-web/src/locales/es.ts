@@ -80,6 +80,62 @@ const dict: Record<string, string> = {
   "shape.ellipse": "Óvalo",
   "shape.rhombus": "Rombo",
   "shape.triangle": "Triángulo",
+  "shape.rounded": "Rectángulo redondeado",
+  "shape.pill": "Píldora",
+  "shape.triangleDown": "Triángulo invertido",
+  "shape.parallelogram": "Paralelogramo",
+  "shape.trapezoid": "Trapecio",
+  "shape.pentagon": "Pentágono",
+  "shape.hexagon": "Hexágono",
+  "shape.octagon": "Octágono",
+  "shape.star": "Estrella",
+  "shape.cross": "Cruz",
+  "shape.arrowRight": "Flecha derecha",
+  "shape.arrowLeft": "Flecha izquierda",
+  "shape.arrowLeftRight": "Flecha doble",
+  "shape.chevron": "Chevrón",
+  "shape.signpost": "Flecha pentagonal",
+  "shape.speech": "Bocadillo",
+  "shape.cloud": "Nube",
+  "shape.cylinder": "Cilindro",
+  "shape.braceLeft": "Llave izquierda",
+  "shape.braceRight": "Llave derecha",
+  "shape.predefined": "Proceso predefinido",
+  "shape.document": "Documento",
+  "shape.documents": "Varios documentos",
+  "shape.manualInput": "Entrada manual",
+  "shape.manualOperation": "Operación manual",
+  "shape.delay": "Retardo",
+  "shape.display": "Pantalla",
+  "shape.storedData": "Datos almacenados",
+  "shape.internalStorage": "Almacenamiento interno",
+  "shape.offPage": "Conector fuera de página",
+  "shape.or": "O",
+  "shape.summing": "Unión sumadora",
+  "shape.collate": "Intercalar",
+  "shape.sort": "Ordenar",
+  "shape.card": "Tarjeta",
+  "shape.tape": "Cinta perforada",
+  "shape.loopLimit": "Límite de bucle",
+  "shape.directAccess": "Almacenamiento de acceso directo",
+  "shape.sequentialData": "Datos secuenciales",
+  "shape.note": "Nota",
+  "shape.custom": "Forma personalizada",
+
+  // shapes panel (<komu-shape-panel>)
+  "shapes.title": "Formas",
+  "shapes.more": "Más formas",
+  "shapes.search": "Buscar formas",
+  "shapes.searchAria": "Buscar formas",
+  "shapes.noResults": "No se encontraron formas",
+  "shapes.lines": "Líneas",
+  "shapes.basic": "Básicas",
+  "shapes.flowchart": "Diagrama de flujo",
+  "shapes.yours": "Tus formas",
+  "shapes.yoursHint":
+    "Archivos SVG de hasta 256 KB. Solo se conserva el contorno, que toma el relleno y el borde de la forma.",
+  "shapes.upload": "Buscar y subir formas SVG",
+  "shapes.remove": "Quitar {name}",
 
   // text bar
   "text.font": "Fuente",
@@ -257,6 +313,14 @@ const dict: Record<string, string> = {
     "Esa imagen es demasiado grande (más de 5 MB incluso después de redimensionarla).",
   "toast.uploadFailedConnection": "La subida falló — verifica tu conexión e inténtalo de nuevo.",
   "toast.uploadFailed": "La subida falló — inténtalo de nuevo.",
+  "toast.svgTypeUnsupported": "Ese archivo no es un SVG.",
+  "toast.svgTooLarge": "Ese SVG es demasiado grande (más de 256 KB).",
+  "toast.svgInvalid": "No se pudo leer ese SVG.",
+  "toast.svgEmpty":
+    "Ese SVG no tiene un contorno utilizable: solo se conservan trazados y formas básicas.",
+  "toast.svgTooComplex":
+    "Ese SVG es demasiado detallado: mantenlo por debajo de 16 KB de trazados.",
+  "toast.svgLibraryFull": "Tu biblioteca de formas está llena: quita una forma para añadir otra.",
 
   // refused / disconnect dialog
   "refused.roomFullTitle": "Esta sala está llena",
@@ -313,8 +377,6 @@ const dict: Record<string, string> = {
 
   // VR
   "vr.exit": "Salir de VR",
-};
-export default dict;
   "vr.loading": "Cargando la pizarra…",
   "vr.help.move": "Stick izquierdo: caminar",
   "vr.help.turn": "Stick derecho: girar · arriba para teletransportarte",
@@ -323,3 +385,5 @@ export default dict;
   "vr.help.height": "Y / X: subir / bajar la vista",
   "vr.help.grab": "Grip o gatillo: coger un rotulador",
   "vr.help.hide": "Pulsa el stick izquierdo: ocultar consejos",
+};
+export default dict;

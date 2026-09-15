@@ -32,6 +32,13 @@ export const ICONS: Record<string, string> = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   // Minus — the VR dock's zoom-out key (pairs with plus).
   minus: '<path d="M5 12h14"/>',
+  // Upload (Lucide) — the shapes panel's "Browse and upload SVG shapes".
+  upload:
+    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+  // Info (Lucide) — the ⓘ hint beside "Your shapes".
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  // Chevron-down — collapsible section headers (rotated via CSS when collapsed).
+  chevron: '<path d="m6 9 6 6 6-6"/>',
   // Download (Lucide) — the Export action.
   download:
     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',

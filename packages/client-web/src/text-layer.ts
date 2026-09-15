@@ -34,10 +34,16 @@ import {
   setStampGeom,
   setTextGeometry,
   setTextRuns,
+  setTextShape,
   setTextStyle,
+  shapeDef,
+  shapeOutlineSvg,
   sideMidpoint,
   translateObjects,
+  CUSTOM_SHAPE,
+  customShapeOf,
   type BorderStyle,
+  type CustomShape,
   type ConnectorCap,
   type ConnectorEnd,
   type ConnectorKind,
@@ -125,6 +131,9 @@ interface EditSession {
   bg?: string;
   /** Shape outline + fixed box height, when this box is a shape. */
   shape?: ShapeKind;
+  /** Custom-shape geometry (shape === "custom"). */
+  shapeSvg?: string;
+  shapeViewBox?: string;
   height?: number;
   /** Shape border colour + style (solid/dashed/none). */
   borderColor?: string;
@@ -147,6 +156,8 @@ interface TextEditState {
   /** Sticky-note paper colour (so peers render the live edit as a coloured note). */
   bg?: string;
   shape?: ShapeKind;
+  shapeSvg?: string;
+  shapeViewBox?: string;
   height?: number;
   borderColor?: string;
   borderStyle?: BorderStyle;
@@ -163,6 +174,8 @@ type Geom = {
   align: TextAlign;
   bg?: string;
   shape?: ShapeKind;
+  shapeSvg?: string;
+  shapeViewBox?: string;
   height?: number;
   borderColor?: string;
   borderStyle?: BorderStyle;
@@ -187,19 +200,28 @@ function selectedHighlight(): string {
     return "";
   return safeColor(colorToHex(raw));
 }
-// Polygon shapes drawn as an SVG-outline background (rectangle/ellipse use a CSS border).
-// Points are in a 0..100 viewBox, inset slightly so the stroke isn't clipped at the edges.
-const SHAPE_POLYGONS: Record<string, string> = {
-  triangle: "50,4 96,96 4,96",
-  rhombus: "50,4 96,50 50,96 4,50",
-};
-/** A polygon outline + fill as an SVG data URI, stretched to the box via preserveAspectRatio=none. */
-function shapeSvg(points: string, fill: string, stroke: string, dashed: boolean): string {
-  const dash = dashed ? ` stroke-dasharray='6 5'` : "";
-  const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'>` +
-    `<polygon points='${points}' fill='${fill}' stroke='${stroke}' stroke-width='2'${dash} stroke-linejoin='round'/></svg>`;
-  return "data:image/svg+xml," + encodeURIComponent(svg);
+/** The custom geometry carried by a box/session/live-edit state, when it IS a custom shape. */
+function customOf(o: {
+  shape?: string;
+  shapeSvg?: string;
+  shapeViewBox?: string;
+}): CustomShape | undefined {
+  if (o.shape !== CUSTOM_SHAPE) return undefined;
+  return customShapeOf(o.shapeSvg, o.shapeViewBox) ?? undefined;
+}
+/** The box a tap-placed shape gets: the catalog shape's natural size, else the default box. */
+function placedShapeSize(kind: string): readonly [number, number] {
+  return shapeDef(kind)?.size ?? [DEFAULT_SHAPE_W, DEFAULT_SHAPE_H];
+}
+/** The stretched shape outline (catalog path or custom markup) as a CSS background-image URL. */
+function shapeBackground(
+  geometry: { path: string; noFill?: boolean } | CustomShape,
+  fill: string,
+  stroke: string,
+  dashed: boolean,
+): string {
+  const svg = shapeOutlineSvg(geometry, fill, stroke, dashed);
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 /** A click that moves less than this (screen px) is a tap-to-place, not a drag-to-size box. */
 const TAP_SLOP_PX = 6;
@@ -418,6 +440,8 @@ export class TextLayer {
     /** Aspect ratio frozen the instant Shift goes down mid-resize (so the lock starts from the
      *  current in-progress shape, not the box's original proportions). Cleared when Shift lifts. */
     lock?: { w: number; h: number };
+    /** A circle symbol (catalog `lockAspect`) stays square without Shift. */
+    lockAspect?: boolean;
   } | null = null;
   /** Live rotation drag preview (degrees) for one box; effectiveGeom prefers it over the doc value. */
   private rotatePreview: { id: string; rotation: number } | null = null;
@@ -480,7 +504,7 @@ export class TextLayer {
         this.scheduleEditBroadcast(); // peers see the mark live
         this.reflectBar();
       },
-      setShapeKind: (kind) => this.applyShapeKind(kind),
+      setShapeKind: (kind, custom) => this.applyShapeKind(kind, custom),
       setFill: (color) => this.applyFill(color),
       setBorder: (p) => this.applyBorder(p),
       setAlign: (align) => this.applyBlock({ align }),
@@ -779,7 +803,8 @@ export class TextLayer {
       ? `<div class="komu-text-body">${runsToHtml(obj.runs)}</div>`
       : runsToHtml(obj.runs);
     el.style.color = INK; // default ink; per-run colours override via the rendered spans
-    if (obj.shape) this.applyShape(el, obj.shape, obj.bg, obj.borderColor, obj.borderStyle);
+    if (obj.shape)
+      this.applyShape(el, obj.shape, obj.bg, obj.borderColor, obj.borderStyle, customOf(obj));
     else this.applySticky(el, obj.bg);
   }
 
@@ -1279,40 +1304,75 @@ export class TextLayer {
     }
   }
 
-  /** Toggle the shape look (outline + fill + centred "Add text" label) on a box element. Rectangle/
-   *  ellipse are drawn with a crisp CSS border (their `shape-<kind>` class); polygon shapes
-   *  (triangle/rhombus) use an SVG-outline background so they actually look like the shape. The
-   *  border colour/style override the defaults (`none` removes the outline entirely). */
+  /** Toggle the shape look (outline + fill + centred "Add text" label) on a box element. Kinds
+   *  with a `box` hint in the catalog (rectangle / rounded / pill / oval) draw a crisp CSS border
+   *  (`shape-box-<hint>`); every other catalog shape — and a custom shape's markup — is stretched
+   *  into the box as an SVG-outline background with a non-scaling 1.5px stroke (`shape-path`). An
+   *  id the catalog doesn't know (a newer client's shape) draws as a rectangle. The border colour /
+   *  style override the defaults (`none` removes the outline entirely). The kind is recorded on
+   *  `data-shape` so layout() can apply its label inset / corner radius. */
   private applyShape(
     el: HTMLElement,
     kind: string | undefined,
     fill: string | undefined,
     borderColor?: string,
     borderStyle?: BorderStyle,
+    custom?: CustomShape,
   ): void {
     for (const c of [...el.classList]) if (c.startsWith("shape")) el.classList.remove(c);
     el.style.backgroundImage = "";
     el.style.removeProperty("border-color");
     el.style.removeProperty("border-style");
     if (!kind) {
+      delete el.dataset.shape;
       el.style.removeProperty("height");
+      el.style.removeProperty("padding");
+      el.style.removeProperty("border-radius");
       return;
     }
-    el.classList.add("shape", `shape-${kind}`);
+    const def = shapeDef(kind);
+    const geometry = kind === CUSTOM_SHAPE ? custom : def;
+    const resolved = geometry ? kind : "rectangle";
+    el.classList.add("shape", `shape-${resolved}`);
+    el.dataset.shape = resolved;
     const f = fill || "#ffffff";
     const bColor = borderColor || SHAPE_STROKE;
     const bStyle = borderStyle ?? "solid";
-    const poly = SHAPE_POLYGONS[kind];
-    if (poly) {
-      // SVG polygon outline + fill, stretched to the box (preserveAspectRatio none).
-      el.style.background = "transparent";
-      const stroke = bStyle === "none" ? "transparent" : bColor;
-      el.style.backgroundImage = `url("${shapeSvg(poly, f, stroke, bStyle === "dashed")}")`;
-    } else {
-      el.style.background = f; // rectangle / ellipse use the CSS border
+    if (!geometry || (def && def.box)) {
+      el.classList.add(`shape-box-${def?.box ?? "rect"}`);
+      el.style.background = f;
       el.style.borderColor = bColor;
       el.style.borderStyle = bStyle; // solid / dashed / none
+    } else {
+      el.classList.add("shape-path");
+      el.style.background = "transparent";
+      const stroke = bStyle === "none" ? "transparent" : bColor;
+      el.style.backgroundImage = shapeBackground(geometry, f, stroke, bStyle === "dashed");
     }
+  }
+
+  /** Per-kind box styling that depends on the SCREEN size: a rounded rectangle's corner radius
+   *  (18% of the shorter side, so corners stay circular at any aspect + zoom) and the label inset
+   *  that keeps text out of a tail / point / cylinder cap (fractions of the box, on top of the base
+   *  0.7em padding). Cleared for kinds without either, so the CSS defaults apply. */
+  private applyShapeMetrics(
+    el: HTMLElement,
+    width: number | undefined,
+    height: number | undefined,
+    fontSize: number,
+    scale: number,
+  ): void {
+    const def = shapeDef(el.dataset.shape ?? "");
+    const w = (width ?? 0) * scale;
+    const h = (height ?? 0) * scale;
+    if (def?.box === "round" && w > 0 && h > 0)
+      el.style.borderRadius = `${Math.max(2, Math.min(w, h) * 0.18)}px`;
+    else el.style.removeProperty("border-radius");
+    if (def?.inset && (w > 0 || h > 0)) {
+      const base = 0.7 * fontSize * scale;
+      const [t, r, b, l] = def.inset;
+      el.style.padding = `${base + t * h}px ${base + r * w}px ${base + b * h}px ${base + l * w}px`;
+    } else el.style.removeProperty("padding");
   }
 
   /** Position + size an element in screen space from its world geometry and the camera. A shape box
@@ -1346,6 +1406,7 @@ export class TextLayer {
     const isSticky = el.classList.contains("sticky");
     const isShape = el.classList.contains("shape");
     const isImage = el.classList.contains("komu-image");
+    if (isShape) this.applyShapeMetrics(el, width, height, fontSize, cam.scale);
     el.style.height = "";
     if (isImage && height != null) {
       // An image is a fixed box (the <img> fills it via object-fit) — it needs a DEFINITE height,
@@ -1754,14 +1815,18 @@ export class TextLayer {
     );
   }
   /** Show/move a translucent placement preview of a shape, centred on the world point. */
-  showShapeGhost(world: { x: number; y: number }, kind: ShapeKind, fill: string): void {
+  showShapeGhost(
+    world: { x: number; y: number },
+    kind: ShapeKind,
+    fill: string,
+    custom?: CustomShape,
+  ): void {
     if (this.edit) return this.hideStickyGhost();
     const g = this.ensureGhost();
     g.className = "komu-text komu-text-ghost";
     g.textContent = "";
-    this.applyShape(g, kind, fill);
-    const w = DEFAULT_SHAPE_W;
-    const h = DEFAULT_SHAPE_H;
+    this.applyShape(g, kind, fill, undefined, undefined, custom);
+    const [w, h] = placedShapeSize(kind);
     this.layout(
       g,
       world.x - w / 2,
@@ -1819,6 +1884,8 @@ export class TextLayer {
     if (obj.height != null) session.height = obj.height;
     if (obj.bg != null) session.bg = obj.bg;
     if (obj.shape != null) session.shape = obj.shape;
+    if (obj.shapeSvg != null) session.shapeSvg = obj.shapeSvg;
+    if (obj.shapeViewBox != null) session.shapeViewBox = obj.shapeViewBox;
     if (obj.borderColor != null) session.borderColor = obj.borderColor;
     if (obj.borderStyle != null) session.borderStyle = obj.borderStyle;
     const rot = this.effectiveGeom(id, obj).rotation;
@@ -1846,11 +1913,15 @@ export class TextLayer {
   /** Shapes tool: drop a new shape box (fixed width×height) centred on the point + open for a label.
    *  Always CREATES (FigJam-style) — placing over an existing object stacks a new shape on top rather
    *  than dropping into that object's text (or no-op'ing over a non-editable stamp/stroke). */
-  shapeAt(world: { x: number; y: number }, kind: ShapeKind, fill: string): void {
+  shapeAt(
+    world: { x: number; y: number },
+    kind: ShapeKind,
+    fill: string,
+    custom?: CustomShape,
+  ): void {
     if (this.edit) this.commit();
-    const w = DEFAULT_SHAPE_W;
-    const h = DEFAULT_SHAPE_H;
-    this.openEditor({
+    const [w, h] = placedShapeSize(kind);
+    const session: Omit<EditSession, "el" | "editable"> = {
       id: null,
       x: world.x - w / 2,
       y: world.y - h / 2,
@@ -1861,7 +1932,12 @@ export class TextLayer {
       align: "center",
       bg: fill || DEFAULT_SHAPE_FILL,
       shape: kind,
-    });
+    };
+    if (kind === CUSTOM_SHAPE && custom) {
+      session.shapeSvg = custom.svg;
+      session.shapeViewBox = custom.viewBox;
+    }
+    this.openEditor(session);
   }
 
   private openEditor(
@@ -1876,7 +1952,14 @@ export class TextLayer {
     this.applyRotation(el, session.rotation ?? 0);
     // Shape (outline + fixed height) or sticky (coloured square) styling on the box itself.
     if (session.shape)
-      this.applyShape(el, session.shape, session.bg, session.borderColor, session.borderStyle);
+      this.applyShape(
+        el,
+        session.shape,
+        session.bg,
+        session.borderColor,
+        session.borderStyle,
+        customOf(session),
+      );
     else this.applySticky(el, session.bg);
     // A shape's text lives in an INNER contenteditable so its empty caret centres within the box
     // (the box is full-height, so an editable === box would strand the caret at the top). Plain
@@ -1936,7 +2019,9 @@ export class TextLayer {
       // also revert the tool to select: the revert would synchronously hide the menu before the
       // picked item's click registers, so e.g. picking the arrow after placing a shape silently
       // dropped you on the select tool. Commit with keepTool so the menu stays and the pick lands.
-      const keepTool = !!next?.closest("komu-shape-menu, komu-sticky-bar, komu-draw-bar");
+      const keepTool = !!next?.closest(
+        "komu-shape-menu, komu-shape-panel, komu-sticky-bar, komu-draw-bar",
+      );
       this.commit(keepTool);
     });
 
@@ -2116,11 +2201,19 @@ export class TextLayer {
   }
 
   /** Shape mode: change the kind of the shape being edited (re-paints its outline live). */
-  private setEditShape(kind: ShapeKind): void {
+  private setEditShape(kind: ShapeKind, custom?: CustomShape): void {
     const e = this.edit;
     if (!e || e.shape == null) return;
+    if (kind === CUSTOM_SHAPE && !custom) return; // a custom kind needs its geometry
     e.shape = kind;
-    this.applyShape(e.el, kind, e.bg, e.borderColor, e.borderStyle);
+    if (kind === CUSTOM_SHAPE && custom) {
+      e.shapeSvg = custom.svg;
+      e.shapeViewBox = custom.viewBox;
+    } else {
+      delete e.shapeSvg;
+      delete e.shapeViewBox;
+    }
+    this.applyShape(e.el, kind, e.bg, e.borderColor, e.borderStyle, custom);
     this.layout(e.el, e.x, e.y, e.width, e.fontSize, e.fontFamily, e.align, e.height);
     this.positionBar();
     this.scheduleEditBroadcast();
@@ -2132,7 +2225,8 @@ export class TextLayer {
     const e = this.edit;
     if (!e || (e.shape == null && e.bg == null)) return; // only shapes + stickies have a fill
     e.bg = color;
-    if (e.shape != null) this.applyShape(e.el, e.shape, color, e.borderColor, e.borderStyle);
+    if (e.shape != null)
+      this.applyShape(e.el, e.shape, color, e.borderColor, e.borderStyle, customOf(e));
     else this.applySticky(e.el, color);
     this.scheduleEditBroadcast();
     this.reflectBar();
@@ -2144,7 +2238,7 @@ export class TextLayer {
     if (!e || e.shape == null) return;
     if (p.color != null) e.borderColor = p.color;
     if (p.style != null) e.borderStyle = p.style;
-    this.applyShape(e.el, e.shape, e.bg, e.borderColor, e.borderStyle);
+    this.applyShape(e.el, e.shape, e.bg, e.borderColor, e.borderStyle, customOf(e));
     this.scheduleEditBroadcast();
     this.reflectBar();
   }
@@ -2170,15 +2264,9 @@ export class TextLayer {
     if (this.edit) return this.setEditBlock(p);
     if (this.barSelId) setTextStyle(this.opts.doc, this.barSelId, p); // observer re-reflects the bar
   }
-  private applyShapeKind(kind: ShapeKind): void {
-    if (this.edit) return this.setEditShape(kind);
-    const id = this.barSelId;
-    if (!id) return;
-    this.opts.doc.transact(() => {
-      const m = this.objects.get(id);
-      if (!m || m.get("type") !== "text") return;
-      m.set("shape", kind);
-    });
+  private applyShapeKind(kind: ShapeKind, custom?: CustomShape): void {
+    if (this.edit) return this.setEditShape(kind, custom);
+    if (this.barSelId) setTextShape(this.opts.doc, this.barSelId, kind, custom);
   }
   private applyFill(color: string): void {
     if (this.edit) return this.setEditFill(color);
@@ -3356,6 +3444,11 @@ export class TextLayer {
       box.classList.toggle("komu-text-resize-stamp", obj?.type === "stamp");
       // An image resizes aspect-locked → corner handles only too (a side handle would distort it).
       box.classList.toggle("komu-text-resize-image", obj?.type === "image");
+      // A circle symbol (catalog lockAspect) keeps its square → corner handles only as well.
+      box.classList.toggle(
+        "komu-text-resize-square",
+        obj?.type === "text" && obj.shape != null && !!shapeDef(obj.shape)?.lockAspect,
+      );
       box.classList.toggle("komu-text-resize-stroke", false);
       box.classList.toggle("komu-text-resize-locked", false);
       const rotatable = obj?.type === "text" || obj?.type === "stamp" || obj?.type === "image";
@@ -3535,6 +3628,7 @@ export class TextLayer {
       ofs: obj.fontSize,
       baseW: obj.width ?? size.w, // auto-width boxes scale from their measured width
       isShape: obj.shape != null,
+      lockAspect: obj.shape != null && !!shapeDef(obj.shape)?.lockAspect,
       isStamp: false,
     };
     this.updateSelectionBar(); // hide the floating toolbar while resizing (re-shows on release)
@@ -3684,10 +3778,11 @@ export class TextLayer {
         nh = Math.max(MIN_TEXT_W, oh - wdy);
         ny = rs.oy + (oh - nh); // anchor the bottom edge
       }
-      if (e.shiftKey && nh > 0 && nw > 0) {
+      if ((e.shiftKey || rs.lockAspect) && nh > 0 && nw > 0) {
         // Freeze the aspect ratio at the instant Shift goes down — using the CURRENT (in-progress)
         // dimensions, not the box's original ones — so the shape doesn't jump when you grab Shift.
-        if (!rs.lock) rs.lock = { w: nw, h: nh };
+        // A circle symbol is always locked, and locked SQUARE (so an old stretched one snaps round).
+        if (!rs.lock) rs.lock = rs.lockAspect ? { w: 1, h: 1 } : { w: nw, h: nh };
         const lw = rs.lock.w;
         const lh = rs.lock.h;
         const ratio = lw / lh;
@@ -4345,6 +4440,8 @@ export class TextLayer {
     if (e.width != null) state.width = e.width;
     if (e.bg != null) state.bg = e.bg;
     if (e.shape != null) state.shape = e.shape;
+    if (e.shapeSvg != null) state.shapeSvg = e.shapeSvg;
+    if (e.shapeViewBox != null) state.shapeViewBox = e.shapeViewBox;
     if (e.height != null) state.height = e.height;
     if (e.borderColor != null) state.borderColor = e.borderColor;
     if (e.borderStyle != null) state.borderStyle = e.borderStyle;
@@ -4382,7 +4479,16 @@ export class TextLayer {
       if (typeof te.width === "number" && isFinite(te.width)) g.width = te.width;
       if (typeof te.height === "number" && isFinite(te.height)) g.height = te.height;
       if (typeof te.bg === "string" && te.bg) g.bg = te.bg;
-      if (typeof te.shape === "string") g.shape = te.shape;
+      if (typeof te.shape === "string" && te.shape) {
+        g.shape = te.shape;
+        // a peer's custom geometry is validated like doc data (size cap + viewBox) before use
+        const custom =
+          te.shape === CUSTOM_SHAPE ? customShapeOf(te.shapeSvg, te.shapeViewBox) : null;
+        if (custom) {
+          g.shapeSvg = custom.svg;
+          g.shapeViewBox = custom.viewBox;
+        }
+      }
       if (typeof te.rotation === "number" && isFinite(te.rotation)) g.rotation = te.rotation;
       if (typeof te.borderColor === "string" && te.borderColor) g.borderColor = te.borderColor;
       if (te.borderStyle === "solid" || te.borderStyle === "dashed" || te.borderStyle === "none")
@@ -4398,7 +4504,7 @@ export class TextLayer {
       el.style.color = INK;
       el.style.setProperty("--remote", typeof st.color === "string" ? st.color : "#4a9eff");
       // a peer's live shape/sticky shows its outline + fill (or paper colour + square)
-      if (g.shape) this.applyShape(el, g.shape, g.bg, g.borderColor, g.borderStyle);
+      if (g.shape) this.applyShape(el, g.shape, g.bg, g.borderColor, g.borderStyle, customOf(g));
       else this.applySticky(el, g.bg);
       this.applyRotation(el, g.rotation ?? 0); // an edited ROTATED box must not flip upright for peers
       this.remoteGeom.set(cid, g);
@@ -4453,6 +4559,8 @@ export class TextLayer {
             ...(e.borderStyle != null ? { borderStyle: e.borderStyle } : {}),
           });
           if (e.height != null) setTextGeometry(this.opts.doc, id, { height: e.height });
+          // The kind can change mid-edit (shape popover) — persist it, custom geometry included.
+          if (e.shape != null) setTextShape(this.opts.doc, id, e.shape, customOf(e));
         });
       } else {
         deleteObject(this.opts.doc, id);
@@ -4473,6 +4581,8 @@ export class TextLayer {
       if (e.height != null) obj.height = e.height;
       if (e.bg != null) obj.bg = e.bg;
       if (e.shape != null) obj.shape = e.shape;
+      if (e.shapeSvg != null) obj.shapeSvg = e.shapeSvg;
+      if (e.shapeViewBox != null) obj.shapeViewBox = e.shapeViewBox;
       if (e.borderColor != null) obj.borderColor = e.borderColor;
       if (e.borderStyle != null) obj.borderStyle = e.borderStyle;
       addText(this.opts.doc, obj);

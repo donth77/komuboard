@@ -13,6 +13,8 @@
  */
 import * as Y from "yjs";
 
+import { CUSTOM_SHAPE, customShapeOf } from "./shapes";
+
 // Brush (pen vs highlighter) and dash (solid vs dotted) are independent axes; `highlight-dashed`
 // is the dotted highlighter. The pen panel only exposes the first three; the draw bar all four.
 export type StrokeStyle = "solid" | "dashed" | "highlight" | "highlight-dashed";
@@ -55,8 +57,10 @@ export interface TextRun {
 export type TextAlign = "left" | "center" | "right";
 
 /** Shape outlines the "Shapes and lines" tool can draw as text-bearing boxes (lines/arrows are a
- *  separate ConnectorObject). The box renders the outline + a centred label. */
-export type ShapeKind = "rectangle" | "ellipse" | "rhombus" | "triangle";
+ *  separate ConnectorObject). The box renders the outline + a centred label. A catalog id from
+ *  shapes.ts (`SHAPE_CATALOG`) or `CUSTOM_SHAPE` ("custom": the geometry travels on the object as
+ *  `shapeSvg` + `shapeViewBox`). Renderers draw an id they don't know as a rectangle. */
+export type ShapeKind = string;
 /** A shape's border style: a solid line, a dashed line, or no border at all. */
 export type BorderStyle = "solid" | "dashed" | "none";
 
@@ -145,6 +149,11 @@ export interface TextObject {
   /** When set, the box renders as a shape outline (rectangle/ellipse/…) with a centred label and a
    *  `bg` fill. Drawn by the "Shapes and lines" tool. */
   shape?: ShapeKind;
+  /** Custom shape only (`shape === "custom"`): the sanitized SVG geometry (children of an <svg>),
+   *  at most MAX_CUSTOM_SHAPE_SVG_CHARS. Rendered only ever as a CSS/data-URI image. */
+  shapeSvg?: string;
+  /** Custom shape only: the viewBox ("minX minY width height") `shapeSvg` is drawn in. */
+  shapeViewBox?: string;
   /** Rich content as styled runs (a single LWW field). */
   runs: TextRun[];
   fontFamily: string;
@@ -251,7 +260,7 @@ export const DEFAULT_STICKY_SIZE = 150;
 export const DEFAULT_SHAPE_FILL = "#ffffff";
 export const DEFAULT_SHAPE_W = 180;
 export const DEFAULT_SHAPE_H = 130;
-export const SHAPE_KINDS: readonly string[] = ["rectangle", "ellipse", "rhombus", "triangle"];
+// The drawable shape ids (`SHAPE_KINDS`) + the catalog live in shapes.ts (re-exported via index.ts).
 
 /** Connectors: default ink + line width (canvas units), and the kinds the menu can draw. */
 export const DEFAULT_CONNECTOR_COLOR = "#1f2933";
@@ -315,6 +324,8 @@ export function addText(doc: Y.Doc, t: TextObject): void {
     if (t.height != null) m.set("height", t.height);
     if (t.rotation != null) m.set("rotation", t.rotation);
     if (t.shape != null) m.set("shape", t.shape);
+    if (t.shapeSvg != null) m.set("shapeSvg", t.shapeSvg);
+    if (t.shapeViewBox != null) m.set("shapeViewBox", t.shapeViewBox);
     m.set("runs", t.runs);
     m.set("fontFamily", t.fontFamily);
     m.set("fontSize", t.fontSize);
@@ -499,6 +510,30 @@ export function setTextStyle(
     if (style.bg != null) m.set("bg", style.bg);
     if (style.borderColor != null) m.set("borderColor", style.borderColor);
     if (style.borderStyle != null) m.set("borderStyle", style.borderStyle);
+  });
+}
+
+/** Change a shape box's kind. A catalog id clears any custom geometry; `CUSTOM_SHAPE` requires the
+ *  geometry and stores it alongside — atomically, so a peer never reads a half-switched box. */
+export function setTextShape(
+  doc: Y.Doc,
+  id: string,
+  shape: ShapeKind,
+  custom?: { svg: string; viewBox: string },
+): void {
+  doc.transact(() => {
+    const m = objectsMap(doc).get(id);
+    if (!m || m.get("type") !== "text") return;
+    if (shape === CUSTOM_SHAPE) {
+      if (!custom) return; // a custom kind without geometry is unrenderable — refuse
+      m.set("shape", CUSTOM_SHAPE);
+      m.set("shapeSvg", custom.svg);
+      m.set("shapeViewBox", custom.viewBox);
+    } else {
+      m.set("shape", shape);
+      m.delete("shapeSvg");
+      m.delete("shapeViewBox");
+    }
   });
 }
 
@@ -975,7 +1010,18 @@ function readText(m: Y.Map<unknown>): TextObject | null {
   const bg = m.get("bg");
   if (typeof bg === "string" && bg) text.bg = bg;
   const shape = m.get("shape");
-  if (typeof shape === "string" && SHAPE_KINDS.includes(shape)) text.shape = shape as ShapeKind;
+  if (typeof shape === "string" && shape) {
+    if (shape === CUSTOM_SHAPE) {
+      // A custom shape is only usable with valid geometry; otherwise degrade to a rectangle (the box
+      // and its label survive) rather than dropping the shape or trusting oversized markup.
+      const custom = customShapeOf(m.get("shapeSvg"), m.get("shapeViewBox"));
+      if (custom) {
+        text.shape = CUSTOM_SHAPE;
+        text.shapeSvg = custom.svg;
+        text.shapeViewBox = custom.viewBox;
+      } else text.shape = "rectangle";
+    } else text.shape = shape; // catalog id — an unknown one renders as a rectangle downstream
+  }
   const borderColor = m.get("borderColor");
   if (typeof borderColor === "string" && borderColor) text.borderColor = borderColor;
   const borderStyle = m.get("borderStyle");
@@ -1042,6 +1088,8 @@ export interface TextEditState {
   height?: number;
   bg?: string;
   shape?: ShapeKind;
+  shapeSvg?: string;
+  shapeViewBox?: string;
   borderColor?: string;
   borderStyle?: BorderStyle;
   rotation?: number;

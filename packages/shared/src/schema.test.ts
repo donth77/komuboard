@@ -27,6 +27,7 @@ import {
   setObjectsPoints,
   setTextGeometry,
   setTextRuns,
+  setTextShape,
   sideMidpoint,
   translateObjects,
   DEFAULT_PEER_COLOR,
@@ -38,6 +39,7 @@ import {
   type StrokeObject,
   type TextObject,
 } from "./schema";
+import { CUSTOM_SHAPE, MAX_CUSTOM_SHAPE_SVG_CHARS } from "./shapes";
 
 function stroke(id: string, points: number[] = [0, 0, 10, 10]): StrokeObject {
   return {
@@ -784,5 +786,91 @@ describe("randomRoomId — high-entropy shareable ids (docs/09 SEC-RM)", () => {
     for (let i = 0; i < 1000; i++) ids.add(randomRoomId());
     // ~1.3M-combination space → ~0.4 expected collisions per 1000 draws; the old form collided ~constantly.
     expect(ids.size).toBeGreaterThan(980);
+  });
+});
+
+describe("shape kinds", () => {
+  const svg = '<path d="M0 0H10V10H0Z" vector-effect="non-scaling-stroke"/>';
+
+  it("round-trips a catalog shape and a custom shape's geometry", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("s1", { shape: "cylinder", width: 180, height: 130 }));
+    addText(
+      doc,
+      textObj("s2", {
+        shape: CUSTOM_SHAPE,
+        shapeSvg: svg,
+        shapeViewBox: "0 0 10 10",
+        width: 100,
+        height: 80,
+      }),
+    );
+    expect(asText(readObject(objectsMap(doc).get("s1")!))).toMatchObject({ shape: "cylinder" });
+    const custom = asText(readObject(objectsMap(doc).get("s2")!));
+    expect(custom).toMatchObject({ shape: CUSTOM_SHAPE, shapeSvg: svg, shapeViewBox: "0 0 10 10" });
+  });
+
+  it("keeps an unknown catalog id (renderers fall back to a rectangle) and never writes undefined", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("s1", { shape: "hexadecagon" }));
+    const t = asText(readObject(objectsMap(doc).get("s1")!));
+    expect(t.shape).toBe("hexadecagon");
+    expect("shapeSvg" in t).toBe(false);
+  });
+
+  it("degrades a custom shape with missing, oversized, or malformed geometry to a rectangle", () => {
+    const doc = new Y.Doc();
+    rawObject(doc, "c1", { ...textObj("c1"), shape: CUSTOM_SHAPE }); // no geometry at all
+    rawObject(doc, "c2", {
+      ...textObj("c2"),
+      shape: CUSTOM_SHAPE,
+      shapeSvg: "x".repeat(MAX_CUSTOM_SHAPE_SVG_CHARS + 1),
+      shapeViewBox: "0 0 10 10",
+    });
+    rawObject(doc, "c3", {
+      ...textObj("c3"),
+      shape: CUSTOM_SHAPE,
+      shapeSvg: svg,
+      shapeViewBox: "0 0 0 0",
+    });
+    for (const id of ["c1", "c2", "c3"]) {
+      const t = asText(readObject(objectsMap(doc).get(id)!));
+      expect(t.shape).toBe("rectangle");
+      expect("shapeSvg" in t).toBe(false);
+      expect("shapeViewBox" in t).toBe(false);
+    }
+  });
+
+  it("setTextShape switches kinds atomically and clears custom geometry on the way out", () => {
+    const doc = new Y.Doc();
+    addText(doc, textObj("s1", { shape: "rectangle" }));
+    setTextShape(doc, "s1", CUSTOM_SHAPE, { svg, viewBox: "0 0 10 10" });
+    expect(asText(readObject(objectsMap(doc).get("s1")!))).toMatchObject({
+      shape: CUSTOM_SHAPE,
+      shapeSvg: svg,
+    });
+    setTextShape(doc, "s1", "document");
+    const t = asText(readObject(objectsMap(doc).get("s1")!));
+    expect(t.shape).toBe("document");
+    expect(objectsMap(doc).get("s1")!.has("shapeSvg")).toBe(false);
+    // custom without geometry is refused (the box keeps its current kind)
+    setTextShape(doc, "s1", CUSTOM_SHAPE);
+    expect(asText(readObject(objectsMap(doc).get("s1")!)).shape).toBe("document");
+  });
+
+  it("cloneObject carries the custom geometry to the copy", () => {
+    const clone = cloneObject(
+      textObj("s1", { shape: CUSTOM_SHAPE, shapeSvg: svg, shapeViewBox: "0 0 10 10" }),
+      "s2",
+      "u2",
+      5,
+      5,
+    );
+    expect(clone).toMatchObject({
+      id: "s2",
+      shape: CUSTOM_SHAPE,
+      shapeSvg: svg,
+      shapeViewBox: "0 0 10 10",
+    });
   });
 });

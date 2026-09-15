@@ -80,6 +80,62 @@ const dict: Record<string, string> = {
   "shape.ellipse": "楕円",
   "shape.rhombus": "ひし形",
   "shape.triangle": "三角形",
+  "shape.rounded": "角丸四角形",
+  "shape.pill": "カプセル",
+  "shape.triangleDown": "逆三角形",
+  "shape.parallelogram": "平行四辺形",
+  "shape.trapezoid": "台形",
+  "shape.pentagon": "五角形",
+  "shape.hexagon": "六角形",
+  "shape.octagon": "八角形",
+  "shape.star": "星",
+  "shape.cross": "十字",
+  "shape.arrowRight": "右矢印",
+  "shape.arrowLeft": "左矢印",
+  "shape.arrowLeftRight": "両方向矢印",
+  "shape.chevron": "シェブロン",
+  "shape.signpost": "五角形矢印",
+  "shape.speech": "吹き出し",
+  "shape.cloud": "雲",
+  "shape.cylinder": "円柱",
+  "shape.braceLeft": "左波かっこ",
+  "shape.braceRight": "右波かっこ",
+  "shape.predefined": "定義済み処理",
+  "shape.document": "書類",
+  "shape.documents": "複数書類",
+  "shape.manualInput": "手操作入力",
+  "shape.manualOperation": "手作業",
+  "shape.delay": "遅延",
+  "shape.display": "表示",
+  "shape.storedData": "記憶データ",
+  "shape.internalStorage": "内部記憶",
+  "shape.offPage": "ページ外結合子",
+  "shape.or": "論理和",
+  "shape.summing": "和接合",
+  "shape.collate": "照合",
+  "shape.sort": "分類",
+  "shape.card": "カード",
+  "shape.tape": "せん孔テープ",
+  "shape.loopLimit": "ループ端",
+  "shape.directAccess": "直接アクセス記憶",
+  "shape.sequentialData": "順次アクセス記憶",
+  "shape.note": "メモ",
+  "shape.custom": "カスタム図形",
+
+  // shapes panel (<komu-shape-panel>)
+  "shapes.title": "図形",
+  "shapes.more": "その他の図形",
+  "shapes.search": "図形を検索",
+  "shapes.searchAria": "図形を検索",
+  "shapes.noResults": "図形が見つかりません",
+  "shapes.lines": "線",
+  "shapes.basic": "基本",
+  "shapes.flowchart": "フローチャート",
+  "shapes.yours": "マイ図形",
+  "shapes.yoursHint":
+    "256 KB までの SVG ファイル。輪郭だけを取り込み、図形の塗りと枠線が適用されます。",
+  "shapes.upload": "SVG 図形を選んでアップロード",
+  "shapes.remove": "{name} を削除",
 
   // text bar
   "text.font": "フォント",
@@ -258,6 +314,12 @@ const dict: Record<string, string> = {
   "toast.uploadFailedConnection":
     "アップロードに失敗しました — 接続を確認してもう一度お試しください。",
   "toast.uploadFailed": "アップロードに失敗しました — もう一度お試しください。",
+  "toast.svgTypeUnsupported": "このファイルは SVG ではありません。",
+  "toast.svgTooLarge": "この SVG は大きすぎます（256 KB 超）。",
+  "toast.svgInvalid": "この SVG を読み込めませんでした。",
+  "toast.svgEmpty": "この SVG には使える輪郭がありません。パスと基本図形だけが取り込まれます。",
+  "toast.svgTooComplex": "この SVG は複雑すぎます。パスは 16 KB 未満にしてください。",
+  "toast.svgLibraryFull": "マイ図形がいっぱいです。図形を削除してから追加してください。",
 
   // refused / disconnect dialog
   "refused.roomFullTitle": "このルームは満員です",
@@ -313,8 +375,6 @@ const dict: Record<string, string> = {
 
   // VR
   "vr.exit": "VRを終了",
-};
-export default dict;
   "vr.loading": "ボードを読み込み中…",
   "vr.help.move": "左スティック：移動",
   "vr.help.turn": "右スティック：回転・上に倒してテレポート",
@@ -323,3 +383,5 @@ export default dict;
   "vr.help.height": "Y / X：視点を上げる / 下げる",
   "vr.help.grab": "グリップかトリガー：マーカーを持つ",
   "vr.help.hide": "左スティックを押す：ヒントを隠す",
+};
+export default dict;

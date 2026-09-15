@@ -80,6 +80,62 @@ const dict: Record<string, string> = {
   "shape.ellipse": "Oval",
   "shape.rhombus": "Raute",
   "shape.triangle": "Dreieck",
+  "shape.rounded": "Abgerundetes Rechteck",
+  "shape.pill": "Pille",
+  "shape.triangleDown": "Umgekehrtes Dreieck",
+  "shape.parallelogram": "Parallelogramm",
+  "shape.trapezoid": "Trapez",
+  "shape.pentagon": "Fünfeck",
+  "shape.hexagon": "Sechseck",
+  "shape.octagon": "Achteck",
+  "shape.star": "Stern",
+  "shape.cross": "Kreuz",
+  "shape.arrowRight": "Pfeil nach rechts",
+  "shape.arrowLeft": "Pfeil nach links",
+  "shape.arrowLeftRight": "Doppelpfeil",
+  "shape.chevron": "Chevron",
+  "shape.signpost": "Fünfeck-Pfeil",
+  "shape.speech": "Sprechblase",
+  "shape.cloud": "Wolke",
+  "shape.cylinder": "Zylinder",
+  "shape.braceLeft": "Linke geschweifte Klammer",
+  "shape.braceRight": "Rechte geschweifte Klammer",
+  "shape.predefined": "Vordefinierter Prozess",
+  "shape.document": "Dokument",
+  "shape.documents": "Mehrere Dokumente",
+  "shape.manualInput": "Manuelle Eingabe",
+  "shape.manualOperation": "Manueller Vorgang",
+  "shape.delay": "Verzögerung",
+  "shape.display": "Anzeige",
+  "shape.storedData": "Gespeicherte Daten",
+  "shape.internalStorage": "Interner Speicher",
+  "shape.offPage": "Verbindung zu anderer Seite",
+  "shape.or": "Oder",
+  "shape.summing": "Summierungspunkt",
+  "shape.collate": "Zusammenstellen",
+  "shape.sort": "Sortieren",
+  "shape.card": "Lochkarte",
+  "shape.tape": "Lochstreifen",
+  "shape.loopLimit": "Schleifengrenze",
+  "shape.directAccess": "Direktzugriffsspeicher",
+  "shape.sequentialData": "Sequenzielle Daten",
+  "shape.note": "Notiz",
+  "shape.custom": "Eigene Form",
+
+  // shapes panel (<komu-shape-panel>)
+  "shapes.title": "Formen",
+  "shapes.more": "Mehr Formen",
+  "shapes.search": "Formen suchen",
+  "shapes.searchAria": "Formen suchen",
+  "shapes.noResults": "Keine Formen gefunden",
+  "shapes.lines": "Linien",
+  "shapes.basic": "Grundformen",
+  "shapes.flowchart": "Flussdiagramm",
+  "shapes.yours": "Deine Formen",
+  "shapes.yoursHint":
+    "SVG-Dateien bis 256 KB. Nur der Umriss bleibt erhalten und übernimmt Füllung und Rahmen der Form.",
+  "shapes.upload": "SVG-Formen auswählen und hochladen",
+  "shapes.remove": "{name} entfernen",
 
   // text bar
   "text.font": "Schriftart",
@@ -258,6 +314,14 @@ const dict: Record<string, string> = {
   "toast.uploadFailedConnection":
     "Upload fehlgeschlagen — prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
   "toast.uploadFailed": "Upload fehlgeschlagen — bitte erneut versuchen.",
+  "toast.svgTypeUnsupported": "Diese Datei ist kein SVG.",
+  "toast.svgTooLarge": "Dieses SVG ist zu groß (über 256 KB).",
+  "toast.svgInvalid": "Dieses SVG konnte nicht gelesen werden.",
+  "toast.svgEmpty":
+    "Dieses SVG hat keinen verwendbaren Umriss – nur Pfade und Grundformen bleiben erhalten.",
+  "toast.svgTooComplex": "Dieses SVG ist zu detailliert – bleib unter 16 KB an Pfaden.",
+  "toast.svgLibraryFull":
+    "Deine Formenbibliothek ist voll – entferne eine Form, um eine andere hinzuzufügen.",
 
   // refused / disconnect dialog
   "refused.roomFullTitle": "Dieser Raum ist voll",
@@ -314,8 +378,6 @@ const dict: Record<string, string> = {
 
   // VR
   "vr.exit": "VR beenden",
-};
-export default dict;
   "vr.loading": "Tafel wird geladen…",
   "vr.help.move": "Linker Stick: gehen",
   "vr.help.turn": "Rechter Stick: drehen · nach oben zum Teleportieren",
@@ -324,3 +386,5 @@ export default dict;
   "vr.help.height": "Y / X: Sicht höher / tiefer",
   "vr.help.grab": "Griff oder Trigger: Stift aufnehmen",
   "vr.help.hide": "Linken Stick drücken: Tipps ausblenden",
+};
+export default dict;

@@ -31,6 +31,8 @@ import type { PresencePerson } from "./avatar-presence-row";
 import "./tool-dock";
 import "./sticky-bar";
 import "./shape-menu";
+import "./shape-panel";
+import type { ShapePickDetail } from "./shape-panel";
 import "./stamp-wheel";
 import "./emoji-picker";
 import { pushStampRecent } from "./stamp-wheel";
@@ -190,6 +192,8 @@ app.innerHTML = `
 
   <komu-emoji-picker class="hidden"></komu-emoji-picker>
 
+  <komu-shape-panel class="hidden"></komu-shape-panel>
+
   <komu-zoombar></komu-zoombar>
 
   <button class="help-btn" id="help-btn" type="button" data-i18n-tip="common.help" data-i18n-aria="common.help">${icon("help")}</button>
@@ -334,6 +338,7 @@ if (stickyBarEl) {
   canvas.setStickyColor(DEFAULT_STICKY_COLOR);
 }
 const shapeMenuEl = document.querySelector("komu-shape-menu");
+const shapePanelEl = document.querySelector("komu-shape-panel");
 const stampWheelEl = document.querySelector("komu-stamp-wheel");
 const emojiPickerEl = document.querySelector("komu-emoji-picker");
 // The "Shapes and lines" menu has two groups: shape boxes (placed) and connectors (drawn as arrows).
@@ -425,6 +430,7 @@ const ALL_SHEETS = [drawBarEl, stickyBarEl, shapeMenuEl, stampWheelEl, insertShe
 // Apply a tool to the canvas + sheet visibility (does NOT touch the dock highlight).
 function applyTool(tool: ToolId): void {
   currentTool = tool;
+  if (tool !== "shapes") shapePanelEl?.close(); // the shapes library only lives with its tool
   canvas.setTool(tool);
   updateSelectionBar(); // a non-select tool hides the action bar; returning to select may show it
   const active = sheetForTool(tool);
@@ -436,6 +442,11 @@ function applyTool(tool: ToolId): void {
   // The mini-sheets (draw/sticky/shape) sit flush atop the dock so its top merges with them; the
   // stamp wheel floats free, so it must NOT trigger that merge.
   app?.classList.toggle("sheet-open", !!active && tool !== "stamp");
+  // While the shapes panel is open it supersedes the small shape menu (desktop and phone alike).
+  if (shapePanelEl?.isOpen) {
+    shapeMenuEl?.classList.add("hidden");
+    app?.classList.remove("sheet-open");
+  }
   if (tool !== "stamp") emojiPickerEl?.classList.add("hidden"); // leaving stamp closes the picker
   // Replay the wheel's entrance (outer ring in first, inner emoji disc just after) each time it opens.
   if (tool === "stamp" && stampWheelEl) {
@@ -467,6 +478,10 @@ function closeInsertSheet(): void {
 // Re-clicking the active tool toggles its sheet (the tool stays selected).
 function toggleSheet(el: Element | null): void {
   if (!el) return;
+  if (el === shapeMenuEl && shapePanelEl?.isOpen) {
+    shapePanelEl.close(); // the panel stands in for the menu → closing it brings the menu back
+    return;
+  }
   // The stamp wheel isn't a sliding mini-sheet (it's a free-floating panel that closes on pick), so
   // it toggles its visibility outright on every platform — letting a re-tap of the Stamp tool reopen it.
   if (mobileMql.matches && el.classList.contains("mini-sheet")) {
@@ -661,6 +676,7 @@ dock?.addEventListener("tool-change", (e) => {
     if (insertSheet.isOpen) {
       closeInsertSheet();
     } else {
+      shapePanelEl?.close(); // the shapes library can't stack on the launcher
       for (const el of ALL_SHEETS) el?.classList.add("hidden"); // mutually exclusive with tool sheets
       emojiPickerEl?.classList.add("hidden");
       insertSheet.open();
@@ -696,13 +712,49 @@ app?.addEventListener("sticky-color", (e) => {
   canvas.setStickyColor((e as CustomEvent<{ color: string }>).detail.color);
 });
 
-// <komu-shape-menu> emits `shape-change` → either set the shape box drawn next, or switch the tool
-// into connector-draw mode (line/arrow/elbow/block draw on drag, snapping to shape sides).
+// <komu-shape-menu> / <komu-shape-panel> emit `shape-change` → either set the shape box drawn next
+// (a custom shape carries its geometry), or switch the tool into connector-draw mode (line/arrow/
+// elbow/block draw on drag, snapping to shape sides). A panel pick is mirrored on the menu's "More
+// shapes" row (icon + name) so the armed shape is visible once the panel closes.
 app?.addEventListener("shape-change", (e) => {
-  const kind = (e as CustomEvent<{ kind: string }>).detail.kind;
-  if (DRAWABLE_SHAPES.has(kind)) canvas.setShape(kind as Parameters<typeof canvas.setShape>[0]);
+  const d = (e as CustomEvent<Partial<ShapePickDetail> & { kind: string }>).detail;
+  const kind = d.kind;
+  if (DRAWABLE_SHAPES.has(kind)) canvas.setShape(kind, d.custom);
   else if (CONNECTOR_KINDS.has(kind))
     canvas.setConnector(kind as Parameters<typeof canvas.setConnector>[0]);
+  else return;
+  if (d.source === "panel") {
+    shapeMenuEl?.setArmed(kind, d.label && d.icon ? { label: d.label, icon: d.icon } : undefined);
+    if (mobileMql.matches) shapePanelEl?.close(); // phones: a pick closes the sheet
+  } else if (shapePanelEl) {
+    shapePanelEl.armed = kind; // a menu pick → the panel's highlight follows
+  }
+  refreshInsertActive();
+});
+// "More shapes" opens the shapes library panel, which replaces the small menu while open; closing
+// it (X / Escape / a pick on phones / a tool switch) hands the sheet back to the Shapes tool.
+function openShapePanel(): void {
+  if (!shapePanelEl) return;
+  shapePanelEl.open();
+  shapeMenuEl?.classList.add("hidden");
+  shapeMenuEl?.classList.remove("collapsed");
+  app?.classList.remove("sheet-open");
+}
+app?.addEventListener("shape-more", openShapePanel);
+app?.addEventListener("shape-panel-close", () => {
+  // Focus was inside the now-hidden panel (or fell to <body>) → hand it back to the menu's More row
+  // so a keyboard user lands where they opened the panel from.
+  const focusLost =
+    !document.activeElement ||
+    document.activeElement === document.body ||
+    !!shapePanelEl?.contains(document.activeElement);
+  if (currentTool === "shapes") applyTool("shapes"); // bring the menu back
+  if (focusLost && currentTool === "shapes")
+    shapeMenuEl?.querySelector<HTMLElement>(".sm-more")?.focus({ preventScroll: true });
+});
+// Components surface their transient errors (e.g. a rejected SVG upload) as toasts.
+app?.addEventListener("komu-toast", (e) => {
+  showToast((e as CustomEvent<{ message: string }>).detail.message);
 });
 
 // --------------------------------------------------------------------------
@@ -848,6 +900,10 @@ window.addEventListener("keydown", (e) => {
     }
     if (emojiPickerEl && !emojiPickerEl.classList.contains("hidden")) {
       emojiPickerEl.classList.add("hidden");
+      return;
+    }
+    if (shapePanelEl?.isOpen) {
+      shapePanelEl.close(); // dismiss the shapes library — the tool + its menu stay
       return;
     }
     if (drawBarEl?.popoverOpen) {

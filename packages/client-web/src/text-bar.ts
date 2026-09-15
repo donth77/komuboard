@@ -18,10 +18,24 @@ import { SWATCHES } from "./palette";
 import {
   STICKY_COLOR_NAMES,
   STICKY_COLORS,
+  CUSTOM_SHAPE,
+  shapeDef,
+  shapeIconSvg,
   type BorderStyle,
+  type CustomShape,
   type ShapeKind,
   type TextAlign,
 } from "@komuboard/shared";
+
+import {
+  catalogTiles,
+  gridHtml,
+  initGridTabStops,
+  libraryTiles,
+  wireGridKeys,
+  type GridTile,
+} from "./shape-grid";
+import { libraryShape } from "./shape-library";
 
 export interface TextBarHost {
   setFontFamily(css: string): void;
@@ -29,8 +43,9 @@ export interface TextBarHost {
   toggleBullets(): void;
   /** A mark changed via execCommand → TextLayer re-measures/broadcasts + re-reflects. */
   onFormat(): void;
-  /** Shape-mode controls (only used when the box being edited is a shape). */
-  setShapeKind(kind: ShapeKind): void;
+  /** Shape-mode controls (only used when the box being edited is a shape). A custom kind passes
+   *  its geometry (from the device library). */
+  setShapeKind(kind: ShapeKind, custom?: CustomShape): void;
   setFill(color: string): void;
   /** Set the shape's border colour and/or style (omit a field to leave it unchanged). */
   setBorder(p: { color?: string; style?: BorderStyle }): void;
@@ -142,14 +157,18 @@ const SVG = {
   // "type"/text-style glyph for the mobile marks group toggle (a serif capital T).
   type: '<path d="M4.5 5.5h11"/><path d="M10 5.5v9.5"/><path d="M8 15h4"/>',
 };
-// Shape glyphs for the shape-select control + its popover (drawable shapes only).
-const SHAPE_SVG: Record<ShapeKind, string> = {
-  rectangle: '<rect x="3.5" y="5" width="13" height="10" rx="1.2"/>',
-  ellipse: '<ellipse cx="10" cy="10" rx="7" ry="5.5"/>',
-  rhombus: '<path d="M10 3 17 10 10 17 3 10z"/>',
-  triangle: '<path d="M10 4 17 16H3z"/>',
-};
-const SHAPE_ORDER: ShapeKind[] = ["rectangle", "ellipse", "rhombus", "triangle"];
+// The shape-select control's glyph: the catalog icon, or a generic "custom shape" glyph. A custom
+// box's markup comes from the doc (possibly a peer's) and is only ever painted as a background image
+// — never inlined into the chrome.
+const CUSTOM_GLYPH =
+  '<path d="M3.5 3.5h5.5v5.5H3.5zM11 3.5h5.5v5.5H11zM3.5 11h5.5v5.5H3.5z"/><path d="M13.75 11.5v5M11.25 14h5"/>';
+function shapeGlyph(kind: string): string {
+  const def = shapeDef(kind);
+  return def ? shapeIconSvg(def, "ctb-shape-glyph") : ico(CUSTOM_GLYPH);
+}
+function escHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+}
 // Text-alignment glyphs (left / center / right).
 const ALIGN_SVG: Record<TextAlign, string> = {
   left: '<path d="M4 5.5h12M4 10h8M4 14.5h11"/>',
@@ -204,7 +223,7 @@ export class TextBar {
     el.innerHTML =
       // Leading controls: shape-select + border are shape-only; fill is shown for shapes AND sticky
       // notes (`.ctb-fill-only`), so a note's colour is reachable from the box itself.
-      `<button class="ctb-btn ctb-shape-only ctb-shape-kind" data-act="shape-kind" data-i18n-tip="text.shape"><span class="ctb-shape-ico">${ico(SHAPE_SVG.rectangle)}</span><span class="ctb-caret">▾</span></button>` +
+      `<button class="ctb-btn ctb-shape-only ctb-shape-kind" data-act="shape-kind" data-i18n-tip="text.shape"><span class="ctb-shape-ico">${shapeGlyph("rectangle")}</span><span class="ctb-caret">▾</span></button>` +
       `<button class="ctb-btn ctb-fill-only ctb-fill" data-act="fill" data-i18n-tip="text.fillColor"><span class="ctb-fill-dot" data-fill></span><span class="ctb-caret">▾</span></button>` +
       `<button class="ctb-btn ctb-shape-only ctb-border" data-act="border" data-i18n-tip="text.border"><span class="ctb-border-ico">${lineWeightIcon("ctb-ico")}</span><span class="ctb-caret">▾</span></button>` +
       `<span class="ctb-sep ctb-fill-only"></span>` +
@@ -223,11 +242,11 @@ export class TextBar {
       `</span>` +
       `</span>` +
       `<span class="ctb-sep"></span>` +
-      `<button class="ctb-btn" data-act="bullet" data-i18n-tip="text.bulletedList">${ico(SVG.list)}</button>` +
-      `<button class="ctb-btn" data-act="link" data-i18n-tip="text.link">${ico(SVG.link)}</button>` +
+      `<button class="ctb-btn" data-act="bullet" data-i18n-aria="text.bulletedList" data-i18n-tip="text.bulletedList">${ico(SVG.list)}</button>` +
+      `<button class="ctb-btn" data-act="link" data-i18n-aria="text.link" data-i18n-tip="text.link">${ico(SVG.link)}</button>` +
       `<span class="ctb-sep"></span>` +
       `<button class="ctb-btn ctb-color" data-act="color" data-i18n-tip="text.textColor"><span class="ctb-a">A</span><span class="ctb-underbar" data-swatch></span></button>` +
-      `<button class="ctb-btn ctb-hl" data-act="highlight" data-i18n-tip="text.highlight"><span class="ctb-hl-box" data-hlswatch></span></button>` +
+      `<button class="ctb-btn ctb-hl" data-act="highlight" data-i18n-aria="text.highlight" data-i18n-tip="text.highlight"><span class="ctb-hl-box" data-hlswatch></span></button>` +
       // Shape-only trailing control: text alignment (matters for shapes' centred labels).
       `<span class="ctb-sep ctb-shape-only"></span>` +
       `<button class="ctb-btn ctb-shape-only ctb-align" data-act="align" data-i18n-tip="text.alignment"><span class="ctb-align-ico">${ico(ALIGN_SVG.center)}</span><span class="ctb-caret">▾</span></button>`;
@@ -440,28 +459,72 @@ export class TextBar {
     this.pop = pop;
   }
 
-  /** Shape-kind popover (shape mode): a grid of the drawable shapes; picking changes the box's kind. */
+  /** Shape-kind popover (shape mode): the full searchable catalog (Basic / Flowchart / Your shapes)
+   *  on the same tiles as the shapes panel; picking changes the box's kind — to a custom shape too. */
   private openShapePop(anchor: HTMLElement): void {
     if (this.pop?.dataset.for === "shape-kind") {
       this.closePop();
       return;
     }
     this.closePop();
-    const cur = this.state?.shape;
+    const cur = this.state?.shape ?? null;
     const pop = document.createElement("div");
     pop.className = "ctb-pop ctb-shape-pop";
     pop.dataset.for = "shape-kind";
-    pop.addEventListener("mousedown", (e) => e.preventDefault());
-    pop.innerHTML = SHAPE_ORDER.map(
-      (k) =>
-        `<button class="ctb-shape-opt${k === cur ? " on" : ""}" type="button" data-kind="${k}" data-tip="${t(`shape.${k}`)}">${ico(SHAPE_SVG[k])}</button>`,
-    ).join("");
-    pop.addEventListener("click", (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-kind]");
+    // Tile clicks keep the editor's focus/selection; the search field may take focus (a blur into
+    // .ctb-pop doesn't commit the box).
+    pop.addEventListener("mousedown", (e) => {
+      if (!(e.target as HTMLElement).closest("input")) e.preventDefault();
+    });
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "ctb-shape-search";
+    search.placeholder = t("shapes.search");
+    search.setAttribute("aria-label", t("shapes.searchAria"));
+    search.autocomplete = "off";
+    search.spellcheck = false;
+    const body = document.createElement("div");
+    body.className = "ctb-shape-body";
+    const render = (): void => {
+      const q = search.value;
+      const sections: Array<[string, GridTile[]]> = [
+        [t("shapes.basic"), catalogTiles("basic", q)],
+        [t("shapes.flowchart"), catalogTiles("flowchart", q)],
+        [t("shapes.yours"), libraryTiles(q)],
+      ];
+      const filled = sections.filter(([, tiles]) => tiles.length);
+      body.innerHTML = filled.length
+        ? filled
+            .map(
+              ([title, tiles]) =>
+                `<div class="ctb-shape-section"><div class="ctb-shape-title">${escHtml(title)}</div>${gridHtml(tiles, cur, { label: title })}</div>`,
+            )
+            .join("")
+        : `<div class="sp-empty">${escHtml(t("shapes.noResults"))}</div>`;
+      initGridTabStops(body);
+    };
+    search.addEventListener("input", render);
+    search.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      this.closePop();
+      this.editor?.focus();
+    });
+    body.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>(".sp-tile[data-kind]");
       if (!b) return;
-      this.host.setShapeKind(b.getAttribute("data-kind") as ShapeKind);
+      const kind = b.getAttribute("data-kind") ?? "";
+      if (kind === CUSTOM_SHAPE) {
+        const lib = b.getAttribute("data-library");
+        const entry = lib ? libraryShape(lib) : undefined;
+        if (!entry) return;
+        this.host.setShapeKind(CUSTOM_SHAPE, { svg: entry.svg, viewBox: entry.viewBox });
+      } else this.host.setShapeKind(kind);
       this.closePop();
     });
+    wireGridKeys(body);
+    pop.append(search, body);
+    render();
     document.body.appendChild(pop);
     this.placePop(pop, anchor);
     this.pop = pop;
@@ -888,7 +951,7 @@ export class TextBar {
     }
     if (isShape) {
       const ico2 = this.root.querySelector<HTMLElement>(".ctb-shape-ico");
-      if (ico2 && s.shape) ico2.innerHTML = ico(SHAPE_SVG[s.shape]);
+      if (ico2 && s.shape) ico2.innerHTML = shapeGlyph(s.shape);
       // Tint the border icon to its colour (dimmed when the outline is off).
       const bico = this.root.querySelector<HTMLElement>(".ctb-border-ico");
       if (bico) {
