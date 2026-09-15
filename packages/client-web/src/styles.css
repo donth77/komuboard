@@ -2117,12 +2117,14 @@ input[type="range"] {
   position: absolute;
   left: 84px; /* where the shape menu sits (just right of the dock) */
   top: 72px; /* below the 56px topbar + a 16px margin */
-  bottom: 16px;
   z-index: 45;
   display: flex;
   flex-direction: column;
   width: 340px;
   max-width: calc(100vw - 100px);
+  /* As tall as its content (a search with three hits is a short panel), capped so it always ends
+     above the bottom-left zoom bar (16px inset + 42px tall + a 16px gap) — the body scrolls then. */
+  max-height: calc(100vh - 72px - 74px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -2988,7 +2990,7 @@ input[type="range"] {
     transform: translateX(-50%);
     width: min(340px, calc(100vw - 20px));
     max-width: none;
-    height: min(62vh, 520px);
+    max-height: min(62vh, 520px); /* content-sized too; grows upward from the dock */
   }
   /* Stamp wheel + emoji picker float centred above the bottom dock (they're not mini-sheets — a
      radial wheel doesn't fit the slide-up clip). The picker overlays the wheel while open. */
@@ -3076,7 +3078,10 @@ input[type="range"] {
     right: 0;
     top: 0;
     bottom: calc(12px + env(safe-area-inset-bottom, 0px) + 58px); /* = the dock's top edge */
-    overflow: hidden;
+    /* `clip`, not `hidden`: a hidden-overflow box is still a scroll container, so focusing a sheet
+       button mid-slide (a fast tap on the launcher) scrolled the clip up by a sheet's height and
+       left the "hidden" sheets peeking above the dock. A clipped box can't scroll at all. */
+    overflow: clip;
     pointer-events: none;
     z-index: 38; /* below the dock (45) so the sheet tucks behind it */
   }
