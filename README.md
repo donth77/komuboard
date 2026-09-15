@@ -15,7 +15,9 @@
   <img src="https://img.shields.io/badge/pnpm-workspace-F69220?logo=pnpm&logoColor=white" alt="pnpm workspace">
 </p>
 
-**Komuboard** is a realtime, online collaborative whiteboard that works on desktop (mouse), mobile/tablet (touch), and VR (WebXR). Anyone opens a link, lands in an anonymous room, and draws together with live multiplayer cursors and presence, no signup. **Try it live at [komuboard.app](https://komuboard.app).** 
+**Komuboard** is a whiteboard that several people can draw on at the same time. It runs in the browser on a desktop, on a phone or tablet, and inside a VR headset through WebXR. You open a link, land in a room, and start drawing. There is no signup. While you work, you can see everyone else's cursor and who is in the room with you.
+
+**Try it live at [komuboard.app](https://komuboard.app).**
 
 ## Screenshots
 
@@ -34,27 +36,60 @@
   </table>
 </div>
 
-## Features
+## What you can do
 
-- **Infinite pan/zoom canvas**: freehand pen + highlighter (color, thickness, solid/dotted), sticky notes, shapes, text, connectors (arrows that bind to objects and re-route), emoji/stamp stickers, and image upload. Eraser, multi-select, grouping, lock, keyboard nudge, and undo/redo.
-- **Realtime multiplayer** via Yjs CRDT — live labeled cursors, presence avatars, live drag/resize/rotate/typing shown mid-gesture, and join/leave.
-- **Anonymous rooms** by default — shareable code/URL, no signup, edge persistence so a room survives reconnect.
-- **Export** the whole board to PNG or PDF (grid, transparent, or solid background).
-- **Cross-reality**: the same board renders on a standing 3D whiteboard in VR (WebXR). Peers appear as live 3D cursors with their edits and selections mirrored in realtime. In-headset you get the full toolset — select, pan, pen/highlighter, eraser — via a floating tool dock or grabbable **physics props**: grip the marker/eraser to pick it up, draw on the board, drop it and it falls back to the tray. A desktop "magic-window" preview (mouse + WASD) makes all of it testable without a headset.
-- **Progressive UX**: full power on desktop mouse, fully usable on mobile/tablet touch, immersive (not merely viewable) in VR.
+**Draw and arrange things**
 
+- **Pen and highlighter.** Pick a color, a thickness, and a solid or dotted line.
+- **Sticky notes, shapes, and text.** A searchable shape library with basic and flowchart shapes, plus your own SVG outlines uploaded as custom shapes.
+- **Connectors.** Arrows stay attached to objects and re-route themselves when you move things.
+- **Stickers and images.** Emoji, stamps, and your own uploads.
+- **The usual editing.** Erase, multi-select, group, lock, nudge with the arrow keys, undo and redo.
+- **Infinite canvas.** Pan and zoom, and never run out of room.
+- **Export.** The whole board as a PNG or PDF, on a grid, transparent, or solid.
 
-## Tech stack 
+**Work with other people**
 
-- **Language + build:** TypeScript everywhere; Vite; pnpm workspaces monorepo.
-- **Shared document / CRDT:** Yjs (single source of truth) + `y-protocols/awareness` for ephemeral presence (cursors, selections, VR avatar poses, cursor-chat).
-- **2D renderer:** custom renderer bound to the Yjs doc (DOM-unified for per-object z-order), with a documented migration path to WebGL.
-- **Realtime backend:** Cloudflare Workers + Durable Objects; PartyServer (one room per DO) + Y-PartyServer (per-room Yjs doc); PartySocket on the client; partysub to shard very large rooms.
-- **Persistence:** a single compacted Yjs snapshot (`encodeStateAsUpdate`) per save in DO SQLite — one BLOB row, no growing update log — flushed the moment a room empties; uploaded assets in Cloudflare R2; optional D1 for a room index.
-- **VR layer:** A-Frame + Three.js (WebXR) — the Yjs doc is rasterized onto a 3D whiteboard surface; strokes drawn in VR are written into the same doc; peer cursors, live edits, and selections sync via awareness. Ships inside `client-web` as a lazily-loaded chunk (renderer swap on the same session, no reload). Includes an emulated-headset e2e harness (Meta `iwer`) so the controller path is CI-verified without hardware.
-- **Hosting:** SPA + VR assets on Cloudflare Pages (free CDN); realtime + API on Workers + Durable Objects (free tier).
-- **Auth:** anonymous-first (room id in URL); optional named accounts later.
-- **Client libs + tooling:** Lucide icons; light state store (Zustand/signals); **React optional** (acceptable for toolbar/panels, not part of the canonical renderer stack); Vitest (unit), Playwright (e2e + multiplayer); GitHub Actions → `wrangler deploy` + Pages deploy.
+- **Everyone edits at once.** Yjs (a CRDT) keeps the copies in step.
+- **You see who is there.** Labeled cursors, presence avatars, joins and leaves.
+- **Live, not after the fact.** Drags, resizes, rotations, and typing show up while they happen.
+- **Anonymous rooms.** Share a code or a URL, with no signup. Boards are saved at the edge, so a room survives a reconnect.
+
+**Put on a headset**
+
+- **The same board, standing in 3D.** VR through WebXR.
+- **Peers as 3D cursors.** Their edits and selections mirror as they happen.
+- **The whole toolset.** Select, pan, pen, highlighter, and eraser, from a floating tool dock.
+- **Or grab the props.** Grip the marker or the eraser, draw on the board, then drop it and it falls back into the tray.
+- **No headset needed to try it.** A desktop "magic window" preview, with mouse + WASD.
+
+Every device gets its own way in. A desktop mouse gets the full set of tools, touch on a phone or tablet stays fully usable, and VR is somewhere you work rather than somewhere you watch.
+
+## How it is built
+
+**The board itself**
+
+- **TypeScript, Vite, pnpm workspaces.** One monorepo.
+- **Yjs holds the board.** One document is the single source of truth.
+- **Awareness holds everything short-lived.** Cursors, selections, VR avatar poses, and cursor-chat ride `y-protocols/awareness`, so they never touch the document.
+- **Custom 2D renderer.** Bound to the Yjs document. It draws through the DOM so each object keeps its own z-order, and there is a documented path to WebGL later.
+
+**Realtime and storage**
+
+- **Cloudflare Workers and Durable Objects.** PartyServer gives every room its own Durable Object, and Y-PartyServer holds that room's Yjs document.
+- **PartySocket on the client.** partysub shards rooms that grow very large.
+- **One row per save.** Each save writes a compacted Yjs snapshot (`encodeStateAsUpdate`) into Durable Object SQLite as a single BLOB. No update log to grow.
+- **Written the moment the room empties.** That is when the flush happens.
+- **Images in Cloudflare R2.** D1 can hold a room index.
+- **Hosting.** The SPA and VR assets sit on Cloudflare Pages (free CDN). Realtime and the API run on Workers and Durable Objects (free tier).
+- **Anonymous first.** The room id is in the URL. Named accounts may come later.
+
+**VR**
+
+- **A-Frame and Three.js over WebXR.** The Yjs document is rasterized onto a 3D whiteboard surface.
+- **Strokes drawn in VR go back into that same document.** Peer cursors, live edits, and selections sync through awareness.
+- **Ships as a lazily-loaded chunk inside `client-web`.** You swap renderers in the same session, with no reload.
+- **Tested without hardware.** An emulated-headset e2e harness (Meta `iwer`) covers the controller path in CI.
 
 ## Repo structure
 
@@ -70,7 +105,9 @@ komuboard/
     └── worker/               # Cloudflare Worker + Durable Object (PartyServer / Y-PartyServer)
 ```
 
-## Dev quickstart
+## Run it locally
+
+You need Node 22+ and pnpm 9. Install, start the dev stack, then open two tabs on the same room and draw.
 
 ```bash
 # Install all workspace dependencies (Node 22+, pnpm 9)
@@ -79,12 +116,20 @@ pnpm install
 # Run the full local dev stack: worker (wrangler @ :8787) + web (vite @ :5173)
 pnpm dev
 # then open http://127.0.0.1:5173/?room=demo in two tabs to watch strokes, cursors, and selections sync
+```
 
-# Quality gates
+The same checks CI runs:
+
+```bash
 pnpm typecheck && pnpm lint && pnpm test   # vitest unit tests
 pnpm test:e2e                              # boots worker + web, asserts realtime sync
+```
 
-# Deploy the realtime backend (requires a Cloudflare account)
+## Deploy your own
+
+You need a Cloudflare account. Create the R2 bucket once, deploy the worker, then build the web client against it.
+
+```bash
 # One-time: create the R2 bucket that holds uploaded images (binding "UPLOADS" in worker/wrangler.toml)
 pnpm --filter @komuboard/worker exec wrangler r2 bucket create komuboard-uploads
 pnpm --filter @komuboard/worker run deploy   # `run` — bare `pnpm deploy` hits pnpm's own deploy cmd
@@ -94,10 +139,16 @@ pnpm --filter @komuboard/worker run deploy   # `run` — bare `pnpm deploy` hits
 VITE_WORKER_HOST=komuboard-worker.<your-subdomain>.workers.dev pnpm --filter @komuboard/client-web build
 ```
 
-`pnpm install && pnpm dev`, then open two tabs on the same room and draw.
+Pushing to `main` does not deploy anything. Publishing the built site is a separate, manual Cloudflare Pages deploy.
 
 ## Asset credits
 
-- VR whiteboard: [Low Poly Whiteboard by tankop1](https://sketchfab.com/3d-models/low-poly-whiteboard-1cbf089ec4b741ad9d092d15db6d55ba) (Sketchfab, CC-BY)
-- VR marker: [Whiteboard marker by Jimmy Johansson](https://sketchfab.com/3d-models/whiteboard-marker-904951bc3f2048fb83c62bb097958b55) (Sketchfab, CC-BY)
-- VR eraser: [Whiteboard eraser by Jimmy Johansson](https://sketchfab.com/3d-models/whiteboard-eraser-ced8b75f6ecc44c9b1503af9aa4f7d06) (Sketchfab, CC-BY)
+The VR scene uses three CC-BY models from Sketchfab:
+
+- Whiteboard: [Low Poly Whiteboard by tankop1](https://sketchfab.com/3d-models/low-poly-whiteboard-1cbf089ec4b741ad9d092d15db6d55ba)
+- Marker: [Whiteboard marker by Jimmy Johansson](https://sketchfab.com/3d-models/whiteboard-marker-904951bc3f2048fb83c62bb097958b55)
+- Eraser: [Whiteboard eraser by Jimmy Johansson](https://sketchfab.com/3d-models/whiteboard-eraser-ced8b75f6ecc44c9b1503af9aa4f7d06)
+
+## License
+
+MIT. See [LICENSE](LICENSE).

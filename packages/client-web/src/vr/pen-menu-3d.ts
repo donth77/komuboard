@@ -42,8 +42,9 @@ export const PEN_SWATCHES = [
 ];
 export const PEN_WIDTHS = [4, 8, 16];
 
-const BTN = 0.085;
-const GAP = 0.018;
+// Same key size as the tool dock across the board, so the two read as one set of controls.
+const BTN = 0.08;
+const GAP = 0.016;
 const IDLE_BG = "#1d2530";
 const ACTIVE_BG = "#4a9eff";
 

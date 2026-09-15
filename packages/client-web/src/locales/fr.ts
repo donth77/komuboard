@@ -317,3 +317,11 @@ const dict: Record<string, string> = {
   "vr.exit": "Quitter la VR",
 };
 export default dict;
+  "vr.loading": "Chargement du tableau…",
+  "vr.help.move": "Stick gauche : marcher",
+  "vr.help.turn": "Stick droit : tourner · vers le haut pour se téléporter",
+  "vr.help.board": "A : aller au tableau",
+  "vr.help.drop": "B : poser le feutre",
+  "vr.help.height": "Y / X : monter / baisser la vue",
+  "vr.help.grab": "Grip ou gâchette : prendre un feutre",
+  "vr.help.hide": "Cliquer le stick gauche : masquer les astuces",

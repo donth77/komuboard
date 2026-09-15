@@ -2,12 +2,14 @@
 // board panel), wires the live pipeline, and owns entry/exit. The heavy lifting lives in focused
 // modules: board-raster (Canvas2D doc renderer), board-texture (GPU upload plumbing),
 // whiteboard-model (GLB normalization + surface detection), presence-3d (60 fps peer cursors +
-// content-change detection). Enters an immersive session where WebXR exists; otherwise stays a
+// content-change detection), locomotion (the camera rig: sticks, teleport, go-to-board, seated
+// height). Enters an immersive session where WebXR exists; otherwise stays a
 // mouse-look "magic window" preview (the documented fallback — also what e2e exercises headlessly).
 
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
+import { t } from "../i18n";
 import {
   clearAssetLoadNotifier,
   drawBoardRegion,
@@ -16,11 +18,13 @@ import {
 } from "./board-raster";
 import { createPanelTexture } from "./board-texture";
 import { createInteraction } from "./interaction";
+import { createLocomotion } from "./locomotion";
 import { createPenMenu3D, type PenMenuState } from "./pen-menu-3d";
 import { createPresence3D } from "./presence-3d";
 import { createToolDock3D } from "./tool-dock-3d";
+import { textCard } from "./text-card";
 import { createTrayProps } from "./tray-props";
-import { loadAframe, registerSceneTicker } from "./three-types";
+import { loadAframe, onSceneTick, registerSceneTicker, type Obj3D } from "./three-types";
 import { fitAspect } from "./viewport-window";
 import { DEFAULT_FIT, fitWhiteboardModel, type BoardFit } from "./whiteboard-model";
 
@@ -37,6 +41,12 @@ export interface VREnterOptions {
 }
 
 const TEX_W = 2048;
+/** How long to wait for the whiteboard GLB before showing the free-floating panel instead. */
+const MODEL_TIMEOUT_MS = 12_000;
+
+/** Where the "Komuboard" title floats: just above the board's top edge. */
+const titlePos = (fit: BoardFit): string =>
+  `${fit.x.toFixed(3)} ${(fit.y + fit.height / 2 + 0.2).toFixed(3)} ${fit.z.toFixed(3)}`;
 
 export async function enterVR(opts: VREnterOptions): Promise<void> {
   const aframe = await loadAframe();
@@ -58,23 +68,57 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
   root.innerHTML =
     '<a-scene vr-mode-ui="enterAREnabled: false" style="position: fixed; inset: 0; z-index: 200;">' +
     '<a-sky color="#10151c"></a-sky>' +
+    // The camera rig: the camera and both controllers (added by interaction) ride it, so every kind
+    // of locomotion moves you by moving this one entity.
+    '<a-entity id="vr-rig"><a-entity id="vr-camera" camera look-controls wasd-controls position="0 1.6 0"></a-entity></a-entity>' +
     // Platform: a COZY pedestal under the board, not a 9m ground plane — the huge disc's far
     // surface overpainted nearer geometry in this build (hid the model's legs + tray props), and a
     // small platform floating in the dark sky reads better anyway. The invisible wall (interaction)
     // clamps movement to its rim.
     '<a-cylinder id="vr-floor" radius="2.4" height="0.02" color="#1a212b" position="0 -0.01 0"></a-cylinder>' +
     '<a-entity id="vr-model" gltf-model="url(/models/low_poly_whiteboard.glb)"></a-entity>' +
-    `<a-plane id="vr-board" width="${DEFAULT_FIT.width}" height="${DEFAULT_FIT.height}" position="${DEFAULT_FIT.x} ${DEFAULT_FIT.y} ${DEFAULT_FIT.z}"></a-plane>` +
-    '<a-text value="Komuboard" align="center" color="#8a94a6" width="1.6" position="0 2.25 -1.6"></a-text>' +
+    // The board assembly (panel, dock, props, peer cursors) stays HIDDEN until the model has loaded
+    // and the panel is pinned to its surface — otherwise it flashes at this placeholder spot and
+    // then jumps. A spinner stands in for it meanwhile (see below).
+    `<a-plane id="vr-board" visible="false" width="${DEFAULT_FIT.width}" height="${DEFAULT_FIT.height}" position="${DEFAULT_FIT.x} ${DEFAULT_FIT.y} ${DEFAULT_FIT.z}"></a-plane>` +
+    `<a-text id="vr-title" value="Komuboard" align="center" color="#8a94a6" width="1.6" position="${titlePos(DEFAULT_FIT)}"></a-text>` +
     "</a-scene>";
   document.body.appendChild(root);
   const scene = root.querySelector("a-scene") as HTMLElement & {
     enterVR?: () => Promise<void>;
     exitVR?: () => Promise<void>;
     hasLoaded?: boolean;
+    camera?: unknown;
   };
   const panel = root.querySelector("#vr-board") as HTMLElement;
+  const rig = root.querySelector("#vr-rig") as HTMLElement;
+  const title = root.querySelector("#vr-title") as HTMLElement;
+  const modelEl = root.querySelector("#vr-model") as HTMLElement;
   registerSceneTicker(aframe, scene); // per-frame callbacks ride a component tick (XR-frame safe)
+
+  // Loading state: a spinning arc + a localized label where the board will appear.
+  const loading = document.createElement("a-entity");
+  loading.id = "vr-loading";
+  loading.setAttribute("position", `${DEFAULT_FIT.x} ${DEFAULT_FIT.y} ${DEFAULT_FIT.z}`);
+  const spinner = document.createElement("a-ring") as HTMLElement & { object3D?: Obj3D };
+  spinner.setAttribute("radius-inner", "0.075");
+  spinner.setAttribute("radius-outer", "0.095");
+  spinner.setAttribute("theta-length", "270");
+  spinner.setAttribute("material", "shader: flat; color: #4a9eff; side: double");
+  // Read from the spawn point, 1.6 m away: ~4.5 cm letters on a 0.6 m card.
+  const loadingLabel = textCard([t("vr.loading")], { align: "center", fontSize: 40, width: 520 });
+  const label = document.createElement("a-image");
+  label.setAttribute("src", loadingLabel.url);
+  label.setAttribute("width", "0.6");
+  label.setAttribute("height", (0.6 * loadingLabel.aspect).toFixed(3));
+  label.setAttribute("position", "0 -0.2 0");
+  loading.appendChild(spinner);
+  loading.appendChild(label);
+  scene.appendChild(loading);
+  const offSpin = onSceneTick(() => {
+    const o3 = spinner.object3D;
+    if (o3) o3.rotation.z -= 0.09;
+  });
 
   // Live state: the panel fit (updates when the model's surface is detected) and the world viewport
   // it shows (re-fitted to the surface's aspect).
@@ -146,6 +190,7 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
   // Interaction (select / hand-pan / pen / eraser + zoom) and the floating tool dock — one pointer
   // pipeline for the preview's mouse cursor and (on device) controller lasers.
   let interactionRef: ReturnType<typeof createInteraction> | null = null;
+  let boardShown = false; // flips once the board assembly is revealed (see showBoard)
   const dock = createToolDock3D({
     scene,
     onTool: (t) => interactionRef?.setTool(t),
@@ -185,6 +230,7 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
   props.tint(penState.color);
   const interaction = createInteraction({
     scene,
+    rig,
     panel,
     doc: opts.doc,
     awareness: opts.awareness,
@@ -193,10 +239,10 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
       rect = r;
     },
     requestRedraw: fastRedraw,
-    onToolChange: (t) => {
-      dock.setActive(t);
-      props.setActive(t);
-      penMenu.setVisible(t === "pen");
+    onToolChange: (tool) => {
+      dock.setActive(tool);
+      props.setActive(tool);
+      penMenu.setVisible(tool === "pen" && boardShown);
     },
     // Feed the held prop its ride-along point: panel UV → the board face's world plane.
     onPointer: (uv, active) => {
@@ -213,17 +259,63 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
         active,
       );
     },
+    // A marker/eraser held in a hand draws/erases by touching the board face.
+    contactUV: () => props.contact(),
   });
   interactionRef = interaction;
+  // Getting around: walk / snap-turn / teleport on the sticks, A = go to the board, B = put the
+  // held prop down, Y / X = raise / lower the view; seated users are re-levelled on entry.
+  const loco = createLocomotion({
+    aframe,
+    scene,
+    rig,
+    controller: (hand) => interaction.controller(hand),
+    panelFit: () => panelFit,
+    onDrop: () => props.drop(),
+  });
+
+  // Everything that belongs to the board is shown and hidden together (the pen submenu follows the
+  // tool as usual, but only once the board is there).
+  const showBoard = (v: boolean): void => {
+    boardShown = v;
+    panel.setAttribute("visible", String(v));
+    dock.setVisible(v);
+    props.setVisible(v);
+    presence.setVisible(v);
+    penMenu.setVisible(v && interaction.getTool() === "pen");
+    interaction.setEnabled(v);
+    loading.setAttribute("visible", String(!v));
+  };
+  showBoard(false);
+
   // e2e/debug hook — headless tests drive tools through this (projecting 3D dock buttons to screen
   // coordinates is brittle; the dock's click path shares the panel's, which IS tested directly).
   (window as unknown as { __komuvr?: unknown }).__komuvr = {
+    boardShown: () => boardShown,
+    /** Preview only: a panel UV → viewport px (where a test should put the mouse). */
+    panelToScreen: (u: number, v: number): { x: number; y: number } | null => {
+      const cam = scene.camera;
+      const T = aframe?.THREE;
+      if (!cam || !T) return null;
+      const p = new T.Vector3(
+        panelFit.x + (u - 0.5) * panelFit.width,
+        panelFit.y + (v - 0.5) * panelFit.height,
+        panelFit.z,
+      ).project(cam);
+      return { x: ((p.x + 1) / 2) * window.innerWidth, y: ((1 - p.y) / 2) * window.innerHeight };
+    },
     setTool: (t: Parameters<typeof interaction.setTool>[0]) => interaction.setTool(t),
     getTool: () => interaction.getTool(),
     rect: () => rect,
     selection: () => interaction.selection(),
     penOptions: () => interaction.penOptions(),
     propState: () => props.debugState(),
+    fit: () => panelFit,
+    rig: () => loco.rig(),
+    head: () => loco.head(),
+    goToBoard: () => loco.goToBoard(),
+    teleport: () => loco.teleport(),
+    controller: (hand: "left" | "right") => interaction.controller(hand),
   };
 
   // First draw once the scene is ready; the panel's mesh may (re)appear asynchronously too.
@@ -232,18 +324,31 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
   else scene.addEventListener("loaded", onLoaded, { once: true });
   panel.addEventListener("object3dset", onLoaded);
 
+  // The board is revealed exactly once: pinned to the model's surface when it loads, or free-floating
+  // at the placeholder spot if the model fails or takes too long (a late model still re-pins it).
+  const reveal = (): void => {
+    if (boardShown) return;
+    window.clearTimeout(modelTimer);
+    offSpin();
+    showBoard(true);
+    draw();
+  };
+  const modelTimer = window.setTimeout(reveal, MODEL_TIMEOUT_MS);
+  modelEl.addEventListener("model-error", reveal);
   // The whiteboard model: once its writing surface is found, pin the panel to it and re-fit the
-  // texture to the surface's aspect. The scene works without the model (free-floating panel).
-  fitWhiteboardModel(aframe, root.querySelector("#vr-model") as HTMLElement, (fit) => {
+  // texture to the surface's aspect.
+  fitWhiteboardModel(aframe, modelEl, (fit) => {
     panelFit = fit;
     panel.setAttribute("width", fit.width.toFixed(3));
     panel.setAttribute("height", fit.height.toFixed(3));
     panel.setAttribute("position", `${fit.x.toFixed(3)} ${fit.y.toFixed(3)} ${fit.z.toFixed(3)}`);
+    title.setAttribute("position", titlePos(fit));
     tex.canvas.height = Math.max(64, Math.round((TEX_W * fit.height) / fit.width));
     rect = fitAspect(rect, fit.width / fit.height);
     dock.place(fit);
     props.place(fit);
     penMenu.place(fit);
+    reveal();
     draw();
   });
 
@@ -252,12 +357,16 @@ export async function enterVR(opts: VREnterOptions): Promise<void> {
   const exit = document.createElement("button");
   exit.type = "button";
   exit.className = "vr-exit";
-  exit.textContent = "Exit VR";
+  exit.textContent = t("vr.exit");
   root.appendChild(exit);
   let keyHandler: ((e: KeyboardEvent) => void) | null = null;
   const teardown = (): void => {
     if (keyHandler) window.removeEventListener("keydown", keyHandler, true);
     opts.doc.off("update", onUpdate);
+    window.clearTimeout(modelTimer);
+    modelEl.removeEventListener("model-error", reveal);
+    offSpin();
+    loco.destroy();
     interaction.destroy();
     dock.destroy();
     props.destroy();

@@ -2,13 +2,46 @@
 // that loads A-Frame. We deliberately avoid @types/three (A-Frame bundles its own THREE) — these
 // interfaces document exactly which surface we depend on.
 
-export interface Vec3 {
+export interface XYZ {
   x: number;
   y: number;
   z: number;
+}
+
+export interface Vec3 extends XYZ {
   set(x: number, y: number, z: number): void;
   setScalar(s: number): void;
-  lerp(v: { x: number; y: number; z: number }, alpha: number): Vec3;
+  lerp(v: XYZ, alpha: number): Vec3;
+  copy(v: XYZ): Vec3;
+  applyQuaternion(q: Quat): Vec3;
+  /** World → normalized device coordinates through a camera. */
+  project(camera: unknown): Vec3;
+}
+
+export interface Quat {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+  setFromUnitVectors(from: Vec3, to: Vec3): Quat;
+}
+
+/** The slice of THREE.Object3D the camera rig and hand-held props drive directly. */
+export interface Obj3D {
+  position: Vec3;
+  quaternion: Quat;
+  rotation: XYZ;
+  scale: Vec3;
+  visible: boolean;
+  add(child: Obj3D): void;
+  remove(child: Obj3D): void;
+  /** Re-parent, preserving the child's WORLD transform. */
+  attach(child: Obj3D): void;
+  getWorldPosition(target: Vec3): Vec3;
+  /** For a camera: the direction it looks (-Z); for plain objects: their +Z. */
+  getWorldDirection(target: Vec3): Vec3;
+  localToWorld(v: Vec3): Vec3;
+  updateWorldMatrix(updateParents: boolean, updateChildren: boolean): void;
 }
 
 export interface Box3Like {
@@ -29,7 +62,8 @@ export interface ThreeNS {
   CanvasTexture: new (c: HTMLCanvasElement) => Tex;
   MeshBasicMaterial: new (p: { map: Tex }) => { map: Tex };
   Box3: new () => Box3Like;
-  Vector3: new () => Vec3;
+  Vector3: new (x?: number, y?: number, z?: number) => Vec3;
+  Quaternion: new () => Quat;
   SRGBColorSpace?: string;
 }
 

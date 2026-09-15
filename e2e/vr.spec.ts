@@ -26,6 +26,22 @@ test("enter VR: drawer item opens the 3D preview with the board panel; Exit rest
   await expect(a.page.locator("#vr-board")).toBeAttached();
   await expect(a.page.locator(".vr-exit")).toBeVisible();
 
+  // Loading state: the board assembly is hidden behind a spinner until the whiteboard model has
+  // been fitted, then shown all at once (no panel flashing at a placeholder spot and jumping).
+  await expect(a.page.locator("#vr-loading")).toBeAttached();
+  await a.page.waitForFunction(
+    () => (window as unknown as { __komuvr: { boardShown(): boolean } }).__komuvr.boardShown(),
+    undefined,
+    { timeout: 20_000 },
+  );
+  const shown = await a.page.evaluate(() => {
+    const vis = (id: string): boolean | null =>
+      (document.getElementById(id) as unknown as { object3D?: { visible: boolean } } | null)
+        ?.object3D?.visible ?? null;
+    return { board: vis("vr-board"), dock: vis("vr-dock"), loading: vis("vr-loading") };
+  });
+  expect(shown).toEqual({ board: true, dock: true, loading: false });
+
   // The texture canvas exists and actually has board pixels (the sticky's yellow).
   await expect
     .poll(
@@ -54,6 +70,30 @@ test("enter VR: drawer item opens the 3D preview with the board panel; Exit rest
   await expect(a.page.locator("a-scene")).toHaveCount(0);
   await expect(a.page.locator("#vr-board-canvas")).toHaveCount(0);
   await expect(a.page.locator(".komu-text")).toBeVisible();
+  await a.close();
+});
+
+test("VR loading: a missing whiteboard model falls back to the free-floating panel", async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const a = await connectPeer(browser, uniqueRoom("vrnomodel"));
+  await a.page.route("**/low_poly_whiteboard.glb", (r) => r.abort());
+  await a.page.locator("#nav-toggle").click();
+  await a.page.locator('.app-menu [data-act="vr"]').click();
+  await expect(a.page.locator("a-scene")).toBeVisible({ timeout: 30_000 });
+  // The model's load error reveals the board at its placeholder placement (no 12 s wait).
+  await a.page.waitForFunction(
+    () => (window as unknown as { __komuvr: { boardShown(): boolean } }).__komuvr.boardShown(),
+    undefined,
+    { timeout: 10_000 },
+  );
+  const fit = await a.page.evaluate(() =>
+    (window as unknown as { __komuvr: { fit(): { width: number; y: number } } }).__komuvr.fit(),
+  );
+  expect(fit).toMatchObject({ width: 1.5, y: 1.35 });
+  await a.page.locator(".vr-exit").click();
+  await expect(a.page.locator("a-scene")).toHaveCount(0);
   await a.close();
 });
 

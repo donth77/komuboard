@@ -316,3 +316,11 @@ const dict: Record<string, string> = {
   "vr.exit": "Exit VR",
 };
 export default dict;
+  "vr.loading": "Loading the board…",
+  "vr.help.move": "Left stick: walk",
+  "vr.help.turn": "Right stick: turn · push up to teleport",
+  "vr.help.board": "A: go to the board",
+  "vr.help.drop": "B: put the marker down",
+  "vr.help.height": "Y / X: raise / lower your view",
+  "vr.help.grab": "Grip or trigger: pick up a marker",
+  "vr.help.hide": "Click the left stick: hide these tips",

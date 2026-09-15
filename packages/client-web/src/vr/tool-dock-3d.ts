@@ -23,11 +23,13 @@ export interface ToolDock3D {
   setActive(tool: VRTool): void;
   /** Re-position beside the (model-fitted) board. */
   place(fit: BoardFit): void;
+  setVisible(v: boolean): void;
   destroy(): void;
 }
 
-const BTN = 0.11; // key size (m)
-const GAP = 0.025;
+// Key size (m): the 9-key column comes to ~0.88 m, so it hangs within a 0.95 m board's height.
+const BTN = 0.08;
+const GAP = 0.016;
 const IDLE_BG = "#1d2530";
 const ACTIVE_BG = "#4a9eff";
 
@@ -105,6 +107,9 @@ export function createToolDock3D(opts: ToolDock3DOptions): ToolDock3D {
         `${x.toFixed(3)} ${y.toFixed(3)} ${(fit.z + 0.02).toFixed(3)}`,
       );
       rootEnt.setAttribute("rotation", "0 12 0");
+    },
+    setVisible(v) {
+      rootEnt.setAttribute("visible", String(v));
     },
     destroy() {
       rootEnt.remove();

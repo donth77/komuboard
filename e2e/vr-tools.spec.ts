@@ -16,12 +16,14 @@ interface KomuVR {
   selection(): string[];
   penOptions(): { color: string; width: number; style: string };
   propState(): Record<string, { state: string; x: number; y: number }>;
+  boardShown(): boolean;
+  panelToScreen(u: number, v: number): { x: number; y: number } | null;
 }
 test("VR tools: select, pan, zoom, pen, eraser all work in the preview", async ({ browser }) => {
   test.setTimeout(120_000);
   const a = await connectPeer(browser, uniqueRoom("vrtools"));
-  // The default camera viewport is centred on world (0,0). Screen (640,340) maps to roughly world
-  // (0,107) on the panel, so size the sticky generously around that.
+  // The default camera viewport is centred on world (0,0), which lands at the panel's centre, so
+  // size the sticky generously around that.
   await injectSticky(a.page, { id: "s1", x: -150, y: -150, size: 300, bg: "#ffd43b" });
   await expect(a.page.locator(".komu-text")).toBeVisible();
 
@@ -29,14 +31,31 @@ test("VR tools: select, pan, zoom, pen, eraser all work in the preview", async (
   await a.page.locator('.app-menu [data-act="vr"]').click();
   await expect(a.page.locator("a-scene")).toBeVisible({ timeout: 30_000 });
   await a.page.waitForFunction(() => !!(window as { __komuvr?: unknown }).__komuvr);
-  await a.page.waitForTimeout(2000); // model fit + first draw settle
+  // The board assembly is revealed once the whiteboard model is fitted.
+  await a.page.waitForFunction(
+    () => (window as unknown as { __komuvr: KomuVR }).__komuvr.boardShown(),
+    undefined,
+    { timeout: 20_000 },
+  );
+  await a.page.waitForTimeout(800); // first draw settle
 
   // The floating dock exists (4 tools + 3 zoom keys).
   await expect(a.page.locator("#vr-dock a-plane")).toHaveCount(9); // 4 tools + zoom −/+/fit + undo/redo
 
+  // Screen positions come from the panel's own projection, so the scene's geometry can change
+  // without breaking the pointer choreography below (u/v are panel UVs, v = 1 at the top).
+  const at = async (u: number, v: number): Promise<{ x: number; y: number }> => {
+    const p = await a.page.evaluate(
+      ([uu, vv]) => (window as unknown as { __komuvr: KomuVR }).__komuvr.panelToScreen(uu, vv),
+      [u, v] as const,
+    );
+    if (!p) throw new Error("panelToScreen unavailable");
+    return { x: Math.round(p.x), y: Math.round(p.y) };
+  };
+
   // SELECT: click the panel centre (the sticky) → selection broadcast + hook agrees. The mouse
   // cursor re-raycasts on the frame after a move, so settle briefly between move and press.
-  const panelCentre = { x: 640, y: 340 };
+  const panelCentre = await at(0.5, 0.5);
   await a.page.mouse.move(panelCentre.x, panelCentre.y);
   await a.page.waitForTimeout(150);
   await a.page.mouse.down();
@@ -116,10 +135,12 @@ test("VR tools: select, pan, zoom, pen, eraser all work in the preview", async (
 
   // PEN: a drag draws a stroke into the SAME doc (web peers get it via normal sync).
   await a.page.evaluate(() => (window as unknown as { __komuvr: KomuVR }).__komuvr.setTool("pen"));
-  await a.page.mouse.move(panelCentre.x - 100, panelCentre.y + 80);
+  const penFrom = await at(0.3, 0.35);
+  const penTo = await at(0.62, 0.28);
+  await a.page.mouse.move(penFrom.x, penFrom.y);
   await a.page.waitForTimeout(150);
   await a.page.mouse.down();
-  await a.page.mouse.move(panelCentre.x + 60, panelCentre.y + 110, { steps: 10 });
+  await a.page.mouse.move(penTo.x, penTo.y, { steps: 10 });
   await a.page.mouse.up();
   await expect.poll(async () => (await objectIds(a.page)).length).toBe(2);
 
@@ -128,11 +149,13 @@ test("VR tools: select, pan, zoom, pen, eraser all work in the preview", async (
     (window as unknown as { __komuvr: KomuVR }).__komuvr.setTool("eraser"),
   );
   const ids = await objectIds(a.page);
-  // The view panned/zoomed above, so erase by sweeping a wide band across the panel.
-  await a.page.mouse.move(400, 250);
+  // The view panned/zoomed above, so erase by sweeping the panel corner to corner.
+  const sweepFrom = await at(0.1, 0.9);
+  const sweepTo = await at(0.9, 0.1);
+  await a.page.mouse.move(sweepFrom.x, sweepFrom.y);
   await a.page.waitForTimeout(150);
   await a.page.mouse.down();
-  await a.page.mouse.move(900, 420, { steps: 25 });
+  await a.page.mouse.move(sweepTo.x, sweepTo.y, { steps: 25 });
   await a.page.mouse.up();
   await expect
     .poll(async () => (await objectIds(a.page)).length, { timeout: 10_000 })
@@ -186,10 +209,12 @@ test("VR tools: select, pan, zoom, pen, eraser all work in the preview", async (
   // HELD MARKER is a physical object: it rides the pointer across the board…
   const penProp = () =>
     a.page.evaluate(() => (window as unknown as { __komuvr: KomuVR }).__komuvr.propState().pen);
-  await a.page.mouse.move(520, 300);
+  const rideFrom = await at(0.3, 0.6);
+  const rideTo = await at(0.7, 0.6);
+  await a.page.mouse.move(rideFrom.x, rideFrom.y);
   await a.page.waitForTimeout(250);
   const held1 = await penProp();
-  await a.page.mouse.move(760, 300);
+  await a.page.mouse.move(rideTo.x, rideTo.y);
   await a.page.waitForTimeout(250);
   const held2 = await penProp();
   expect(held1.state).toBe("held");

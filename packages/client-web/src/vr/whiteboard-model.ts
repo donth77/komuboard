@@ -1,7 +1,7 @@
 // The standing-whiteboard GLB (user-provided; credited in the README): auto-normalize on load and
 // report where the live board panel should sit. Models ship at arbitrary scale/origin, so we
-// measure bounds, face the wide side toward the camera, scale to ~2.3 m, ground it on the floor,
-// then find the WRITING-SURFACE mesh and pin the panel to its world bounds.
+// measure bounds, face the wide side toward the camera, scale to a real whiteboard's size, ground
+// it on the floor, then find the WRITING-SURFACE mesh and pin the panel to its world bounds.
 
 import type { AEntity, AframeNS, Box3Like } from "./three-types";
 
@@ -14,10 +14,18 @@ export interface BoardFit {
   height: number;
   /** The model's marker tray, when one is detected: rest surface for the tool props. */
   tray?: { y: number; z: number };
+  /** The whole model's floor footprint (world x/z bounds) — teleport keeps out of it. */
+  footprint?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
 
-/** Default free-floating panel placement (also the no-model fallback). */
-export const DEFAULT_FIT: BoardFit = { x: 0, y: 1.5, z: -1.6, width: 2, height: 1.2 };
+/** The model's floor footprint (its widest floor extent), metres. Sized so the writing surface comes
+ *  out ~1.5 × 0.95 m with its centre at ~1.36 m and the tray at ~0.85 m — a real mobile whiteboard.
+ *  (The GLB's own proportions put the board high on its stand: at a 2.3 m footprint the centre sat
+ *  at 1.84 m, above most people's eyes and out of reach for anyone seated.) */
+export const MODEL_FOOTPRINT = 1.7;
+
+/** Default free-floating panel placement (also the no-model fallback) — matches the fitted model. */
+export const DEFAULT_FIT: BoardFit = { x: 0, y: 1.35, z: -1.6, width: 1.5, height: 0.95 };
 
 export function fitWhiteboardModel(
   aframe: AframeNS | undefined,
@@ -34,7 +42,7 @@ export function fitWhiteboardModel(
     if (!footprint) return;
     // Face the camera: if the model is wider along z than x, its board faces ±x — rotate 90°.
     if (size.z > size.x && o3.rotation) o3.rotation.y = Math.PI / 2;
-    o3.scale.setScalar(2.3 / footprint);
+    o3.scale.setScalar(MODEL_FOOTPRINT / footprint);
     const box = new THREE.Box3().setFromObject(o3);
     const c = new THREE.Vector3();
     box.getCenter(c);
@@ -45,6 +53,12 @@ export function fitWhiteboardModel(
     // never frame/leg parts; within a tier the THINNEST slab wins (frames and stands are hollow →
     // fat bounding boxes, so "largest area" wrongly picked the legs assembly).
     const finalBox = new THREE.Box3().setFromObject(o3);
+    const floorBounds = {
+      minX: finalBox.min.x,
+      maxX: finalBox.max.x,
+      minZ: finalBox.min.z,
+      maxZ: finalBox.max.z,
+    };
     let board: Box3Like | null = null;
     let bestKey = Infinity;
     let tray: Box3Like | null = null;
@@ -84,6 +98,7 @@ export function fitWhiteboardModel(
         z: found.max.z + 0.006,
         width: (found.max.x - found.min.x) * 0.99,
         height: (found.max.y - found.min.y) * 0.99,
+        footprint: floorBounds,
         ...(trayFit ? { tray: trayFit } : {}),
       });
     } else {
@@ -93,8 +108,9 @@ export function fitWhiteboardModel(
         x: 0,
         y: finalBox.min.y + h * 0.65,
         z: (finalBox.min.z + finalBox.max.z) / 2 + 0.05,
-        width: 1.8,
-        height: 1.08,
+        width: 1.33,
+        height: 0.8,
+        footprint: floorBounds,
       });
     }
   });

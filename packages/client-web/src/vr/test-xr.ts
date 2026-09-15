@@ -10,6 +10,12 @@ export interface FakeXRHandle {
   trigger(hand: "left" | "right", pressed: boolean): void;
   /** Squeeze the grip button (grip-grab). */
   grip(hand: "left" | "right", pressed: boolean): void;
+  /** Tilt `hand`'s thumbstick (x right, y DOWN — pushing forward is y = −1). */
+  stick(hand: "left" | "right", x: number, y: number): void;
+  /** Press a face button: a / b on the right controller, x / y on the left. */
+  button(hand: "left" | "right", id: "a" | "b" | "x" | "y", pressed: boolean): void;
+  /** Move the headset (reference-space metres) — e.g. a seated eye height. */
+  head(x: number, y: number, z: number): void;
   /** Introspection for debugging API-shape mismatches. */
   describe(): string;
 }
@@ -29,6 +35,7 @@ interface ControllerLike {
     w?: number;
   };
   updateButtonValue?: (name: string, value: number) => void;
+  updateAxes?: (id: string, x: number, y: number) => void;
   gamepad?: unknown;
 }
 
@@ -101,6 +108,17 @@ export function installFakeXR(): FakeXRHandle {
     grip(hand, pressed) {
       const c = controller(hand);
       c?.updateButtonValue?.("squeeze", pressed ? 1 : 0);
+    },
+    stick(hand, x, y) {
+      controller(hand)?.updateAxes?.("thumbstick", x, y);
+    },
+    button(hand, id, pressed) {
+      controller(hand)?.updateButtonValue?.(`${id}-button`, pressed ? 1 : 0);
+    },
+    head(x, y, z) {
+      (
+        device as unknown as { position: { set(x: number, y: number, z: number): void } }
+      ).position.set(x, y, z);
     },
     describe() {
       const d = device as unknown as Record<string, unknown>;

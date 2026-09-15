@@ -315,3 +315,11 @@ const dict: Record<string, string> = {
   "vr.exit": "VR 종료",
 };
 export default dict;
+  "vr.loading": "보드를 불러오는 중…",
+  "vr.help.move": "왼쪽 스틱: 걷기",
+  "vr.help.turn": "오른쪽 스틱: 회전 · 위로 밀어 순간이동",
+  "vr.help.board": "A: 보드 앞으로",
+  "vr.help.drop": "B: 마커 내려놓기",
+  "vr.help.height": "Y / X: 시점 올리기 / 내리기",
+  "vr.help.grab": "그립 또는 트리거: 마커 집기",
+  "vr.help.hide": "왼쪽 스틱 누르기: 도움말 숨기기",

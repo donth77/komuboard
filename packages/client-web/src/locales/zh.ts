@@ -312,3 +312,11 @@ const dict: Record<string, string> = {
   "vr.exit": "退出 VR",
 };
 export default dict;
+  "vr.loading": "正在加载白板…",
+  "vr.help.move": "左摇杆：行走",
+  "vr.help.turn": "右摇杆：转向 · 上推传送",
+  "vr.help.board": "A：走到白板前",
+  "vr.help.drop": "B：放下马克笔",
+  "vr.help.height": "Y / X：升高 / 降低视角",
+  "vr.help.grab": "握把或扳机：拿起马克笔",
+  "vr.help.hide": "按下左摇杆：隐藏提示",

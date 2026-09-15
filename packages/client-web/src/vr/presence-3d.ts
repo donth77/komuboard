@@ -28,6 +28,7 @@ export interface Presence3D {
   peers(): PeerPresence[];
   /** Whether any peer is mid-gesture (drag/resize/rotate/draw/typing). */
   gestureActive(): boolean;
+  setVisible(v: boolean): void;
   destroy(): void;
 }
 
@@ -40,9 +41,10 @@ interface CursorEnt {
   name: string;
 }
 
-/** Cursor sizing (metres) — deliberately large so a peer across the room is findable at a glance. */
-const POINTER_SIZE = 0.1;
-const LABEL_W = 0.42; // a-text "width" — glyph size follows it, so keep it modest
+/** Cursor sizing (metres) — generous, so a peer is findable at a glance from across the room, but
+ *  not so big it hides what they're pointing at on a 1.5 m board. */
+const POINTER_SIZE = 0.07;
+const LABEL_W = 0.3; // a-text "width" — glyph size follows it, so keep it modest
 
 /** The SAME pointer icon as the 2D cursors (Lucide mouse-pointer-2), tinted per peer. */
 function pointerSvg(color: string): string {
@@ -196,6 +198,9 @@ export function createPresence3D(opts: Presence3DOptions): Presence3D {
   return {
     peers,
     gestureActive,
+    setVisible(v) {
+      rootEnt.setAttribute("visible", String(v));
+    },
     destroy() {
       offTick();
       opts.awareness.off("change", onChange);

@@ -34,6 +34,8 @@ interface CursorEventDetail {
 
 export interface InteractionOptions {
   scene: HTMLElement;
+  /** The camera rig — the controllers ride it, so locomotion carries them along. */
+  rig: HTMLElement;
   panel: HTMLElement;
   doc: Y.Doc;
   awareness: Awareness;
@@ -44,6 +46,8 @@ export interface InteractionOptions {
   onToolChange(tool: VRTool): void;
   /** Per-tick pointer feed: panel UV (null when off-board) + whether a gesture is pressing. */
   onPointer?(uv: { x: number; y: number } | null, active: boolean): void;
+  /** Panel UV where a hand-held marker/eraser is pressed against the board face (null when not). */
+  contactUV?(): { x: number; y: number } | null;
 }
 
 export interface PenOptions {
@@ -62,6 +66,10 @@ export interface Interaction {
   deleteSelection(): void;
   zoomStep(dir: 1 | -1): void;
   zoomFit(): void;
+  /** The laser-controls entity for one hand. */
+  controller(hand: "left" | "right"): HTMLElement;
+  /** Gate the board gestures (off while the board is still loading and hidden). */
+  setEnabled(v: boolean): void;
   destroy(): void;
 }
 
@@ -73,18 +81,21 @@ export function createInteraction(opts: InteractionOptions): Interaction {
   scene.setAttribute("raycaster", "objects: .vr-interactive");
   // Controllers (validated on device day): standard laser-controls; their triggers fire the same
   // entity events the mouse cursor does.
-  const controllers: RaycasterEl[] = [];
-  for (const hand of ["left", "right"]) {
+  const makeController = (hand: "left" | "right"): RaycasterEl => {
     const c = document.createElement("a-entity") as RaycasterEl;
     c.setAttribute("laser-controls", `hand: ${hand}`);
     c.setAttribute("raycaster", "objects: .vr-interactive; lineColor: #4a9eff; lineOpacity: 0.75");
-    scene.appendChild(c);
-    controllers.push(c);
-  }
+    opts.rig.appendChild(c);
+    return c;
+  };
+  const hands = { left: makeController("left"), right: makeController("right") };
+  const controllers: RaycasterEl[] = [hands.left, hands.right];
 
   let tool: VRTool = "select";
   let selected: string[] = [];
   let penOpts: PenOptions = { color: "#0E1116", width: 8, style: "solid" };
+  // A hidden panel still raycasts (three.js doesn't consult `visible`), so gestures are gated here.
+  let enabled = true;
 
   // The pointer's current world position (from whichever raycaster is engaged with the panel).
   const uvToWorld = (uv: { x: number; y: number }): { x: number; y: number } => {
@@ -107,6 +118,8 @@ export function createInteraction(opts: InteractionOptions): Interaction {
   interface Gesture {
     kind: VRTool;
     source: RaycasterEl | null;
+    /** Driven by a hand-held prop touching the board (not a trigger/mouse press). */
+    touch: boolean;
     startWorld: { x: number; y: number };
     startRect: WorldRect;
     points: number[]; // pen
@@ -139,10 +152,20 @@ export function createInteraction(opts: InteractionOptions): Interaction {
   };
 
   const step = (): void => {
-    // Mid-gesture: track the raycaster that started it. Idle: whichever pointer is on the board —
-    // the preview's mouse ray or (in-headset) either controller's laser, so laser HOVER publishes
-    // the cross-reality cursor too, not just trigger-holds.
-    let uv = gesture ? intersectionUV(gesture.source) : intersectionUV(null);
+    if (!enabled) return;
+    // Physical contact: a hand-held marker/eraser pressed against the board face draws/erases like
+    // the real thing, no trigger needed (only while no laser/mouse gesture is running).
+    const touchUV = opts.contactUV?.() ?? null;
+    if (touchUV && !gesture && (tool === "pen" || tool === "eraser")) begin(null, touchUV, true);
+    else if (gesture?.touch && !touchUV) finish();
+    // Mid-gesture: track the raycaster (or contact) that started it. Idle: whichever pointer is on
+    // the board — the preview's mouse ray or (in-headset) either controller's laser, so laser HOVER
+    // publishes the cross-reality cursor too, not just trigger-holds.
+    let uv = gesture
+      ? gesture.touch
+        ? touchUV
+        : intersectionUV(gesture.source)
+      : intersectionUV(null);
     if (!uv && !gesture) for (const c of controllers) if ((uv = intersectionUV(c))) break;
     opts.onPointer?.(uv, !!gesture);
     if (uv) {
@@ -187,21 +210,6 @@ export function createInteraction(opts: InteractionOptions): Interaction {
         }
       }
     }
-    // Invisible platform wall: WASD walking stays on the pedestal (radius 2.4) — clamp the camera
-    // rig radially so you can step around the whiteboard but not off the platform's edge.
-    const camPos = (
-      scene as unknown as {
-        camera?: { el?: { object3D?: { position?: { x: number; z: number } } } };
-      }
-    ).camera?.el?.object3D?.position;
-    if (camPos) {
-      const d = Math.hypot(camPos.x, camPos.z);
-      if (d > 2.1) {
-        const f = 2.1 / d;
-        camPos.x *= f;
-        camPos.z *= f;
-      }
-    }
   };
   // Ticks via the shared komu-tick component (XR-frame safe; window rAF stalls in immersive
   // sessions, and this A-Frame build's addBehavior only ticks real components).
@@ -214,20 +222,16 @@ export function createInteraction(opts: InteractionOptions): Interaction {
     cam?.setAttribute("look-controls", `enabled: ${enabled}`);
   };
 
-  const onDown = (evt: Event): void => {
-    if (gesture) return; // one gesture at a time (a trigger press can synthesize two mousedowns)
-    const detail = (evt as CustomEvent<CursorEventDetail>).detail;
-    const source = detail?.cursorEl ?? null;
-    setLook(false);
-    // Prefer the intersection the cursor ACTED on (carried on the event) — polling the raycaster
-    // right after a fast move can be one tick stale.
-    const evtUV = detail?.intersection?.uv;
-    const uv = evtUV ? { x: evtUV.x, y: evtUV.y } : intersectionUV(source);
-    if (!uv) return;
+  const begin = (
+    source: RaycasterEl | null,
+    uv: { x: number; y: number },
+    touch: boolean,
+  ): void => {
     const w = uvToWorld(uv);
     gesture = {
       kind: tool,
       source,
+      touch,
       startWorld: w,
       startRect: { ...opts.getRect() },
       points: tool === "pen" ? [w.x, w.y] : [],
@@ -242,8 +246,7 @@ export function createInteraction(opts: InteractionOptions): Interaction {
       }
     }
   };
-  const onUp = (): void => {
-    setLook(true);
+  const finish = (): void => {
     const g = gesture;
     gesture = null;
     if (!g) return;
@@ -253,12 +256,29 @@ export function createInteraction(opts: InteractionOptions): Interaction {
       setSelection(hit ? [hit] : []);
     }
   };
+
+  const onDown = (evt: Event): void => {
+    if (!enabled) return;
+    if (gesture) return; // one gesture at a time (a trigger press can synthesize two mousedowns)
+    const detail = (evt as CustomEvent<CursorEventDetail>).detail;
+    const source = detail?.cursorEl ?? null;
+    setLook(false);
+    // Prefer the intersection the cursor ACTED on (carried on the event) — polling the raycaster
+    // right after a fast move can be one tick stale.
+    const evtUV = detail?.intersection?.uv;
+    const uv = evtUV ? { x: evtUV.x, y: evtUV.y } : intersectionUV(source);
+    if (uv) begin(source, uv, false);
+  };
+  const onUp = (): void => {
+    setLook(true);
+    if (!gesture?.touch) finish(); // lifting a trigger doesn't end a stroke drawn by contact
+  };
   panel.addEventListener("mousedown", onDown);
   panel.addEventListener("mouseup", onUp);
 
   // Preview nicety: wheel over the panel zooms about the pointer.
   const onWheel = (e: Event): void => {
-    const uv = intersectionUV(null);
+    const uv = enabled ? intersectionUV(null) : null;
     if (!uv) return;
     const factor = (e as WheelEvent).deltaY > 0 ? 1.12 : 1 / 1.12;
     opts.setRect(zoomAt(opts.getRect(), uv.x, 1 - uv.y, factor));
@@ -301,6 +321,10 @@ export function createInteraction(opts: InteractionOptions): Interaction {
       const r = opts.getRect();
       opts.setRect(zoomToFit(docContentBounds(doc), r.width / r.height));
       opts.requestRedraw();
+    },
+    controller: (hand) => hands[hand],
+    setEnabled(v) {
+      enabled = v;
     },
     destroy() {
       offTick();
