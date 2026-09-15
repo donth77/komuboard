@@ -10,7 +10,6 @@ import { connectPeer, hasSelection, objJSON, uniqueRoom, type BoardWindow } from
  */
 
 const FILL = "#a5d8ff";
-const FILL_RGB = [165, 216, 255];
 const PAPER_DARK = [14, 17, 22];
 
 const near = (px: number[], rgb: number[], tol = 6): boolean =>
