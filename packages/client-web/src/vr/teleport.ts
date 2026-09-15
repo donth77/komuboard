@@ -33,6 +33,9 @@ export interface TeleportState {
   end: XYZ | null;
   /** The blink overlay's opacity (0 when no jump is in progress). */
   blink: number;
+  /** The highest opacity the blink reached during the current / most recent jump (0 = none yet).
+   *  Lets a test prove the blink closed fully without sampling frames it can't keep up with. */
+  blinkPeak: number;
 }
 
 export interface Teleport {
@@ -149,6 +152,7 @@ const IDLE: TeleportState = {
   hit: null,
   end: null,
   blink: 0,
+  blinkPeak: 0,
 };
 
 export function createTeleport(opts: TeleportOptions): Teleport {
@@ -471,6 +475,7 @@ export function createTeleport(opts: TeleportOptions): Teleport {
 
   // ---- blink -----------------------------------------------------------------------------------
   let blink: { phase: "out" | "in"; t0: number; move: (() => void) | null } | null = null;
+  let blinkPeak = 0;
   const endBlink = (): void => {
     const pending = blink?.move;
     blink = null;
@@ -492,6 +497,7 @@ export function createTeleport(opts: TeleportOptions): Teleport {
       blinkParent = cam;
     }
     blink = { phase: "out", t0: performance.now(), move };
+    blinkPeak = 0;
     blinkMesh.visible = true;
   };
   const tick = (): void => {
@@ -500,6 +506,7 @@ export function createTeleport(opts: TeleportOptions): Teleport {
     if (blink.phase === "out") {
       const k = (now - blink.t0) / BLINK_OUT_MS;
       blinkMat.opacity = Math.min(1, k);
+      blinkPeak = Math.max(blinkPeak, blinkMat.opacity);
       if (k >= 1) {
         const move = blink.move;
         blink = { phase: "in", t0: now, move: null };
@@ -521,7 +528,7 @@ export function createTeleport(opts: TeleportOptions): Teleport {
       endBlink();
     },
     jump,
-    state: () => ({ aiming, valid, target, hit, end, blink: blinkMat.opacity }),
+    state: () => ({ aiming, valid, target, hit, end, blink: blinkMat.opacity, blinkPeak }),
     destroy() {
       offTick();
       stopAiming();

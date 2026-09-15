@@ -35,6 +35,7 @@ interface KomuVR {
     hit: string | null;
     end: XYZ | null;
     blink: number;
+    blinkPeak: number;
   };
 }
 type Hand = "left" | "right";
@@ -95,10 +96,12 @@ test("emulated headset: seated user can get to the board, turn, teleport, and ad
   // 1.6 m, looking slightly down at the middle of the board — instead of level with its tray.
   const DESIGN_EYE = 1.6;
   const fit = await k.fit();
+  // The lift is the proof (only a real calibration moves the rig); the camera alone can still read
+  // its pre-XR 1.6 m for a while on a slow renderer, so it's asserted after the rig.
+  await expect.poll(async () => (await k.rig()).y, { timeout: 20_000 }).toBeGreaterThan(0.4);
   await expect
     .poll(async () => (await k.head())?.y ?? 0, { timeout: 10_000 })
     .toBeGreaterThan(DESIGN_EYE - 0.05);
-  expect((await k.rig()).y).toBeGreaterThan(0.4);
   // The controller tips are shown in-headset.
   await expect
     .poll(() =>
@@ -138,21 +141,14 @@ test("emulated headset: seated user can get to the board, turn, teleport, and ad
   }
   expect(aimed).toMatchObject({ aiming: true, valid: true, hit: "floor" });
   expect(aimed.end).toEqual(aimed.target);
-  // The jump happens behind a blink: sample its opacity in-page (frames can be slower than any
-  // round-trip here) to prove it closes fully, then clears.
-  await page.evaluate(() => {
-    const w = window as unknown as { __komuvr: KomuVR; __blinkMax?: number };
-    w.__blinkMax = 0;
-    const id = setInterval(() => {
-      w.__blinkMax = Math.max(w.__blinkMax ?? 0, w.__komuvr.teleport().blink);
-    }, 4);
-    setTimeout(() => clearInterval(id), 5000);
-  });
+  // The jump happens behind a blink. Frames on a CI runner can be slower than any sampling here,
+  // so the scene records the blink's PEAK opacity itself: once the blink has cleared, the peak
+  // proves it closed fully on the way.
   await xr(page, "stick", "right", 0, 0);
   await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __blinkMax: number }).__blinkMax))
+    .poll(async () => (await k.teleport()).blinkPeak, { timeout: 30_000 })
     .toBeGreaterThan(0.9);
-  await expect.poll(async () => (await k.teleport()).blink).toBe(0);
+  await expect.poll(async () => (await k.teleport()).blink, { timeout: 30_000 }).toBe(0);
   const h2 = (await k.head())!;
   expect(Math.hypot(h2.x - aimed.target!.x, h2.z - aimed.target!.z)).toBeLessThan(0.05);
   expect(Math.hypot(h2.x - h1.x, h2.z - h1.z)).toBeGreaterThan(0.1);

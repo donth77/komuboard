@@ -64,7 +64,11 @@ const SEATED_GAP = 0.2;
 const HEIGHT_STEP = 0.1;
 const MIN_LIFT = -0.8;
 const MAX_LIFT = 1.2;
-/** Keep trying the entry calibration this long — the first XR pose can lag the enter-vr event. */
+/** Wait this long after the FIRST rendered XR frame before measuring (the pose settles), then keep
+ *  trying up to the give-up. Both count from that first frame, not the enter-vr event: until a frame
+ *  has rendered the camera still holds its pre-XR pose (the preview's 1.6 m eye height), which would
+ *  read as "standing" and wrongly cancel a seated user's lift — a window that can last seconds on a
+ *  slow renderer while its first-frame shaders compile. */
 const CALIBRATE_DELAY_MS = 600;
 const CALIBRATE_GIVE_UP_MS = 8000;
 
@@ -82,7 +86,12 @@ export function createLocomotion(opts: LocomotionOptions): Locomotion {
   const THREE = opts.aframe?.THREE;
   const tmp = THREE ? new THREE.Vector3() : null;
   const rig3 = (opts.rig as HTMLElement & { object3D?: Obj3D }).object3D;
-  const sceneEl = opts.scene as HTMLElement & { camera?: Obj3D; is?(state: string): boolean };
+  const sceneEl = opts.scene as HTMLElement & {
+    camera?: Obj3D;
+    is?(state: string): boolean;
+    /** A-Frame sets this to the current XRFrame inside its render loop (null/undefined outside XR). */
+    frame?: unknown;
+  };
   const left = opts.controller("left");
   const right = opts.controller("right");
 
@@ -222,17 +231,19 @@ export function createLocomotion(opts: LocomotionOptions): Locomotion {
   left.addEventListener("thumbstickdown", onLeftStickClick);
 
   let pendingCalibration = false;
-  let enteredAt = 0;
+  /** performance.now() of the first XR frame seen after entry (0 = none yet). */
+  let firstFrameAt = 0;
   let aiming = false;
   let target: XYZ | null = null;
   const onEnter = (): void => {
     pendingCalibration = true;
-    enteredAt = performance.now();
+    firstFrameAt = 0;
     syncHelp();
   };
   const onExit = (): void => {
     // Back to the magic-window preview: reset the rig so the desktop view is where it started.
     pendingCalibration = false;
+    firstFrameAt = 0;
     aiming = false;
     target = null;
     autoLift = 0;
@@ -256,10 +267,13 @@ export function createLocomotion(opts: LocomotionOptions): Locomotion {
     const now = performance.now();
     const dt = Math.min(0.1, lastT ? (now - lastT) / 1000 : 0);
     lastT = now;
-    // Seated check once the headset's pose has settled after entry (kept pending until a real pose
-    // is there to measure, within reason).
-    if (pendingCalibration && inVR() && now - enteredAt > CALIBRATE_DELAY_MS) {
-      if (calibrate() || now - enteredAt > CALIBRATE_GIVE_UP_MS) pendingCalibration = false;
+    // Seated check once the headset's pose has settled after entry — measured only after a real XR
+    // frame has rendered (kept pending until a real pose is there to measure, within reason).
+    if (pendingCalibration && inVR() && sceneEl.frame) {
+      if (!firstFrameAt) firstFrameAt = now;
+      else if (now - firstFrameAt > CALIBRATE_DELAY_MS) {
+        if (calibrate() || now - firstFrameAt > CALIBRATE_GIVE_UP_MS) pendingCalibration = false;
+      }
     }
     // Walk: left stick, relative to where the head faces (stick up is y = −1).
     const l = stick.left;
