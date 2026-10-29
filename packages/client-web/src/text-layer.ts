@@ -1578,7 +1578,7 @@ export class TextLayer {
     try {
       for (const [id, el] of this.els) {
         const obj = this.readObj(id);
-        if (obj?.type === "stamp") {
+        if (obj?.type === "stamp" || obj?.type === "image") {
           const g = this.effectiveGeom(id, obj);
           this.layout(el, g.x, g.y, g.width, g.fontSize, "", "left", g.height);
           continue;

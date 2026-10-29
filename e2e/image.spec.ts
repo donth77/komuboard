@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  type BoardWindow,
   calibrate,
   connectPeer,
   hasSelection,
@@ -153,6 +154,49 @@ test("an image rotates via the keyboard nudge (] = +15° about its centre)", asy
   await a.page.keyboard.press("]");
 
   await expect.poll(async () => ((await objJSON(a.page, "i1"))!.rotation as number) ?? 0).toBe(15);
+  await a.close();
+});
+
+test("an image follows the camera — wheel-zoom rescales it and a hand-pan moves it", async ({
+  browser,
+  request,
+}) => {
+  // Regression (#1): the camera sync re-laid out text + stamps but skipped images, so after a zoom or
+  // pan an image kept its old on-screen size and position until the next doc edit re-rendered it.
+  const key = await uploadPng(request);
+  const a = await connectPeer(browser, uniqueRoom("imgcam"));
+  const centre = await centredImage(a.page, key);
+  const img = a.page.locator(".komu-image");
+  const zoom = () =>
+    a.page.evaluate(
+      () => (window as unknown as BoardWindow).__komuboard.canvas!.getZoomPercent() / 100,
+    );
+
+  // Wheel-zoom in over the image: its on-screen box must track its 200×150 world size × the zoom.
+  const z0 = await zoom();
+  await a.page.mouse.move(centre.x, centre.y);
+  await a.page.mouse.wheel(0, -200);
+  await expect.poll(zoom).toBeGreaterThan(z0 + 0.05);
+  const sizeError = async () => {
+    const s = await zoom();
+    const b = (await img.boundingBox())!;
+    return Math.max(Math.abs(b.width - 200 * s), Math.abs(b.height - 150 * s));
+  };
+  await expect.poll(sizeError).toBeLessThan(3); // (getZoomPercent rounds to 1%, so not exact)
+
+  // Hand-pan: the image moves with the board by the drag delta.
+  const before = (await img.boundingBox())!;
+  await a.page.keyboard.press("h");
+  await a.page.mouse.move(centre.x, centre.y);
+  await a.page.mouse.down();
+  await a.page.mouse.move(centre.x + 60, centre.y + 40);
+  await a.page.mouse.move(centre.x + 120, centre.y + 80);
+  await a.page.mouse.up();
+  const panError = async () => {
+    const b = (await img.boundingBox())!;
+    return Math.max(Math.abs(b.x - before.x - 120), Math.abs(b.y - before.y - 80));
+  };
+  await expect.poll(panError).toBeLessThan(2);
   await a.close();
 });
 
